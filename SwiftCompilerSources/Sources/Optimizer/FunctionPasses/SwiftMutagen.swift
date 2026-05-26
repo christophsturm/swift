@@ -86,7 +86,7 @@ private func swiftMutagenEnvironmentValue(_ name: String) -> String? {
 }
 
 private struct SwiftMutagenMutation {
-  let originalID: BuiltinInst.ID
+  let originalID: BuiltinInst.ID?
   let mutator: String
   let mutatedBuiltinName: String
   let sourceOriginal: String
@@ -153,6 +153,84 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
   for block in function.blocks {
     for instruction in block.instructions {
       guard let builtin = instruction as? BuiltinInst else {
+        if let returnInst = instruction as? ReturnInst {
+          for mutation in swiftMutagenReturnMutations(for: returnInst, config: config) {
+            guard swiftMutagenMutatorIsEnabled(mutation.mutator, config: config) else {
+              continue
+            }
+            guard let sourceLocation = swiftMutagenReturnSourceLocation(
+              for: returnInst,
+              mutation: mutation,
+              config: config
+            ) else {
+              continue
+            }
+
+            let id = swiftMutagenFormatMutantID(swiftMutagenNextOrdinal)
+            swiftMutagenNextOrdinal += 1
+            let candidate = SwiftMutagenCandidate(
+              id: id,
+              module: moduleName,
+              function: functionName,
+              file: sourceLocation.file,
+              line: sourceLocation.line,
+              column: sourceLocation.column,
+              mutation: mutation.withSource(
+                original: sourceLocation.sourceOriginal,
+                mutated: sourceLocation.sourceMutated))
+
+            switch config.mode {
+            case .discover:
+              if !swiftMutagenHasTruncatedDiscoveryOutput {
+                swiftMutagenCreateParentDirectories(forFile: config.mutantsPath)
+                swiftMutagenWrite("", to: config.mutantsPath, append: false)
+                swiftMutagenHasTruncatedDiscoveryOutput = true
+              }
+              swiftMutagenWrite(candidate.jsonLine, to: config.mutantsPath, append: true)
+            case .apply:
+              if candidate.id == config.activeMutantID {
+                swiftMutagenApplyReturn(mutation: mutation, to: returnInst, context)
+                changed = true
+              }
+            }
+          }
+        }
+        if let apply = instruction as? ApplyInst,
+           let mutation = swiftMutagenVoidCallMutation(for: apply),
+           swiftMutagenMutatorIsEnabled(mutation.mutator, config: config),
+           let sourceLocation = swiftMutagenInstructionSourceLocation(
+            for: apply,
+            mutation: mutation,
+            config: config
+           ) {
+          let id = swiftMutagenFormatMutantID(swiftMutagenNextOrdinal)
+          swiftMutagenNextOrdinal += 1
+          let candidate = SwiftMutagenCandidate(
+            id: id,
+            module: moduleName,
+            function: functionName,
+            file: sourceLocation.file,
+            line: sourceLocation.line,
+            column: sourceLocation.column,
+            mutation: mutation.withSource(
+              original: sourceLocation.sourceOriginal,
+              mutated: sourceLocation.sourceMutated))
+
+          switch config.mode {
+          case .discover:
+            if !swiftMutagenHasTruncatedDiscoveryOutput {
+              swiftMutagenCreateParentDirectories(forFile: config.mutantsPath)
+              swiftMutagenWrite("", to: config.mutantsPath, append: false)
+              swiftMutagenHasTruncatedDiscoveryOutput = true
+            }
+            swiftMutagenWrite(candidate.jsonLine, to: config.mutantsPath, append: true)
+          case .apply:
+            if candidate.id == config.activeMutantID {
+              context.erase(instruction: apply)
+              changed = true
+            }
+          }
+        }
         continue
       }
 
@@ -208,6 +286,84 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
   if changed {
     context.notifyInstructionsChanged()
   }
+}
+
+private func swiftMutagenReturnMutations(
+  for returnInst: ReturnInst,
+  config: SwiftMutagenConfig
+) -> [SwiftMutagenMutation] {
+  let returnedValue = returnInst.returnedValue
+  let returnType = returnedValue.type
+  var mutations: [SwiftMutagenMutation] = []
+
+  if swiftMutagenIsBoolType(returnType, in: returnInst.parentFunction) {
+    let literal = swiftMutagenBoolLiteralValue(returnedValue)
+    if literal != false {
+      mutations.append(SwiftMutagenMutation(
+        originalID: nil,
+        mutator: "FALSE_RETURNS",
+        mutatedBuiltinName: "return_false",
+        sourceOriginal: "return",
+        sourceMutated: "return false",
+        silOriginal: returnType.description,
+        silMutated: "false"))
+    }
+    if literal != true {
+      mutations.append(SwiftMutagenMutation(
+        originalID: nil,
+        mutator: "TRUE_RETURNS",
+        mutatedBuiltinName: "return_true",
+        sourceOriginal: "return",
+        sourceMutated: "return true",
+        silOriginal: returnType.description,
+        silMutated: "true"))
+    }
+    return mutations
+  }
+
+  if returnType.isOptional && !swiftMutagenIsOptionalNone(returnedValue) {
+    let mutator = swiftMutagenMutatorIsEnabled("EMPTY_RETURNS", config: config)
+      ? "EMPTY_RETURNS"
+      : "NULL_RETURNS"
+    mutations.append(SwiftMutagenMutation(
+      originalID: nil,
+      mutator: mutator,
+      mutatedBuiltinName: "return_nil",
+      sourceOriginal: "return",
+      sourceMutated: "return nil",
+      silOriginal: returnType.description,
+      silMutated: "Optional.none"))
+    return mutations
+  }
+
+  if swiftMutagenIsIntegerStructType(returnType, in: returnInst.parentFunction),
+     swiftMutagenIntegerStructLiteralValue(returnedValue) != 0 {
+    mutations.append(SwiftMutagenMutation(
+      originalID: nil,
+      mutator: "PRIMITIVE_RETURNS",
+      mutatedBuiltinName: "return_zero",
+      sourceOriginal: "return",
+      sourceMutated: "return 0",
+      silOriginal: returnType.description,
+      silMutated: "0"))
+  }
+
+  return mutations
+}
+
+private func swiftMutagenVoidCallMutation(for apply: ApplyInst) -> SwiftMutagenMutation? {
+  guard apply.type.isVoid else {
+    return nil
+  }
+
+  return SwiftMutagenMutation(
+    originalID: nil,
+    mutator: "VOID_METHOD_CALLS",
+    mutatedBuiltinName: "remove_void_call",
+    sourceOriginal: "call",
+    sourceMutated: "removed call",
+    silOriginal: apply.description,
+    silMutated: "removed")
 }
 
 private func swiftMutagenMutations(for builtin: BuiltinInst) -> [SwiftMutagenMutation] {
@@ -503,6 +659,107 @@ private func swiftMutagenApply(
   builtin.replace(with: replacement, context)
 }
 
+private func swiftMutagenApplyReturn(
+  mutation: SwiftMutagenMutation,
+  to returnInst: ReturnInst,
+  _ context: FunctionPassContext
+) {
+  let builder = Builder(before: returnInst, context)
+  let returnType = returnInst.returnedValue.type
+  let replacement: Value?
+  switch mutation.mutatedBuiltinName {
+  case "return_false":
+    replacement = swiftMutagenMakeBool(false, type: returnType, builder: builder)
+  case "return_true":
+    replacement = swiftMutagenMakeBool(true, type: returnType, builder: builder)
+  case "return_nil":
+    replacement = builder.createOptionalNone(type: returnType)
+  case "return_zero":
+    replacement = swiftMutagenMakeIntegerZero(type: returnType, in: returnInst.parentFunction, builder: builder)
+  default:
+    replacement = nil
+  }
+
+  guard let replacement else {
+    return
+  }
+  builder.createReturn(of: replacement)
+  context.erase(instruction: returnInst)
+}
+
+private func swiftMutagenMakeBool(
+  _ value: Bool,
+  type: Type,
+  builder: Builder
+) -> Value {
+  let literal = builder.createBoolLiteral(value)
+  return builder.createStruct(type: type, elements: [literal])
+}
+
+private func swiftMutagenMakeIntegerZero(
+  type: Type,
+  in function: Function,
+  builder: Builder
+) -> Value? {
+  guard let fields = type.getNominalFields(in: function),
+        fields.count == 1,
+        fields[0].canonicalType.isBuiltinInteger else {
+    return nil
+  }
+  let zero = builder.createIntegerLiteral(0, type: fields[0])
+  return builder.createStruct(type: type, elements: [zero])
+}
+
+private func swiftMutagenIsBoolType(_ type: Type, in function: Function) -> Bool {
+  guard let nominal = type.nominal,
+        nominal.name.string == "Bool",
+        let fields = type.getNominalFields(in: function),
+        fields.count == 1 else {
+    return false
+  }
+  return fields[0].canonicalType.isBuiltinInteger(withFixedWidth: 1)
+}
+
+private func swiftMutagenIsIntegerStructType(_ type: Type, in function: Function) -> Bool {
+  guard let nominal = type.nominal,
+        nominal.name.string != "Bool",
+        let fields = type.getNominalFields(in: function),
+        fields.count == 1 else {
+    return false
+  }
+  return fields[0].canonicalType.isBuiltinInteger
+}
+
+private func swiftMutagenBoolLiteralValue(_ value: Value) -> Bool? {
+  guard let structInst = value as? StructInst,
+        let literal = structInst.operands.first?.value as? IntegerLiteralInst,
+        let literalValue = literal.value else {
+    return nil
+  }
+  if literalValue == 0 {
+    return false
+  }
+  if literalValue == -1 || literalValue == 1 {
+    return true
+  }
+  return nil
+}
+
+private func swiftMutagenIntegerStructLiteralValue(_ value: Value) -> Int? {
+  guard let structInst = value as? StructInst,
+        let literal = structInst.operands.first?.value as? IntegerLiteralInst else {
+    return nil
+  }
+  return literal.value
+}
+
+private func swiftMutagenIsOptionalNone(_ value: Value) -> Bool {
+  guard let enumInst = value as? EnumInst else {
+    return false
+  }
+  return enumInst.type.isOptional && enumInst.caseIndex == Builder.optionalNoneCaseIndex
+}
+
 private func swiftMutagenMutatorIsEnabled(
   _ mutator: String,
   config: SwiftMutagenConfig
@@ -518,6 +775,73 @@ private func swiftMutagenMutatorIsEnabled(
   return false
 }
 
+private func swiftMutagenReturnSourceLocation(
+  for returnInst: ReturnInst,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  if let fileNameAndPosition = returnInst.location.fileNameAndPosition {
+    let path = fileNameAndPosition.path.string
+    guard let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) else {
+      return nil
+    }
+    return (
+      swiftMutagenTrimPackageRoot(matchedPath, config: config),
+      fileNameAndPosition.line,
+      fileNameAndPosition.column,
+      mutation.sourceOriginal,
+      mutation.sourceMutated)
+  }
+
+  let location = returnInst.parentFunction.location.description
+  for path in swiftMutagenSwiftSourcePaths(config: config) {
+    guard location.contains(path),
+          let line = swiftMutagenPreferredLine(in: location, path: path) else {
+      continue
+    }
+    return (
+      swiftMutagenTrimPackageRoot(path, config: config),
+      line,
+      1,
+      mutation.sourceOriginal,
+      mutation.sourceMutated)
+  }
+  return nil
+}
+
+private func swiftMutagenInstructionSourceLocation(
+  for instruction: Instruction,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  if let fileNameAndPosition = instruction.location.fileNameAndPosition {
+    let path = fileNameAndPosition.path.string
+    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
+      return (
+        swiftMutagenTrimPackageRoot(matchedPath, config: config),
+        fileNameAndPosition.line,
+        fileNameAndPosition.column,
+        mutation.sourceOriginal,
+        mutation.sourceMutated)
+    }
+  }
+
+  let location = instruction.parentFunction.location.description
+  for path in swiftMutagenSwiftSourcePaths(config: config) {
+    guard location.contains(path),
+          let line = swiftMutagenPreferredLine(in: location, path: path) else {
+      continue
+    }
+    return (
+      swiftMutagenTrimPackageRoot(path, config: config),
+      line,
+      1,
+      mutation.sourceOriginal,
+      mutation.sourceMutated)
+  }
+  return nil
+}
+
 private func swiftMutagenSourceLocation(
   for instruction: Instruction,
   function: Function,
@@ -527,11 +851,11 @@ private func swiftMutagenSourceLocation(
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   if let fileNameAndPosition = instruction.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
-    guard swiftMutagenPathIsIncluded(path, config: config) else {
+    guard let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) else {
       return nil
     }
     return (
-      swiftMutagenTrimPackageRoot(path, config: config),
+      swiftMutagenTrimPackageRoot(matchedPath, config: config),
       fileNameAndPosition.line,
       fileNameAndPosition.column,
       "",
@@ -577,9 +901,9 @@ private func swiftMutagenFindSourceOperator(
 
   let operatorPairs: [(String, String)]
   if mutation.mutator == "INCREMENTS" {
-    if mutation.originalID == .SAddOver {
+    if mutation.originalID == .some(.SAddOver) {
       operatorPairs = [("+=", "-="), ("+", "-")]
-    } else if mutation.originalID == .SSubOver {
+    } else if mutation.originalID == .some(.SSubOver) {
       operatorPairs = [("-=", "+="), ("-", "+")]
     } else {
       operatorPairs = [(mutation.sourceOriginal, mutation.sourceMutated)]
@@ -588,39 +912,39 @@ private func swiftMutagenFindSourceOperator(
     operatorPairs = [("-", "")]
   } else if mutation.mutator == "NEGATE_CONDITIONALS" {
     switch mutation.originalID {
-    case .ICMP_EQ:
+    case .some(.ICMP_EQ):
       operatorPairs = [("==", "!=")]
-    case .ICMP_NE:
+    case .some(.ICMP_NE):
       operatorPairs = [("!=", "==")]
-    case .ICMP_SGE, .ICMP_UGE:
+    case .some(.ICMP_SGE), .some(.ICMP_UGE):
       operatorPairs = [(">=", "<"), ("<=", ">")]
-    case .ICMP_SGT, .ICMP_UGT:
+    case .some(.ICMP_SGT), .some(.ICMP_UGT):
       operatorPairs = [(">", "<="), ("<", ">=")]
-    case .ICMP_SLE, .ICMP_ULE:
+    case .some(.ICMP_SLE), .some(.ICMP_ULE):
       operatorPairs = [("<=", ">"), (">=", "<")]
-    case .ICMP_SLT, .ICMP_ULT:
+    case .some(.ICMP_SLT), .some(.ICMP_ULT):
       operatorPairs = [("<", ">="), (">", "<=")]
     default:
       operatorPairs = [(mutation.sourceOriginal, mutation.sourceMutated)]
     }
   } else if mutation.mutator == "CONDITIONALS_BOUNDARY" {
     switch mutation.originalID {
-    case .ICMP_SGE, .ICMP_UGE:
+    case .some(.ICMP_SGE), .some(.ICMP_UGE):
       operatorPairs = [(">=", ">"), ("<=", "<")]
-    case .ICMP_SGT, .ICMP_UGT:
+    case .some(.ICMP_SGT), .some(.ICMP_UGT):
       operatorPairs = [(">", ">="), ("<", "<=")]
-    case .ICMP_SLE, .ICMP_ULE:
+    case .some(.ICMP_SLE), .some(.ICMP_ULE):
       operatorPairs = [("<=", "<"), (">=", ">")]
-    case .ICMP_SLT, .ICMP_ULT:
+    case .some(.ICMP_SLT), .some(.ICMP_ULT):
       operatorPairs = [("<", "<="), (">", ">=")]
     default:
       operatorPairs = [(mutation.sourceOriginal, mutation.sourceMutated)]
     }
   } else {
     switch mutation.originalID {
-    case .SAddOver, .Add, .FAdd:
+    case .some(.SAddOver), .some(.Add), .some(.FAdd):
       operatorPairs = [("+", "-")]
-    case .SSubOver, .Sub, .FSub:
+    case .some(.SSubOver), .some(.Sub), .some(.FSub):
       operatorPairs = [("-", "+")]
     default:
       operatorPairs = [(mutation.sourceOriginal, mutation.sourceMutated)]
@@ -906,6 +1230,23 @@ private func swiftMutagenPathIsConfiguredSource(
     }
   }
   return false
+}
+
+private func swiftMutagenIncludedSourcePath(
+  _ path: String,
+  config: SwiftMutagenConfig
+) -> String? {
+  if swiftMutagenPathIsIncluded(path, config: config) {
+    return path
+  }
+  let suffix = path.hasPrefix("/") ? path : "/" + path
+  for sourceFile in config.sourceFiles {
+    if sourceFile.hasSuffix(suffix),
+       swiftMutagenPathIsIncluded(sourceFile, config: config) {
+      return sourceFile
+    }
+  }
+  return nil
 }
 
 private func swiftMutagenTrimPackageRoot(

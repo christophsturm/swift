@@ -377,14 +377,25 @@ private func swiftMutagenMutations(for builtin: BuiltinInst) -> [SwiftMutagenMut
       silOriginal: builtin.name.string,
       silMutated: "ssub_with_overflow"))
   case .SSubOver:
-    mutations.append(SwiftMutagenMutation(
-      originalID: .SSubOver,
-      mutator: swiftMutagenIsIncrementBuiltin(builtin) ? "INCREMENTS" : "MATH",
-      mutatedBuiltinName: "sadd_with_overflow",
-      sourceOriginal: "-",
-      sourceMutated: "+",
-      silOriginal: builtin.name.string,
-      silMutated: "sadd_with_overflow"))
+    if swiftMutagenIsUnaryNegationBuiltin(builtin) {
+      mutations.append(SwiftMutagenMutation(
+        originalID: .SSubOver,
+        mutator: "INVERT_NEGS",
+        mutatedBuiltinName: "sadd_with_overflow",
+        sourceOriginal: "-",
+        sourceMutated: "",
+        silOriginal: builtin.name.string,
+        silMutated: "sadd_with_overflow"))
+    } else {
+      mutations.append(SwiftMutagenMutation(
+        originalID: .SSubOver,
+        mutator: swiftMutagenIsIncrementBuiltin(builtin) ? "INCREMENTS" : "MATH",
+        mutatedBuiltinName: "sadd_with_overflow",
+        sourceOriginal: "-",
+        sourceMutated: "+",
+        silOriginal: builtin.name.string,
+        silMutated: "sadd_with_overflow"))
+    }
   case .Add:
     mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "sub", sourceOriginal: "+", sourceMutated: "-"))
   case .Sub:
@@ -450,12 +461,28 @@ private func swiftMutagenIsIncrementBuiltin(_ builtin: BuiltinInst) -> Bool {
   return swiftMutagenIsOneInteger(arguments[0]) || swiftMutagenIsOneInteger(arguments[1])
 }
 
+private func swiftMutagenIsUnaryNegationBuiltin(_ builtin: BuiltinInst) -> Bool {
+  let arguments = Array(builtin.arguments)
+  guard arguments.count >= 2 else {
+    return false
+  }
+  return swiftMutagenIsZeroInteger(arguments[0]) && !swiftMutagenIsZeroInteger(arguments[1])
+}
+
 private func swiftMutagenIsOneInteger(_ value: Value) -> Bool {
   guard let literal = value as? IntegerLiteralInst,
         let literalValue = literal.value else {
     return false
   }
   return literalValue == 1
+}
+
+private func swiftMutagenIsZeroInteger(_ value: Value) -> Bool {
+  guard let literal = value as? IntegerLiteralInst,
+        let literalValue = literal.value else {
+    return false
+  }
+  return literalValue == 0
 }
 
 private func swiftMutagenApply(
@@ -557,6 +584,8 @@ private func swiftMutagenFindSourceOperator(
     } else {
       operatorPairs = [(mutation.sourceOriginal, mutation.sourceMutated)]
     }
+  } else if mutation.mutator == "INVERT_NEGS" {
+    operatorPairs = [("-", "")]
   } else if mutation.mutator == "NEGATE_CONDITIONALS" {
     switch mutation.originalID {
     case .ICMP_EQ:
@@ -794,11 +823,13 @@ private func swiftMutagenSourceExpression(
   mutatedOperator: String
 ) -> (original: String, mutated: String) {
   var leftStart = operatorStart
-  while leftStart > 0 && swiftMutagenIsHorizontalWhitespace(bytes[leftStart - 1]) {
-    leftStart -= 1
-  }
-  while leftStart > 0 && swiftMutagenIsExpressionByte(bytes[leftStart - 1]) {
-    leftStart -= 1
+  if !mutatedOperator.isEmpty {
+    while leftStart > 0 && swiftMutagenIsHorizontalWhitespace(bytes[leftStart - 1]) {
+      leftStart -= 1
+    }
+    while leftStart > 0 && swiftMutagenIsExpressionByte(bytes[leftStart - 1]) {
+      leftStart -= 1
+    }
   }
 
   var rightEnd = operatorEnd

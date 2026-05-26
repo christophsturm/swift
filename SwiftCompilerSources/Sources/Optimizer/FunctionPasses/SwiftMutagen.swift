@@ -31,9 +31,11 @@ private struct SwiftMutagenConfig {
   let packageRoot: String
   let excludePathFragments: [String]
   let sourceFiles: [String]
+  let enabledMutators: [String]
 
   static func load() -> SwiftMutagenConfig? {
-    guard let json = swiftMutagenRead(Self.defaultPath),
+    let configPath = swiftMutagenEnvironmentValue("SWIFT_MUTAGEN_CONFIG") ?? Self.defaultPath
+    guard let json = swiftMutagenRead(configPath),
           let rawMode = swiftMutagenJSONStringValue("mode", in: json) else {
       return nil
     }
@@ -57,6 +59,7 @@ private struct SwiftMutagenConfig {
     let packageRoot = swiftMutagenJSONStringValue("packageRoot", in: json) ?? ""
     let excludePaths = swiftMutagenJSONStringArray("excludePaths", in: json)
     let sourceFiles = swiftMutagenJSONStringArray("sourceFiles", in: json)
+    let enabledMutators = swiftMutagenJSONStringArray("enabledMutators", in: json)
 
     return SwiftMutagenConfig(
       mode: mode,
@@ -64,12 +67,27 @@ private struct SwiftMutagenConfig {
       mutantsPath: mutantsPath,
       packageRoot: packageRoot,
       excludePathFragments: excludePaths,
-      sourceFiles: sourceFiles)
+      sourceFiles: sourceFiles,
+      enabledMutators: enabledMutators)
   }
+}
+
+private func swiftMutagenEnvironmentValue(_ name: String) -> String? {
+  #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS) || os(Linux) || os(Android)
+  return name.withCString { namePointer in
+    guard let valuePointer = getenv(namePointer) else {
+      return nil
+    }
+    return String(cString: valuePointer)
+  }
+  #else
+  return nil
+  #endif
 }
 
 private struct SwiftMutagenMutation {
   let originalID: BuiltinInst.ID
+  let mutator: String
   let mutatedBuiltinName: String
   let sourceOriginal: String
   let sourceMutated: String
@@ -79,6 +97,7 @@ private struct SwiftMutagenMutation {
   func withSource(original: String, mutated: String) -> SwiftMutagenMutation {
     SwiftMutagenMutation(
       originalID: originalID,
+      mutator: mutator,
       mutatedBuiltinName: mutatedBuiltinName,
       sourceOriginal: original,
       sourceMutated: mutated,
@@ -99,7 +118,7 @@ private struct SwiftMutagenCandidate {
   var jsonLine: String {
     var fields: [String] = []
     fields.append(#""id":"\#(swiftMutagenEscapeJSON(id))""#)
-    fields.append(#""mutator":"ConditionalBoundary""#)
+    fields.append(#""mutator":"\#(swiftMutagenEscapeJSON(mutation.mutator))""#)
     fields.append(#""module":"\#(swiftMutagenEscapeJSON(module))""#)
     fields.append(#""function":"\#(swiftMutagenEscapeJSON(function))""#)
     fields.append(#""file":"\#(swiftMutagenEscapeJSON(file))""#)
@@ -133,49 +152,54 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
 
   for block in function.blocks {
     for instruction in block.instructions {
-      guard let builtin = instruction as? BuiltinInst,
-            let mutation = swiftMutagenMutation(for: builtin) else {
+      guard let builtin = instruction as? BuiltinInst else {
         continue
       }
 
-      guard let sourceLocation = swiftMutagenSourceLocation(
-        for: builtin,
-        moduleName: moduleName,
-        mutation: mutation,
-        config: config
-      ) else {
-        continue
-      }
-
-      let id = swiftMutagenFormatMutantID(swiftMutagenNextOrdinal)
-      swiftMutagenNextOrdinal += 1
-
-      let displayMutation = sourceLocation.sourceOriginal.isEmpty
-        ? mutation
-        : mutation.withSource(
-          original: sourceLocation.sourceOriginal,
-          mutated: sourceLocation.sourceMutated)
-      let candidate = SwiftMutagenCandidate(
-        id: id,
-        module: moduleName,
-        function: functionName,
-        file: sourceLocation.file,
-        line: sourceLocation.line,
-        column: sourceLocation.column,
-        mutation: displayMutation)
-
-      switch config.mode {
-      case .discover:
-        if !swiftMutagenHasTruncatedDiscoveryOutput {
-          swiftMutagenCreateParentDirectories(forFile: config.mutantsPath)
-          swiftMutagenWrite("", to: config.mutantsPath, append: false)
-          swiftMutagenHasTruncatedDiscoveryOutput = true
+      for mutation in swiftMutagenMutations(for: builtin) {
+        guard swiftMutagenMutatorIsEnabled(mutation.mutator, config: config) else {
+          continue
         }
-        swiftMutagenWrite(candidate.jsonLine, to: config.mutantsPath, append: true)
-      case .apply:
-        if candidate.id == config.activeMutantID {
-          swiftMutagenApply(mutation: mutation, to: builtin, context)
-          changed = true
+        guard let sourceLocation = swiftMutagenSourceLocation(
+          for: builtin,
+          function: function,
+          moduleName: moduleName,
+          mutation: mutation,
+          config: config
+        ) else {
+          continue
+        }
+
+        let id = swiftMutagenFormatMutantID(swiftMutagenNextOrdinal)
+        swiftMutagenNextOrdinal += 1
+
+        let displayMutation = sourceLocation.sourceOriginal.isEmpty
+          ? mutation
+          : mutation.withSource(
+            original: sourceLocation.sourceOriginal,
+            mutated: sourceLocation.sourceMutated)
+        let candidate = SwiftMutagenCandidate(
+          id: id,
+          module: moduleName,
+          function: functionName,
+          file: sourceLocation.file,
+          line: sourceLocation.line,
+          column: sourceLocation.column,
+          mutation: displayMutation)
+
+        switch config.mode {
+        case .discover:
+          if !swiftMutagenHasTruncatedDiscoveryOutput {
+            swiftMutagenCreateParentDirectories(forFile: config.mutantsPath)
+            swiftMutagenWrite("", to: config.mutantsPath, append: false)
+            swiftMutagenHasTruncatedDiscoveryOutput = true
+          }
+          swiftMutagenWrite(candidate.jsonLine, to: config.mutantsPath, append: true)
+        case .apply:
+          if candidate.id == config.activeMutantID {
+            swiftMutagenApply(mutation: mutation, to: builtin, context)
+            changed = true
+          }
         }
       }
     }
@@ -186,27 +210,252 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
   }
 }
 
-private func swiftMutagenMutation(for builtin: BuiltinInst) -> SwiftMutagenMutation? {
+private func swiftMutagenMutations(for builtin: BuiltinInst) -> [SwiftMutagenMutation] {
+  var mutations: [SwiftMutagenMutation] = []
   switch builtin.id {
+  case .ICMP_EQ:
+    mutations.append(SwiftMutagenMutation(
+      originalID: .ICMP_EQ,
+      mutator: "NEGATE_CONDITIONALS",
+      mutatedBuiltinName: "cmp_ne",
+      sourceOriginal: "==",
+      sourceMutated: "!=",
+      silOriginal: builtin.name.string,
+      silMutated: "cmp_ne"))
+  case .ICMP_NE:
+    mutations.append(SwiftMutagenMutation(
+      originalID: .ICMP_NE,
+      mutator: "NEGATE_CONDITIONALS",
+      mutatedBuiltinName: "cmp_eq",
+      sourceOriginal: "!=",
+      sourceMutated: "==",
+      silOriginal: builtin.name.string,
+      silMutated: "cmp_eq"))
+  case .ICMP_SGE:
+    mutations.append(SwiftMutagenMutation(
+      originalID: .ICMP_SGE,
+      mutator: "CONDITIONALS_BOUNDARY",
+      mutatedBuiltinName: "cmp_sgt",
+      sourceOriginal: ">=",
+      sourceMutated: ">",
+      silOriginal: builtin.name.string,
+      silMutated: "cmp_sgt"))
+    mutations.append(SwiftMutagenMutation(
+      originalID: .ICMP_SGE,
+      mutator: "NEGATE_CONDITIONALS",
+      mutatedBuiltinName: "cmp_slt",
+      sourceOriginal: ">=",
+      sourceMutated: "<",
+      silOriginal: builtin.name.string,
+      silMutated: "cmp_slt"))
   case .ICMP_SGT:
-    return SwiftMutagenMutation(
+    mutations.append(SwiftMutagenMutation(
       originalID: .ICMP_SGT,
+      mutator: "CONDITIONALS_BOUNDARY",
       mutatedBuiltinName: "cmp_sge",
       sourceOriginal: ">",
       sourceMutated: ">=",
       silOriginal: builtin.name.string,
-      silMutated: "cmp_sge")
+      silMutated: "cmp_sge"))
+    mutations.append(SwiftMutagenMutation(
+      originalID: .ICMP_SGT,
+      mutator: "NEGATE_CONDITIONALS",
+      mutatedBuiltinName: "cmp_sle",
+      sourceOriginal: ">",
+      sourceMutated: "<=",
+      silOriginal: builtin.name.string,
+      silMutated: "cmp_sle"))
+  case .ICMP_SLE:
+    mutations.append(SwiftMutagenMutation(
+      originalID: .ICMP_SLE,
+      mutator: "CONDITIONALS_BOUNDARY",
+      mutatedBuiltinName: "cmp_slt",
+      sourceOriginal: "<=",
+      sourceMutated: "<",
+      silOriginal: builtin.name.string,
+      silMutated: "cmp_slt"))
+    mutations.append(SwiftMutagenMutation(
+      originalID: .ICMP_SLE,
+      mutator: "NEGATE_CONDITIONALS",
+      mutatedBuiltinName: "cmp_sgt",
+      sourceOriginal: "<=",
+      sourceMutated: ">",
+      silOriginal: builtin.name.string,
+      silMutated: "cmp_sgt"))
   case .ICMP_SLT:
-    return SwiftMutagenMutation(
+    mutations.append(SwiftMutagenMutation(
       originalID: .ICMP_SLT,
+      mutator: "CONDITIONALS_BOUNDARY",
       mutatedBuiltinName: "cmp_sle",
       sourceOriginal: "<",
       sourceMutated: "<=",
       silOriginal: builtin.name.string,
-      silMutated: "cmp_sle")
+      silMutated: "cmp_sle"))
+    mutations.append(SwiftMutagenMutation(
+      originalID: .ICMP_SLT,
+      mutator: "NEGATE_CONDITIONALS",
+      mutatedBuiltinName: "cmp_sge",
+      sourceOriginal: "<",
+      sourceMutated: ">=",
+      silOriginal: builtin.name.string,
+      silMutated: "cmp_sge"))
+  case .ICMP_UGE:
+    mutations.append(SwiftMutagenMutation(
+      originalID: .ICMP_UGE,
+      mutator: "CONDITIONALS_BOUNDARY",
+      mutatedBuiltinName: "cmp_ugt",
+      sourceOriginal: ">=",
+      sourceMutated: ">",
+      silOriginal: builtin.name.string,
+      silMutated: "cmp_ugt"))
+    mutations.append(SwiftMutagenMutation(
+      originalID: .ICMP_UGE,
+      mutator: "NEGATE_CONDITIONALS",
+      mutatedBuiltinName: "cmp_ult",
+      sourceOriginal: ">=",
+      sourceMutated: "<",
+      silOriginal: builtin.name.string,
+      silMutated: "cmp_ult"))
+  case .ICMP_UGT:
+    mutations.append(SwiftMutagenMutation(
+      originalID: .ICMP_UGT,
+      mutator: "CONDITIONALS_BOUNDARY",
+      mutatedBuiltinName: "cmp_uge",
+      sourceOriginal: ">",
+      sourceMutated: ">=",
+      silOriginal: builtin.name.string,
+      silMutated: "cmp_uge"))
+    mutations.append(SwiftMutagenMutation(
+      originalID: .ICMP_UGT,
+      mutator: "NEGATE_CONDITIONALS",
+      mutatedBuiltinName: "cmp_ule",
+      sourceOriginal: ">",
+      sourceMutated: "<=",
+      silOriginal: builtin.name.string,
+      silMutated: "cmp_ule"))
+  case .ICMP_ULE:
+    mutations.append(SwiftMutagenMutation(
+      originalID: .ICMP_ULE,
+      mutator: "CONDITIONALS_BOUNDARY",
+      mutatedBuiltinName: "cmp_ult",
+      sourceOriginal: "<=",
+      sourceMutated: "<",
+      silOriginal: builtin.name.string,
+      silMutated: "cmp_ult"))
+    mutations.append(SwiftMutagenMutation(
+      originalID: .ICMP_ULE,
+      mutator: "NEGATE_CONDITIONALS",
+      mutatedBuiltinName: "cmp_ugt",
+      sourceOriginal: "<=",
+      sourceMutated: ">",
+      silOriginal: builtin.name.string,
+      silMutated: "cmp_ugt"))
+  case .ICMP_ULT:
+    mutations.append(SwiftMutagenMutation(
+      originalID: .ICMP_ULT,
+      mutator: "CONDITIONALS_BOUNDARY",
+      mutatedBuiltinName: "cmp_ule",
+      sourceOriginal: "<",
+      sourceMutated: "<=",
+      silOriginal: builtin.name.string,
+      silMutated: "cmp_ule"))
+    mutations.append(SwiftMutagenMutation(
+      originalID: .ICMP_ULT,
+      mutator: "NEGATE_CONDITIONALS",
+      mutatedBuiltinName: "cmp_uge",
+      sourceOriginal: "<",
+      sourceMutated: ">=",
+      silOriginal: builtin.name.string,
+      silMutated: "cmp_uge"))
+  case .SAddOver:
+    mutations.append(SwiftMutagenMutation(
+      originalID: .SAddOver,
+      mutator: swiftMutagenIsIncrementBuiltin(builtin) ? "INCREMENTS" : "MATH",
+      mutatedBuiltinName: "ssub_with_overflow",
+      sourceOriginal: "+",
+      sourceMutated: "-",
+      silOriginal: builtin.name.string,
+      silMutated: "ssub_with_overflow"))
+  case .SSubOver:
+    mutations.append(SwiftMutagenMutation(
+      originalID: .SSubOver,
+      mutator: swiftMutagenIsIncrementBuiltin(builtin) ? "INCREMENTS" : "MATH",
+      mutatedBuiltinName: "sadd_with_overflow",
+      sourceOriginal: "-",
+      sourceMutated: "+",
+      silOriginal: builtin.name.string,
+      silMutated: "sadd_with_overflow"))
+  case .Add:
+    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "sub", sourceOriginal: "+", sourceMutated: "-"))
+  case .Sub:
+    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "add", sourceOriginal: "-", sourceMutated: "+"))
+  case .Mul:
+    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "sdiv", sourceOriginal: "*", sourceMutated: "/"))
+  case .SDiv:
+    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "mul", sourceOriginal: "/", sourceMutated: "*"))
+  case .SRem:
+    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "mul", sourceOriginal: "%", sourceMutated: "*"))
+  case .UDiv:
+    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "mul", sourceOriginal: "/", sourceMutated: "*"))
+  case .URem:
+    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "mul", sourceOriginal: "%", sourceMutated: "*"))
+  case .FAdd:
+    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "fsub", sourceOriginal: "+", sourceMutated: "-"))
+  case .FSub:
+    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "fadd", sourceOriginal: "-", sourceMutated: "+"))
+  case .FMul:
+    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "fdiv", sourceOriginal: "*", sourceMutated: "/"))
+  case .FDiv:
+    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "fmul", sourceOriginal: "/", sourceMutated: "*"))
+  case .FRem:
+    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "fmul", sourceOriginal: "%", sourceMutated: "*"))
+  case .And:
+    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "or", sourceOriginal: "&", sourceMutated: "|"))
+  case .Or:
+    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "and", sourceOriginal: "|", sourceMutated: "&"))
+  case .Xor:
+    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "and", sourceOriginal: "^", sourceMutated: "&"))
+  case .Shl:
+    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "ashr", sourceOriginal: "<<", sourceMutated: ">>"))
+  case .AShr, .LShr:
+    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "shl", sourceOriginal: ">>", sourceMutated: "<<"))
   default:
-    return nil
+    break
   }
+  return mutations
+}
+
+private func swiftMutagenBinaryMutation(
+  _ builtin: BuiltinInst,
+  mutator: String,
+  mutatedBuiltinName: String,
+  sourceOriginal: String,
+  sourceMutated: String
+) -> SwiftMutagenMutation {
+  SwiftMutagenMutation(
+    originalID: builtin.id,
+    mutator: mutator,
+    mutatedBuiltinName: mutatedBuiltinName,
+    sourceOriginal: sourceOriginal,
+    sourceMutated: sourceMutated,
+    silOriginal: builtin.name.string,
+    silMutated: mutatedBuiltinName)
+}
+
+private func swiftMutagenIsIncrementBuiltin(_ builtin: BuiltinInst) -> Bool {
+  let arguments = Array(builtin.arguments)
+  guard arguments.count >= 2 else {
+    return false
+  }
+  return swiftMutagenIsOneInteger(arguments[0]) || swiftMutagenIsOneInteger(arguments[1])
+}
+
+private func swiftMutagenIsOneInteger(_ value: Value) -> Bool {
+  guard let literal = value as? IntegerLiteralInst,
+        let literalValue = literal.value else {
+    return false
+  }
+  return literalValue == 1
 }
 
 private func swiftMutagenApply(
@@ -227,8 +476,24 @@ private func swiftMutagenApply(
   builtin.replace(with: replacement, context)
 }
 
+private func swiftMutagenMutatorIsEnabled(
+  _ mutator: String,
+  config: SwiftMutagenConfig
+) -> Bool {
+  if config.enabledMutators.isEmpty {
+    return true
+  }
+  for enabledMutator in config.enabledMutators {
+    if enabledMutator == mutator {
+      return true
+    }
+  }
+  return false
+}
+
 private func swiftMutagenSourceLocation(
   for instruction: Instruction,
+  function: Function,
   moduleName: String,
   mutation: SwiftMutagenMutation,
   config: SwiftMutagenConfig
@@ -248,6 +513,7 @@ private func swiftMutagenSourceLocation(
 
   return swiftMutagenFindSourceOperator(
     moduleName: moduleName,
+    functionLocation: function.location.description,
     mutation: mutation,
     config: config)
 }
@@ -274,6 +540,7 @@ private func swiftMutagenShouldExclude(
 
 private func swiftMutagenFindSourceOperator(
   moduleName: String,
+  functionLocation: String,
   mutation: SwiftMutagenMutation,
   config: SwiftMutagenConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
@@ -282,19 +549,68 @@ private func swiftMutagenFindSourceOperator(
   }
 
   let operatorPairs: [(String, String)]
-  switch mutation.originalID {
-  case .ICMP_SGT:
-    operatorPairs = [(">", ">=")]
-  case .ICMP_SLT:
-    operatorPairs = [("<", "<="), (">", ">=")]
-  default:
-    operatorPairs = [(mutation.sourceOriginal, mutation.sourceMutated)]
+  if mutation.mutator == "INCREMENTS" {
+    if mutation.originalID == .SAddOver {
+      operatorPairs = [("+=", "-="), ("+", "-")]
+    } else if mutation.originalID == .SSubOver {
+      operatorPairs = [("-=", "+="), ("-", "+")]
+    } else {
+      operatorPairs = [(mutation.sourceOriginal, mutation.sourceMutated)]
+    }
+  } else if mutation.mutator == "NEGATE_CONDITIONALS" {
+    switch mutation.originalID {
+    case .ICMP_EQ:
+      operatorPairs = [("==", "!=")]
+    case .ICMP_NE:
+      operatorPairs = [("!=", "==")]
+    case .ICMP_SGE, .ICMP_UGE:
+      operatorPairs = [(">=", "<"), ("<=", ">")]
+    case .ICMP_SGT, .ICMP_UGT:
+      operatorPairs = [(">", "<="), ("<", ">=")]
+    case .ICMP_SLE, .ICMP_ULE:
+      operatorPairs = [("<=", ">"), (">=", "<")]
+    case .ICMP_SLT, .ICMP_ULT:
+      operatorPairs = [("<", ">="), (">", "<=")]
+    default:
+      operatorPairs = [(mutation.sourceOriginal, mutation.sourceMutated)]
+    }
+  } else if mutation.mutator == "CONDITIONALS_BOUNDARY" {
+    switch mutation.originalID {
+    case .ICMP_SGE, .ICMP_UGE:
+      operatorPairs = [(">=", ">"), ("<=", "<")]
+    case .ICMP_SGT, .ICMP_UGT:
+      operatorPairs = [(">", ">="), ("<", "<=")]
+    case .ICMP_SLE, .ICMP_ULE:
+      operatorPairs = [("<=", "<"), (">=", ">")]
+    case .ICMP_SLT, .ICMP_ULT:
+      operatorPairs = [("<", "<="), (">", ">=")]
+    default:
+      operatorPairs = [(mutation.sourceOriginal, mutation.sourceMutated)]
+    }
+  } else {
+    switch mutation.originalID {
+    case .SAddOver, .Add, .FAdd:
+      operatorPairs = [("+", "-")]
+    case .SSubOver, .Sub, .FSub:
+      operatorPairs = [("-", "+")]
+    default:
+      operatorPairs = [(mutation.sourceOriginal, mutation.sourceMutated)]
+    }
   }
 
   let preferredPrefix = config.packageRoot + "/Sources/" + moduleName + "/"
   let sourcePaths = swiftMutagenSwiftSourcePaths(config: config)
   var hasModuleSource = false
-  for path in sourcePaths {
+  let orderedSourcePaths = sourcePaths.sorted {
+    let lhsMatches = functionLocation.contains($0)
+    let rhsMatches = functionLocation.contains($1)
+    if lhsMatches != rhsMatches {
+      return lhsMatches
+    }
+    return $0 < $1
+  }
+
+  for path in orderedSourcePaths {
     if path.hasPrefix(preferredPrefix) {
       hasModuleSource = true
       break
@@ -310,20 +626,35 @@ private func swiftMutagenFindSourceOperator(
     guard let text = swiftMutagenRead(path) else {
       continue
     }
+    let preferredLine = swiftMutagenPreferredLine(in: functionLocation, path: path)
+    var bestForPath: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
     for pair in operatorPairs {
-      if let position = swiftMutagenFindOperator(pair.0, mutatedOperator: pair.1, in: text) {
+      if let position = swiftMutagenFindOperator(
+        pair.0,
+        mutatedOperator: pair.1,
+        in: text,
+        preferredLine: preferredLine
+      ) {
         let result = (
           swiftMutagenTrimPackageRoot(path, config: config),
           position.line,
           position.column,
           position.sourceOriginal,
           position.sourceMutated)
-        if path.hasPrefix(preferredPrefix) {
-          return result
+        if let existing = bestForPath,
+           let preferredLine = preferredLine,
+           swiftMutagenLineDistance(existing.line, preferredLine) <= swiftMutagenLineDistance(result.1, preferredLine) {
+          continue
         }
-        if fallback == nil {
-          fallback = result
-        }
+        bestForPath = result
+      }
+    }
+    if let result = bestForPath {
+      if path.hasPrefix(preferredPrefix) {
+        return result
+      }
+      if fallback == nil {
+        fallback = result
       }
     }
   }
@@ -334,7 +665,8 @@ private func swiftMutagenFindSourceOperator(
 private func swiftMutagenFindOperator(
   _ op: String,
   mutatedOperator: String,
-  in text: String
+  in text: String,
+  preferredLine: Int?
 ) -> (line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   let bytes = Array(text.utf8)
   let opBytes = Array(op.utf8)
@@ -345,6 +677,7 @@ private func swiftMutagenFindOperator(
   var line = 1
   var column = 1
   var index = 0
+  var best: (line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
   while index <= bytes.count - opBytes.count {
     var matched = true
     for opIndex in 0..<opBytes.count {
@@ -373,7 +706,20 @@ private func swiftMutagenFindOperator(
         operatorStart: index,
         operatorEnd: index + opBytes.count,
         mutatedOperator: mutatedOperator)
-      return (line, column, expression.original, expression.mutated)
+      let candidate = (line, column, expression.original, expression.mutated)
+      guard let preferredLine = preferredLine else {
+        return candidate
+      }
+      if line == preferredLine {
+        return candidate
+      }
+      if let existing = best {
+        if swiftMutagenLineDistance(line, preferredLine) < swiftMutagenLineDistance(existing.line, preferredLine) {
+          best = candidate
+        }
+      } else {
+        best = candidate
+      }
     }
     if bytes[index] == 10 {
       line += 1
@@ -383,7 +729,36 @@ private func swiftMutagenFindOperator(
     }
     index += 1
   }
-  return nil
+  return best
+}
+
+private func swiftMutagenPreferredLine(in location: String, path: String) -> Int? {
+  let locationBytes = Array(location.utf8)
+  let pathBytes = Array(path.utf8)
+  guard let pathIndex = swiftMutagenFind(pathBytes, in: locationBytes, startingAt: 0) else {
+    return nil
+  }
+  var index = pathIndex + pathBytes.count
+  guard index < locationBytes.count, locationBytes[index] == 58 else {
+    return nil
+  }
+  index += 1
+  var value = 0
+  var hasDigit = false
+  while index < locationBytes.count {
+    let byte = locationBytes[index]
+    guard byte >= 48 && byte <= 57 else {
+      break
+    }
+    value = value * 10 + Int(byte - 48)
+    hasDigit = true
+    index += 1
+  }
+  return hasDigit ? value : nil
+}
+
+private func swiftMutagenLineDistance(_ lhs: Int, _ rhs: Int) -> Int {
+  lhs >= rhs ? lhs - rhs : rhs - lhs
 }
 
 private func swiftMutagenIsSourceComparisonOperator(

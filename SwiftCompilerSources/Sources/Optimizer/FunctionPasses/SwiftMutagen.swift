@@ -44,6 +44,24 @@ private struct SwiftMutagenConditionMutationRule {
   }
 }
 
+private struct SwiftMutagenArithmeticMutationRule {
+  let builtinID: String
+  let mutatedBuiltinName: String
+  let sourceOriginal: String
+  let sourceMutated: String
+
+  init?(wireFormat: String) {
+    let fields = wireFormat.split(separator: "|", omittingEmptySubsequences: false).map { String($0) }
+    guard fields.count == 4 else {
+      return nil
+    }
+    builtinID = fields[0]
+    mutatedBuiltinName = fields[1]
+    sourceOriginal = fields[2]
+    sourceMutated = fields[3]
+  }
+}
+
 private struct SwiftMutagenConfig {
   static let defaultPath = ".mutagen/session/compiler-config.json"
 
@@ -57,6 +75,7 @@ private struct SwiftMutagenConfig {
   let sourceFiles: [String]
   let enabledMutators: [String]
   let conditionMutationRules: [SwiftMutagenConditionMutationRule]
+  let arithmeticMutationRules: [SwiftMutagenArithmeticMutationRule]
 
   static func load() -> SwiftMutagenConfig? {
     let configPath = swiftMutagenEnvironmentValue("SWIFT_MUTAGEN_CONFIG") ?? Self.defaultPath
@@ -92,6 +111,9 @@ private struct SwiftMutagenConfig {
     let conditionMutationRules = swiftMutagenJSONStringArray("conditionMutationRules", in: json).compactMap {
       SwiftMutagenConditionMutationRule(wireFormat: $0)
     }
+    let arithmeticMutationRules = swiftMutagenJSONStringArray("arithmeticMutationRules", in: json).compactMap {
+      SwiftMutagenArithmeticMutationRule(wireFormat: $0)
+    }
 
     return SwiftMutagenConfig(
       mode: mode,
@@ -103,7 +125,8 @@ private struct SwiftMutagenConfig {
       excludePathFragments: excludePaths,
       sourceFiles: sourceFiles,
       enabledMutators: enabledMutators,
-      conditionMutationRules: conditionMutationRules)
+      conditionMutationRules: conditionMutationRules,
+      arithmeticMutationRules: arithmeticMutationRules)
   }
 }
 
@@ -356,7 +379,7 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
         continue
       }
 
-      for mutation in swiftMutagenMutations(for: builtin) {
+      for mutation in swiftMutagenMutations(for: builtin, config: config) {
         guard swiftMutagenMutatorIsEnabled(mutation.mutator, config: config) else {
           continue
         }
@@ -1025,7 +1048,10 @@ private func swiftMutagenVoidCallMutation(for apply: ApplyInst) -> SwiftMutagenM
     silMutated: "removed")
 }
 
-private func swiftMutagenMutations(for builtin: BuiltinInst) -> [SwiftMutagenMutation] {
+private func swiftMutagenMutations(
+  for builtin: BuiltinInst,
+  config: SwiftMutagenConfig
+) -> [SwiftMutagenMutation] {
   var mutations: [SwiftMutagenMutation] = []
   switch builtin.id {
   case .ICMP_EQ:
@@ -1211,44 +1237,63 @@ private func swiftMutagenMutations(for builtin: BuiltinInst) -> [SwiftMutagenMut
         silOriginal: builtin.name.string,
         silMutated: "sadd_with_overflow"))
     }
-  case .Add:
-    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "sub", sourceOriginal: "+", sourceMutated: "-"))
-  case .Sub:
-    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "add", sourceOriginal: "-", sourceMutated: "+"))
-  case .Mul:
-    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "sdiv", sourceOriginal: "*", sourceMutated: "/"))
-  case .SDiv:
-    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "mul", sourceOriginal: "/", sourceMutated: "*"))
-  case .SRem:
-    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "mul", sourceOriginal: "%", sourceMutated: "*"))
-  case .UDiv:
-    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "mul", sourceOriginal: "/", sourceMutated: "*"))
-  case .URem:
-    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "mul", sourceOriginal: "%", sourceMutated: "*"))
-  case .FAdd:
-    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "fsub", sourceOriginal: "+", sourceMutated: "-"))
-  case .FSub:
-    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "fadd", sourceOriginal: "-", sourceMutated: "+"))
-  case .FMul:
-    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "fdiv", sourceOriginal: "*", sourceMutated: "/"))
-  case .FDiv:
-    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "fmul", sourceOriginal: "/", sourceMutated: "*"))
-  case .FRem:
-    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "fmul", sourceOriginal: "%", sourceMutated: "*"))
-  case .And:
-    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "or", sourceOriginal: "&", sourceMutated: "|"))
-  case .Or:
-    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "and", sourceOriginal: "|", sourceMutated: "&"))
-  case .Xor:
-    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "and", sourceOriginal: "^", sourceMutated: "&"))
-  case .Shl:
-    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "ashr", sourceOriginal: "<<", sourceMutated: ">>"))
-  case .AShr, .LShr:
-    mutations.append(swiftMutagenBinaryMutation(builtin, mutator: "MATH", mutatedBuiltinName: "shl", sourceOriginal: ">>", sourceMutated: "<<"))
   default:
     break
   }
+  if let builtinID = swiftMutagenArithmeticBuiltinIDName(builtin) {
+    for rule in config.arithmeticMutationRules where rule.builtinID == builtinID {
+      mutations.append(swiftMutagenBinaryMutation(
+        builtin,
+        mutator: "MATH",
+        mutatedBuiltinName: rule.mutatedBuiltinName,
+        sourceOriginal: rule.sourceOriginal,
+        sourceMutated: rule.sourceMutated))
+    }
+  }
   return mutations
+}
+
+private func swiftMutagenArithmeticBuiltinIDName(_ builtin: BuiltinInst) -> String? {
+  switch builtin.id {
+  case .Add:
+    return "Add"
+  case .Sub:
+    return "Sub"
+  case .Mul:
+    return "Mul"
+  case .SDiv:
+    return "SDiv"
+  case .SRem:
+    return "SRem"
+  case .UDiv:
+    return "UDiv"
+  case .URem:
+    return "URem"
+  case .FAdd:
+    return "FAdd"
+  case .FSub:
+    return "FSub"
+  case .FMul:
+    return "FMul"
+  case .FDiv:
+    return "FDiv"
+  case .FRem:
+    return "FRem"
+  case .And:
+    return "And"
+  case .Or:
+    return "Or"
+  case .Xor:
+    return "Xor"
+  case .Shl:
+    return "Shl"
+  case .AShr:
+    return "AShr"
+  case .LShr:
+    return "LShr"
+  default:
+    return nil
+  }
 }
 
 private func swiftMutagenBinaryMutation(

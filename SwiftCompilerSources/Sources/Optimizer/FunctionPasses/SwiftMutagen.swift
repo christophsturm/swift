@@ -84,6 +84,48 @@ private struct SwiftMutagenContextualArithmeticMutationRule {
   }
 }
 
+private struct SwiftMutagenReturnMutationRule {
+  let context: String
+  let mutator: String
+  let mutatedBuiltinName: String
+  let sourceOriginal: String
+  let sourceMutated: String
+  let silMutated: String
+
+  init?(wireFormat: String) {
+    let fields = wireFormat.split(separator: "|", omittingEmptySubsequences: false).map { String($0) }
+    guard fields.count == 6 else {
+      return nil
+    }
+    context = fields[0]
+    mutator = fields[1]
+    mutatedBuiltinName = fields[2]
+    sourceOriginal = fields[3]
+    sourceMutated = fields[4]
+    silMutated = fields[5]
+  }
+}
+
+private struct SwiftMutagenVoidCallMutationRule {
+  let mutator: String
+  let mutatedBuiltinName: String
+  let sourceOriginal: String
+  let sourceMutated: String
+  let silMutated: String
+
+  init?(wireFormat: String) {
+    let fields = wireFormat.split(separator: "|", omittingEmptySubsequences: false).map { String($0) }
+    guard fields.count == 5 else {
+      return nil
+    }
+    mutator = fields[0]
+    mutatedBuiltinName = fields[1]
+    sourceOriginal = fields[2]
+    sourceMutated = fields[3]
+    silMutated = fields[4]
+  }
+}
+
 private struct SwiftMutagenConfig {
   static let defaultPath = ".mutagen/session/compiler-config.json"
 
@@ -99,6 +141,8 @@ private struct SwiftMutagenConfig {
   let conditionMutationRules: [SwiftMutagenConditionMutationRule]
   let arithmeticMutationRules: [SwiftMutagenArithmeticMutationRule]
   let contextualArithmeticMutationRules: [SwiftMutagenContextualArithmeticMutationRule]
+  let returnMutationRules: [SwiftMutagenReturnMutationRule]
+  let voidCallMutationRules: [SwiftMutagenVoidCallMutationRule]
 
   static func load() -> SwiftMutagenConfig? {
     let configPath = swiftMutagenEnvironmentValue("SWIFT_MUTAGEN_CONFIG") ?? Self.defaultPath
@@ -140,6 +184,12 @@ private struct SwiftMutagenConfig {
     let contextualArithmeticMutationRules = swiftMutagenJSONStringArray("contextualArithmeticMutationRules", in: json).compactMap {
       SwiftMutagenContextualArithmeticMutationRule(wireFormat: $0)
     }
+    let returnMutationRules = swiftMutagenJSONStringArray("returnMutationRules", in: json).compactMap {
+      SwiftMutagenReturnMutationRule(wireFormat: $0)
+    }
+    let voidCallMutationRules = swiftMutagenJSONStringArray("voidCallMutationRules", in: json).compactMap {
+      SwiftMutagenVoidCallMutationRule(wireFormat: $0)
+    }
 
     return SwiftMutagenConfig(
       mode: mode,
@@ -153,7 +203,9 @@ private struct SwiftMutagenConfig {
       enabledMutators: enabledMutators,
       conditionMutationRules: conditionMutationRules,
       arithmeticMutationRules: arithmeticMutationRules,
-      contextualArithmeticMutationRules: contextualArithmeticMutationRules)
+      contextualArithmeticMutationRules: contextualArithmeticMutationRules,
+      returnMutationRules: returnMutationRules,
+      voidCallMutationRules: voidCallMutationRules)
   }
 }
 
@@ -366,7 +418,7 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
           }
         }
         if let apply = instruction as? ApplyInst,
-           let mutation = swiftMutagenVoidCallMutation(for: apply),
+           let mutation = swiftMutagenVoidCallMutation(for: apply, config: config),
            swiftMutagenMutatorIsEnabled(mutation.mutator, config: config),
            let sourceLocation = swiftMutagenInstructionSourceLocation(
             for: apply,
@@ -1007,72 +1059,89 @@ private func swiftMutagenReturnMutations(
 
   if swiftMutagenIsBoolType(returnType, in: returnInst.parentFunction) {
     let literal = swiftMutagenBoolLiteralValue(returnedValue)
-    if literal != false {
-      mutations.append(SwiftMutagenMutation(
-        originalID: nil,
-        mutator: "FALSE_RETURNS",
-        mutatedBuiltinName: "return_false",
-        sourceOriginal: "return",
-        sourceMutated: "return false",
-        silOriginal: returnType.description,
-        silMutated: "false"))
+    if literal != false,
+       let rule = swiftMutagenFirstReturnRule(context: "boolToFalse", config: config) {
+      mutations.append(swiftMutagenReturnMutation(rule, silOriginal: returnType.description))
     }
-    if literal != true {
-      mutations.append(SwiftMutagenMutation(
-        originalID: nil,
-        mutator: "TRUE_RETURNS",
-        mutatedBuiltinName: "return_true",
-        sourceOriginal: "return",
-        sourceMutated: "return true",
-        silOriginal: returnType.description,
-        silMutated: "true"))
+    if literal != true,
+       let rule = swiftMutagenFirstReturnRule(context: "boolToTrue", config: config) {
+      mutations.append(swiftMutagenReturnMutation(rule, silOriginal: returnType.description))
     }
     return mutations
   }
 
   if returnType.isOptional && !swiftMutagenIsOptionalNone(returnedValue) {
-    let mutator = swiftMutagenMutatorIsEnabled("EMPTY_RETURNS", config: config)
-      ? "EMPTY_RETURNS"
-      : "NULL_RETURNS"
-    mutations.append(SwiftMutagenMutation(
-      originalID: nil,
-      mutator: mutator,
-      mutatedBuiltinName: "return_nil",
-      sourceOriginal: "return",
-      sourceMutated: "return nil",
-      silOriginal: returnType.description,
-      silMutated: "Optional.none"))
+    if let rule = swiftMutagenFirstReturnRule(context: "optionalToNil", config: config) {
+      mutations.append(swiftMutagenReturnMutation(rule, silOriginal: returnType.description))
+    }
     return mutations
   }
 
   if swiftMutagenIsIntegerStructType(returnType, in: returnInst.parentFunction),
-     swiftMutagenIntegerStructLiteralValue(returnedValue) != 0 {
-    mutations.append(SwiftMutagenMutation(
-      originalID: nil,
-      mutator: "PRIMITIVE_RETURNS",
-      mutatedBuiltinName: "return_zero",
-      sourceOriginal: "return",
-      sourceMutated: "return 0",
-      silOriginal: returnType.description,
-      silMutated: "0"))
+     swiftMutagenIntegerStructLiteralValue(returnedValue) != 0,
+     let rule = swiftMutagenFirstReturnRule(context: "integerToZero", config: config) {
+    mutations.append(swiftMutagenReturnMutation(rule, silOriginal: returnType.description))
   }
 
   return mutations
 }
 
-private func swiftMutagenVoidCallMutation(for apply: ApplyInst) -> SwiftMutagenMutation? {
+private func swiftMutagenReturnMutation(
+  _ rule: SwiftMutagenReturnMutationRule,
+  silOriginal: String
+) -> SwiftMutagenMutation {
+  return SwiftMutagenMutation(
+    originalID: nil,
+    mutator: rule.mutator,
+    mutatedBuiltinName: rule.mutatedBuiltinName,
+    sourceOriginal: rule.sourceOriginal,
+    sourceMutated: rule.sourceMutated,
+    silOriginal: silOriginal,
+    silMutated: rule.silMutated)
+}
+
+private func swiftMutagenFirstReturnRule(
+  context: String,
+  config: SwiftMutagenConfig
+) -> SwiftMutagenReturnMutationRule? {
+  for rule in config.returnMutationRules where rule.context == context {
+    if swiftMutagenMutatorIsEnabled(rule.mutator, config: config) {
+      return rule
+    }
+  }
+  return nil
+}
+
+private func swiftMutagenVoidCallMutation(
+  for apply: ApplyInst,
+  config: SwiftMutagenConfig
+) -> SwiftMutagenMutation? {
   guard apply.type.isVoid else {
+    return nil
+  }
+  guard let rule = swiftMutagenFirstVoidCallRule(config: config) else {
     return nil
   }
 
   return SwiftMutagenMutation(
     originalID: nil,
-    mutator: "VOID_METHOD_CALLS",
-    mutatedBuiltinName: "remove_void_call",
-    sourceOriginal: "call",
-    sourceMutated: "removed call",
+    mutator: rule.mutator,
+    mutatedBuiltinName: rule.mutatedBuiltinName,
+    sourceOriginal: rule.sourceOriginal,
+    sourceMutated: rule.sourceMutated,
     silOriginal: apply.description,
-    silMutated: "removed")
+    silMutated: rule.silMutated)
+}
+
+private func swiftMutagenFirstVoidCallRule(
+  config: SwiftMutagenConfig
+) -> SwiftMutagenVoidCallMutationRule? {
+  for rule in config.voidCallMutationRules {
+    if swiftMutagenMutatorIsEnabled(rule.mutator, config: config) {
+      return rule
+    }
+  }
+  return nil
 }
 
 private func swiftMutagenMutations(

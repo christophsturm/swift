@@ -172,6 +172,7 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
 
   let moduleName = context.moduleDecl.name.string
   let shouldLogFunction = swiftMutagenShouldLog(function: function, moduleName: moduleName, config: config)
+  let functionStartedAt = swiftMutagenClockMicroseconds()
   if shouldLogFunction {
     swiftMutagenLogEvent(
       "functionVisit",
@@ -182,6 +183,21 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
         ("function", function.name.string),
         ("location", function.location.description)
       ])
+  }
+  defer {
+    if shouldLogFunction {
+      let finishedAt = swiftMutagenClockMicroseconds()
+      let durationUs = finishedAt >= functionStartedAt ? finishedAt - functionStartedAt : 0
+      swiftMutagenLogEvent(
+        "functionTiming",
+        config: config,
+        fields: [
+          ("mode", swiftMutagenModeName(config.mode)),
+          ("module", moduleName),
+          ("function", function.name.string),
+          ("durationUs", "\(durationUs)")
+        ])
+    }
   }
 
   guard swiftMutagenFunctionName(function.name.string, belongsToModule: moduleName) else {
@@ -869,6 +885,16 @@ private func swiftMutagenSanitizeFileComponent(_ value: String) -> String {
 private func swiftMutagenProcessID() -> Int32 {
   #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS) || os(Linux) || os(Android)
   return getpid()
+  #else
+  return 0
+  #endif
+}
+
+private func swiftMutagenClockMicroseconds() -> UInt64 {
+  #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS) || os(Linux) || os(Android)
+  var now = timeval()
+  gettimeofday(&now, nil)
+  return UInt64(now.tv_sec) * 1_000_000 + UInt64(now.tv_usec)
   #else
   return 0
   #endif

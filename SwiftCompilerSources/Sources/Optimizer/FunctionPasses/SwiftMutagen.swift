@@ -446,8 +446,29 @@ private func swiftMutagenConditionSiteMutations(
   for builtin: BuiltinInst,
   config: SwiftMutagenConfig
 ) -> [SwiftMutagenMutation] {
-  swiftMutagenMutations(for: builtin).filter {
-    ($0.mutator == "CONDITIONALS_BOUNDARY" || $0.mutator == "NEGATE_CONDITIONALS")
+  var mutations = swiftMutagenMutations(for: builtin)
+  mutations.append(SwiftMutagenMutation(
+    originalID: builtin.id,
+    mutator: "CONDITION_TRUE",
+    mutatedBuiltinName: "condition_true",
+    sourceOriginal: builtin.name.string,
+    sourceMutated: "true",
+    silOriginal: builtin.name.string,
+    silMutated: "condition_true"))
+  mutations.append(SwiftMutagenMutation(
+    originalID: builtin.id,
+    mutator: "CONDITION_FALSE",
+    mutatedBuiltinName: "condition_false",
+    sourceOriginal: builtin.name.string,
+    sourceMutated: "false",
+    silOriginal: builtin.name.string,
+    silMutated: "condition_false"))
+
+  return mutations.filter {
+    ($0.mutator == "CONDITIONALS_BOUNDARY"
+      || $0.mutator == "NEGATE_CONDITIONALS"
+      || $0.mutator == "CONDITION_TRUE"
+      || $0.mutator == "CONDITION_FALSE")
       && swiftMutagenMutatorIsEnabled($0.mutator, config: config)
   }
 }
@@ -500,11 +521,11 @@ private func swiftMutagenInjectConditionSite(
 
   for (index, alternative) in site.alternatives.enumerated() {
     let builder = Builder(atEndOf: alternativeBlocks[index], location: site.branch.location, context)
-    let mutatedCondition = builder.createBuiltinBinaryFunction(
-      name: alternative.mutation.mutatedBuiltinName,
-      operandType: firstArgument.type,
-      resultType: site.condition.type,
-      arguments: Array(site.condition.arguments)
+    let mutatedCondition = swiftMutagenMakeConditionAlternative(
+      alternative.mutation,
+      originalCondition: site.condition,
+      firstArgumentType: firstArgument.type,
+      builder: builder
     )
     swiftMutagenCreateConditionBranch(
       condition: mutatedCondition,
@@ -551,6 +572,26 @@ private func swiftMutagenInjectConditionSite(
 
   context.erase(instruction: site.branch)
   return true
+}
+
+private func swiftMutagenMakeConditionAlternative(
+  _ mutation: SwiftMutagenMutation,
+  originalCondition: BuiltinInst,
+  firstArgumentType: Type,
+  builder: Builder
+) -> Value {
+  switch mutation.mutatedBuiltinName {
+  case "condition_true":
+    return builder.createBoolLiteral(true)
+  case "condition_false":
+    return builder.createBoolLiteral(false)
+  default:
+    return builder.createBuiltinBinaryFunction(
+      name: mutation.mutatedBuiltinName,
+      operandType: firstArgumentType,
+      resultType: originalCondition.type,
+      arguments: Array(originalCondition.arguments))
+  }
 }
 
 private func swiftMutagenCreateConditionBranch(
@@ -1345,6 +1386,23 @@ private func swiftMutagenFindSourceOperator(
     }
   } else if mutation.mutator == "INVERT_NEGS" {
     operatorPairs = [("-", "")]
+  } else if mutation.mutator == "CONDITION_TRUE" || mutation.mutator == "CONDITION_FALSE" {
+    switch mutation.originalID {
+    case .some(.ICMP_EQ):
+      operatorPairs = [("==", "==")]
+    case .some(.ICMP_NE):
+      operatorPairs = [("!=", "!=")]
+    case .some(.ICMP_SGE), .some(.ICMP_UGE):
+      operatorPairs = [(">=", ">="), ("<=", "<=")]
+    case .some(.ICMP_SGT), .some(.ICMP_UGT):
+      operatorPairs = [(">", ">"), ("<", "<")]
+    case .some(.ICMP_SLE), .some(.ICMP_ULE):
+      operatorPairs = [("<=", "<="), (">=", ">=")]
+    case .some(.ICMP_SLT), .some(.ICMP_ULT):
+      operatorPairs = [("<", "<"), (">", ">")]
+    default:
+      operatorPairs = [(mutation.sourceOriginal, mutation.sourceOriginal)]
+    }
   } else if mutation.mutator == "NEGATE_CONDITIONALS" {
     switch mutation.originalID {
     case .some(.ICMP_EQ):
@@ -1412,12 +1470,15 @@ private func swiftMutagenFindSourceOperator(
         in: text,
         preferredLine: preferredLine
       ) {
+        let sourceMutated = mutation.mutator == "CONDITION_TRUE" || mutation.mutator == "CONDITION_FALSE"
+          ? mutation.sourceMutated
+          : position.sourceMutated
         let result = (
           swiftMutagenTrimPackageRoot(path, config: config),
           position.line,
           position.column,
           position.sourceOriginal,
-          position.sourceMutated)
+          sourceMutated)
         if let existing = bestForPath,
            let preferredLine = preferredLine,
            swiftMutagenLineDistance(existing.line, preferredLine) <= swiftMutagenLineDistance(result.1, preferredLine) {

@@ -62,6 +62,28 @@ private struct SwiftMutagenArithmeticMutationRule {
   }
 }
 
+private struct SwiftMutagenContextualArithmeticMutationRule {
+  let builtinID: String
+  let context: String
+  let mutator: String
+  let mutatedBuiltinName: String
+  let sourceOriginal: String
+  let sourceMutated: String
+
+  init?(wireFormat: String) {
+    let fields = wireFormat.split(separator: "|", omittingEmptySubsequences: false).map { String($0) }
+    guard fields.count == 6 else {
+      return nil
+    }
+    builtinID = fields[0]
+    context = fields[1]
+    mutator = fields[2]
+    mutatedBuiltinName = fields[3]
+    sourceOriginal = fields[4]
+    sourceMutated = fields[5]
+  }
+}
+
 private struct SwiftMutagenConfig {
   static let defaultPath = ".mutagen/session/compiler-config.json"
 
@@ -76,6 +98,7 @@ private struct SwiftMutagenConfig {
   let enabledMutators: [String]
   let conditionMutationRules: [SwiftMutagenConditionMutationRule]
   let arithmeticMutationRules: [SwiftMutagenArithmeticMutationRule]
+  let contextualArithmeticMutationRules: [SwiftMutagenContextualArithmeticMutationRule]
 
   static func load() -> SwiftMutagenConfig? {
     let configPath = swiftMutagenEnvironmentValue("SWIFT_MUTAGEN_CONFIG") ?? Self.defaultPath
@@ -114,6 +137,9 @@ private struct SwiftMutagenConfig {
     let arithmeticMutationRules = swiftMutagenJSONStringArray("arithmeticMutationRules", in: json).compactMap {
       SwiftMutagenArithmeticMutationRule(wireFormat: $0)
     }
+    let contextualArithmeticMutationRules = swiftMutagenJSONStringArray("contextualArithmeticMutationRules", in: json).compactMap {
+      SwiftMutagenContextualArithmeticMutationRule(wireFormat: $0)
+    }
 
     return SwiftMutagenConfig(
       mode: mode,
@@ -126,7 +152,8 @@ private struct SwiftMutagenConfig {
       sourceFiles: sourceFiles,
       enabledMutators: enabledMutators,
       conditionMutationRules: conditionMutationRules,
-      arithmeticMutationRules: arithmeticMutationRules)
+      arithmeticMutationRules: arithmeticMutationRules,
+      contextualArithmeticMutationRules: contextualArithmeticMutationRules)
   }
 }
 
@@ -1209,33 +1236,12 @@ private func swiftMutagenMutations(
       silOriginal: builtin.name.string,
       silMutated: "cmp_uge"))
   case .SAddOver:
-    mutations.append(SwiftMutagenMutation(
-      originalID: .SAddOver,
-      mutator: swiftMutagenIsIncrementBuiltin(builtin) ? "INCREMENTS" : "MATH",
-      mutatedBuiltinName: "ssub_with_overflow",
-      sourceOriginal: "+",
-      sourceMutated: "-",
-      silOriginal: builtin.name.string,
-      silMutated: "ssub_with_overflow"))
+    if let rule = swiftMutagenContextualArithmeticRule(for: builtin, builtinID: "SAddOver", config: config) {
+      mutations.append(swiftMutagenContextualArithmeticMutation(rule, for: builtin))
+    }
   case .SSubOver:
-    if swiftMutagenIsUnaryNegationBuiltin(builtin) {
-      mutations.append(SwiftMutagenMutation(
-        originalID: .SSubOver,
-        mutator: "INVERT_NEGS",
-        mutatedBuiltinName: "sadd_with_overflow",
-        sourceOriginal: "-",
-        sourceMutated: "",
-        silOriginal: builtin.name.string,
-        silMutated: "sadd_with_overflow"))
-    } else {
-      mutations.append(SwiftMutagenMutation(
-        originalID: .SSubOver,
-        mutator: swiftMutagenIsIncrementBuiltin(builtin) ? "INCREMENTS" : "MATH",
-        mutatedBuiltinName: "sadd_with_overflow",
-        sourceOriginal: "-",
-        sourceMutated: "+",
-        silOriginal: builtin.name.string,
-        silMutated: "sadd_with_overflow"))
+    if let rule = swiftMutagenContextualArithmeticRule(for: builtin, builtinID: "SSubOver", config: config) {
+      mutations.append(swiftMutagenContextualArithmeticMutation(rule, for: builtin))
     }
   default:
     break
@@ -1251,6 +1257,49 @@ private func swiftMutagenMutations(
     }
   }
   return mutations
+}
+
+private func swiftMutagenContextualArithmeticRule(
+  for builtin: BuiltinInst,
+  builtinID: String,
+  config: SwiftMutagenConfig
+) -> SwiftMutagenContextualArithmeticMutationRule? {
+  for rule in config.contextualArithmeticMutationRules where rule.builtinID == builtinID {
+    if swiftMutagenContext(rule.context, matches: builtin) {
+      return rule
+    }
+  }
+  return nil
+}
+
+private func swiftMutagenContext(
+  _ context: String,
+  matches builtin: BuiltinInst
+) -> Bool {
+  switch context {
+  case "increment":
+    return swiftMutagenIsIncrementBuiltin(builtin)
+  case "unaryNegation":
+    return swiftMutagenIsUnaryNegationBuiltin(builtin)
+  case "otherwise":
+    return true
+  default:
+    return false
+  }
+}
+
+private func swiftMutagenContextualArithmeticMutation(
+  _ rule: SwiftMutagenContextualArithmeticMutationRule,
+  for builtin: BuiltinInst
+) -> SwiftMutagenMutation {
+  SwiftMutagenMutation(
+    originalID: builtin.id,
+    mutator: rule.mutator,
+    mutatedBuiltinName: rule.mutatedBuiltinName,
+    sourceOriginal: rule.sourceOriginal,
+    sourceMutated: rule.sourceMutated,
+    silOriginal: builtin.name.string,
+    silMutated: rule.mutatedBuiltinName)
 }
 
 private func swiftMutagenArithmeticBuiltinIDName(_ builtin: BuiltinInst) -> String? {

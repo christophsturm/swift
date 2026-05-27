@@ -15,11 +15,13 @@ import Darwin
 import Glibc
 #endif
 
+import AST
 import SIL
 
 private enum SwiftMutagenMode {
   case discover
   case apply
+  case metamutant
 }
 
 private struct SwiftMutagenConfig {
@@ -28,6 +30,7 @@ private struct SwiftMutagenConfig {
   let mode: SwiftMutagenMode
   let activeMutantID: String
   let mutantsPath: String
+  let manifestFragmentsDirectory: String
   let packageRoot: String
   let excludePathFragments: [String]
   let sourceFiles: [String]
@@ -46,6 +49,8 @@ private struct SwiftMutagenConfig {
       mode = .discover
     case "apply":
       mode = .apply
+    case "metamutant":
+      mode = .metamutant
     default:
       return nil
     }
@@ -56,6 +61,7 @@ private struct SwiftMutagenConfig {
     }
 
     let activeMutantID = swiftMutagenJSONStringValue("activeMutantID", in: json) ?? ""
+    let manifestFragmentsDirectory = swiftMutagenJSONStringValue("manifestFragmentsDirectory", in: json) ?? ""
     let packageRoot = swiftMutagenJSONStringValue("packageRoot", in: json) ?? ""
     let excludePaths = swiftMutagenJSONStringArray("excludePaths", in: json)
     let sourceFiles = swiftMutagenJSONStringArray("sourceFiles", in: json)
@@ -65,6 +71,7 @@ private struct SwiftMutagenConfig {
       mode: mode,
       activeMutantID: activeMutantID,
       mutantsPath: mutantsPath,
+      manifestFragmentsDirectory: manifestFragmentsDirectory,
       packageRoot: packageRoot,
       excludePathFragments: excludePaths,
       sourceFiles: sourceFiles,
@@ -132,6 +139,24 @@ private struct SwiftMutagenCandidate {
   }
 }
 
+private struct SwiftMutagenConditionAlternative {
+  let mutantID: String
+  let alternativeIndex: UInt32
+  let mutation: SwiftMutagenMutation
+}
+
+private struct SwiftMutagenConditionSite {
+  let siteID: UInt64
+  let module: String
+  let function: String
+  let file: String
+  let line: Int
+  let column: Int
+  let condition: BuiltinInst
+  let branch: CondBranchInst
+  let alternatives: [SwiftMutagenConditionAlternative]
+}
+
 private var swiftMutagenNextOrdinal = 1
 private var swiftMutagenHasTruncatedDiscoveryOutput = false
 
@@ -143,6 +168,18 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
   }
 
   if swiftMutagenShouldExclude(function: function, config: config) {
+    return
+  }
+
+  if config.mode == .metamutant {
+    if swiftMutagenInstrumentMetamutantConditionSites(
+      in: function,
+      moduleName: context.moduleDecl.name.string,
+      config: config,
+      context
+    ) {
+      context.notifyInstructionsChanged()
+    }
     return
   }
 
@@ -192,6 +229,8 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
                 swiftMutagenApplyReturn(mutation: mutation, to: returnInst, context)
                 changed = true
               }
+            case .metamutant:
+              break
             }
           }
         }
@@ -229,6 +268,8 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
               context.erase(instruction: apply)
               changed = true
             }
+          case .metamutant:
+            break
           }
         }
         continue
@@ -278,6 +319,8 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
             swiftMutagenApply(mutation: mutation, to: builtin, context)
             changed = true
           }
+        case .metamutant:
+          break
         }
       }
     }
@@ -286,6 +329,393 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
   if changed {
     context.notifyInstructionsChanged()
   }
+}
+
+private func swiftMutagenInstrumentMetamutantConditionSites(
+  in function: Function,
+  moduleName: String,
+  config: SwiftMutagenConfig,
+  _ context: FunctionPassContext
+) -> Bool {
+  let sites = swiftMutagenDiscoverConditionSites(
+    in: function,
+    moduleName: moduleName,
+    config: config
+  )
+  guard !sites.isEmpty else {
+    return false
+  }
+
+  swiftMutagenWriteMetamutantFragment(sites, config: config)
+
+  var changed = false
+  for site in sites {
+    if swiftMutagenInjectConditionSite(site, context) {
+      changed = true
+    }
+  }
+  return changed
+}
+
+private func swiftMutagenDiscoverConditionSites(
+  in function: Function,
+  moduleName: String,
+  config: SwiftMutagenConfig
+) -> [SwiftMutagenConditionSite] {
+  var sites: [SwiftMutagenConditionSite] = []
+  var localOrdinal = 1
+  let functionName = function.name.string
+
+  for block in function.blocks {
+    guard let branch = block.terminator as? CondBranchInst,
+          branch.trueOperands.isEmpty,
+          branch.falseOperands.isEmpty,
+          let condition = branch.condition as? BuiltinInst,
+          swiftMutagenIsComparisonBuiltin(condition) else {
+      continue
+    }
+
+    let mutations = swiftMutagenConditionSiteMutations(for: condition, config: config)
+    guard !mutations.isEmpty else {
+      continue
+    }
+
+    var alternatives: [SwiftMutagenConditionAlternative] = []
+    var sourceLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
+    for mutation in mutations {
+      guard let location = swiftMutagenSourceLocation(
+        for: condition,
+        function: function,
+        moduleName: moduleName,
+        mutation: mutation,
+        config: config
+      ) else {
+        continue
+      }
+      if sourceLocation == nil {
+        sourceLocation = location
+      }
+      let displayMutation = mutation.withSource(
+        original: location.sourceOriginal,
+        mutated: location.sourceMutated
+      )
+      alternatives.append(SwiftMutagenConditionAlternative(
+        mutantID: "local-\(localOrdinal)-\(alternatives.count + 1)",
+        alternativeIndex: UInt32(alternatives.count + 1),
+        mutation: displayMutation
+      ))
+    }
+
+    guard let location = sourceLocation, !alternatives.isEmpty else {
+      continue
+    }
+
+    let siteID = swiftMutagenStableSiteID(
+      packageRoot: config.packageRoot,
+      module: moduleName,
+      file: location.file,
+      line: location.line,
+      column: location.column,
+      function: functionName,
+      siteKind: "condition",
+      localOrdinal: localOrdinal
+    )
+    localOrdinal += 1
+
+    sites.append(SwiftMutagenConditionSite(
+      siteID: siteID,
+      module: moduleName,
+      function: functionName,
+      file: location.file,
+      line: location.line,
+      column: location.column,
+      condition: condition,
+      branch: branch,
+      alternatives: alternatives
+    ))
+  }
+
+  return sites
+}
+
+private func swiftMutagenConditionSiteMutations(
+  for builtin: BuiltinInst,
+  config: SwiftMutagenConfig
+) -> [SwiftMutagenMutation] {
+  swiftMutagenMutations(for: builtin).filter {
+    ($0.mutator == "CONDITIONALS_BOUNDARY" || $0.mutator == "NEGATE_CONDITIONALS")
+      && swiftMutagenMutatorIsEnabled($0.mutator, config: config)
+  }
+}
+
+private func swiftMutagenIsComparisonBuiltin(_ builtin: BuiltinInst) -> Bool {
+  switch builtin.id {
+  case .ICMP_EQ, .ICMP_NE,
+       .ICMP_SGE, .ICMP_SGT, .ICMP_SLE, .ICMP_SLT,
+       .ICMP_UGE, .ICMP_UGT, .ICMP_ULE, .ICMP_ULT:
+    return true
+  default:
+    return false
+  }
+}
+
+private func swiftMutagenInjectConditionSite(
+  _ site: SwiftMutagenConditionSite,
+  _ context: FunctionPassContext
+) -> Bool {
+  guard let visitFunction = context.lookupFunction(name: "__swift_mutagen_visit"),
+        let siteID = swiftMutagenMakeRuntimeSiteID(
+          site.siteID,
+          visitFunction: visitFunction,
+          insertionPoint: site.branch,
+          context
+        ) else {
+    return false
+  }
+
+  guard let firstArgument = site.condition.arguments.first else {
+    return false
+  }
+
+  let function = site.branch.parentFunction
+  let originalCondition = site.branch.condition
+  let trueBlock = site.branch.trueBlock
+  let falseBlock = site.branch.falseBlock
+  let originalBlock = function.appendNewBlock(context)
+  let alternativeBlocks = site.alternatives.map { _ in function.appendNewBlock(context) }
+  let checkBlocks = site.alternatives.dropFirst().map { _ in function.appendNewBlock(context) }
+
+  let dispatchBuilder = Builder(before: site.branch, context)
+  let visitRef = dispatchBuilder.createFunctionRef(visitFunction)
+  let choice = dispatchBuilder.createApply(
+    function: visitRef,
+    SubstitutionMap(),
+    arguments: [siteID]
+  )
+  let rawChoice = dispatchBuilder.createStructExtract(struct: choice, fieldIndex: 0)
+
+  for (index, alternative) in site.alternatives.enumerated() {
+    let builder = Builder(atEndOf: alternativeBlocks[index], location: site.branch.location, context)
+    let mutatedCondition = builder.createBuiltinBinaryFunction(
+      name: alternative.mutation.mutatedBuiltinName,
+      operandType: firstArgument.type,
+      resultType: site.condition.type,
+      arguments: Array(site.condition.arguments)
+    )
+    swiftMutagenCreateConditionBranch(
+      condition: mutatedCondition,
+      trueBlock: trueBlock,
+      falseBlock: falseBlock,
+      insertionBuilder: builder,
+      function: function,
+      location: site.branch.location,
+      context
+    )
+  }
+
+  let originalBuilder = Builder(atEndOf: originalBlock, location: site.branch.location, context)
+  swiftMutagenCreateConditionBranch(
+    condition: originalCondition,
+    trueBlock: trueBlock,
+    falseBlock: falseBlock,
+    insertionBuilder: originalBuilder,
+    function: function,
+    location: site.branch.location,
+    context
+  )
+
+  for (index, alternative) in site.alternatives.enumerated() {
+    let builder = index == 0
+      ? dispatchBuilder
+      : Builder(atEndOf: checkBlocks[index - 1], location: site.branch.location, context)
+    let nextBlock = index + 1 < site.alternatives.count
+      ? checkBlocks[index]
+      : originalBlock
+    let alternativeLiteral = builder.createIntegerLiteral(alternative.alternativeIndex, type: rawChoice.type)
+    let isSelected = builder.createBuiltinBinaryFunction(
+      name: "cmp_eq",
+      operandType: rawChoice.type,
+      resultType: originalCondition.type,
+      arguments: [rawChoice, alternativeLiteral]
+    )
+    builder.createCondBranch(
+      condition: isSelected,
+      trueBlock: alternativeBlocks[index],
+      falseBlock: nextBlock
+    )
+  }
+
+  context.erase(instruction: site.branch)
+  return true
+}
+
+private func swiftMutagenCreateConditionBranch(
+  condition: Value,
+  trueBlock: BasicBlock,
+  falseBlock: BasicBlock,
+  insertionBuilder: Builder,
+  function: Function,
+  location: Location,
+  _ context: FunctionPassContext
+) {
+  let trueEdgeBlock = function.appendNewBlock(context)
+  let falseEdgeBlock = function.appendNewBlock(context)
+  insertionBuilder.createCondBranch(
+    condition: condition,
+    trueBlock: trueEdgeBlock,
+    falseBlock: falseEdgeBlock
+  )
+  Builder(atEndOf: trueEdgeBlock, location: location, context).createBranch(to: trueBlock)
+  Builder(atEndOf: falseEdgeBlock, location: location, context).createBranch(to: falseBlock)
+}
+
+private func swiftMutagenMakeRuntimeSiteID(
+  _ siteID: UInt64,
+  visitFunction: Function,
+  insertionPoint: Instruction,
+  _ context: FunctionPassContext
+) -> Value? {
+  let convention = FunctionConvention(
+    for: visitFunction.loweredFunctionType,
+    in: insertionPoint.parentFunction
+  )
+  guard let parameter = convention.parameters.first else {
+    return nil
+  }
+  let parameterType = parameter.type.loweredType(in: insertionPoint.parentFunction)
+  guard let fields = parameterType.getNominalFields(in: insertionPoint.parentFunction),
+        fields.count == 1 else {
+    return nil
+  }
+
+  let builder = Builder(before: insertionPoint, context)
+  let literal = builder.createIntegerLiteral(siteID, type: fields[0])
+  return builder.createStruct(type: parameterType, elements: [literal])
+}
+
+private func swiftMutagenWriteMetamutantFragment(
+  _ sites: [SwiftMutagenConditionSite],
+  config: SwiftMutagenConfig
+) {
+  guard !config.manifestFragmentsDirectory.isEmpty else {
+    return
+  }
+
+  var output = #"{"sites":["#
+  for (siteIndex, site) in sites.enumerated() {
+    if siteIndex != 0 {
+      output += ","
+    }
+    output += swiftMutagenConditionSiteJSON(site)
+  }
+  output += "]}\n"
+
+  let module = sites.first?.module ?? "module"
+  let function = sites.first?.function ?? "function"
+  let path = config.manifestFragmentsDirectory
+    + "/"
+    + swiftMutagenSanitizeFileComponent(module)
+    + "-"
+    + "\(swiftMutagenProcessID())"
+    + "-"
+    + swiftMutagenHex(swiftMutagenStableHash(function))
+    + ".json"
+  swiftMutagenCreateParentDirectories(forFile: path)
+  swiftMutagenWrite(output, to: path, append: false)
+}
+
+private func swiftMutagenConditionSiteJSON(_ site: SwiftMutagenConditionSite) -> String {
+  var fields: [String] = []
+  fields.append(#""siteID":\#(site.siteID)"#)
+  fields.append(#""module":"\#(swiftMutagenEscapeJSON(site.module))""#)
+  fields.append(#""function":"\#(swiftMutagenEscapeJSON(site.function))""#)
+  fields.append(
+    #""sourceLocation":{"file":"\#(swiftMutagenEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#
+  )
+  fields.append(#""siteKind":"condition""#)
+  fields.append(#""resultKind":"condition""#)
+  var alternatives: [String] = []
+  for alternative in site.alternatives {
+    alternatives.append(swiftMutagenConditionAlternativeJSON(alternative))
+  }
+  fields.append(#""alternatives":[\#(alternatives.joined(separator: ","))]"#)
+  return "{\(fields.joined(separator: ","))}"
+}
+
+private func swiftMutagenConditionAlternativeJSON(_ alternative: SwiftMutagenConditionAlternative) -> String {
+  var fields: [String] = []
+  fields.append(#""mutantID":"\#(swiftMutagenEscapeJSON(alternative.mutantID))""#)
+  fields.append(#""alternativeIndex":\#(alternative.alternativeIndex)"#)
+  fields.append(#""mutator":"\#(swiftMutagenEscapeJSON(alternative.mutation.mutator))""#)
+  fields.append(#""sourceOriginal":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceOriginal))""#)
+  fields.append(#""sourceMutated":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceMutated))""#)
+  fields.append(#""behaviorKey":"\#(swiftMutagenEscapeJSON(alternative.mutation.silMutated))""#)
+  return "{\(fields.joined(separator: ","))}"
+}
+
+private func swiftMutagenStableSiteID(
+  packageRoot: String,
+  module: String,
+  file: String,
+  line: Int,
+  column: Int,
+  function: String,
+  siteKind: String,
+  localOrdinal: Int
+) -> UInt64 {
+  swiftMutagenStableHash([
+    packageRoot,
+    module,
+    file,
+    "\(line)",
+    "\(column)",
+    function,
+    siteKind,
+    "\(localOrdinal)"
+  ].joined(separator: "\u{1f}"))
+}
+
+private func swiftMutagenStableHash(_ text: String) -> UInt64 {
+  var hash: UInt64 = 0xcbf29ce484222325
+  for byte in text.utf8 {
+    hash ^= UInt64(byte)
+    hash = hash &* 0x100000001b3
+  }
+  return hash
+}
+
+private func swiftMutagenHex(_ value: UInt64) -> String {
+  let digits = Array("0123456789ABCDEF".utf8)
+  var output = [UInt8](repeating: 48, count: 16)
+  for index in 0..<16 {
+    let shift = UInt64((15 - index) * 4)
+    let nibble = Int((value >> shift) & 0xf)
+    output[index] = digits[nibble]
+  }
+  return String(decoding: output, as: UTF8.self)
+}
+
+private func swiftMutagenSanitizeFileComponent(_ value: String) -> String {
+  var output = ""
+  for byte in value.utf8 {
+    let isDigit = byte >= 48 && byte <= 57
+    let isUppercase = byte >= 65 && byte <= 90
+    let isLowercase = byte >= 97 && byte <= 122
+    if isDigit || isUppercase || isLowercase || byte == 45 || byte == 95 {
+      output.append(Character(UnicodeScalar(byte)))
+    } else {
+      output.append("_")
+    }
+  }
+  return output.isEmpty ? "fragment" : output
+}
+
+private func swiftMutagenProcessID() -> Int32 {
+  #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS) || os(Linux) || os(Android)
+  return getpid()
+  #else
+  return 0
+  #endif
 }
 
 private func swiftMutagenReturnMutations(

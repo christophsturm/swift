@@ -167,6 +167,11 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
     return
   }
 
+  let moduleName = context.moduleDecl.name.string
+  guard swiftMutagenFunctionName(function.name.string, belongsToModule: moduleName) else {
+    return
+  }
+
   if swiftMutagenShouldExclude(function: function, config: config) {
     return
   }
@@ -174,7 +179,7 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
   if config.mode == .metamutant {
     if swiftMutagenInstrumentMetamutantConditionSites(
       in: function,
-      moduleName: context.moduleDecl.name.string,
+      moduleName: moduleName,
       config: config,
       context
     ) {
@@ -183,7 +188,6 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
     return
   }
 
-  let moduleName = context.moduleDecl.name.string
   let functionName = function.name.string
   var changed = false
 
@@ -651,6 +655,14 @@ private func swiftMutagenConditionAlternativeJSON(_ alternative: SwiftMutagenCon
   fields.append(#""sourceMutated":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceMutated))""#)
   fields.append(#""behaviorKey":"\#(swiftMutagenEscapeJSON(alternative.mutation.silMutated))""#)
   return "{\(fields.joined(separator: ","))}"
+}
+
+private func swiftMutagenFunctionName(_ functionName: String, belongsToModule moduleName: String) -> Bool {
+  let mangledModulePrefix = "$s\(moduleName.utf8.count)\(moduleName)"
+  if functionName.hasPrefix(mangledModulePrefix) {
+    return true
+  }
+  return functionName.hasPrefix("@\(mangledModulePrefix)")
 }
 
 private func swiftMutagenStableSiteID(
@@ -1303,13 +1315,6 @@ private func swiftMutagenShouldExclude(
   function: Function,
   config: SwiftMutagenConfig
 ) -> Bool {
-  switch function.sourceFileKind {
-  case .library?, .main?:
-    break
-  default:
-    return true
-  }
-
   let location = function.location.description
   for fragment in config.excludePathFragments {
     if location.contains(fragment) {
@@ -1383,7 +1388,6 @@ private func swiftMutagenFindSourceOperator(
 
   let preferredPrefix = config.packageRoot + "/Sources/" + moduleName + "/"
   let sourcePaths = swiftMutagenSwiftSourcePaths(config: config)
-  var hasModuleSource = false
   let orderedSourcePaths = sourcePaths.sorted {
     let lhsMatches = functionLocation.contains($0)
     let rhsMatches = functionLocation.contains($1)
@@ -1393,19 +1397,9 @@ private func swiftMutagenFindSourceOperator(
     return $0 < $1
   }
 
-  for path in orderedSourcePaths {
-    if path.hasPrefix(preferredPrefix) {
-      hasModuleSource = true
-      break
-    }
-  }
-  guard hasModuleSource else {
-    return nil
-  }
-
   var fallback: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
 
-  for path in sourcePaths {
+  for path in orderedSourcePaths {
     guard let text = swiftMutagenRead(path) else {
       continue
     }

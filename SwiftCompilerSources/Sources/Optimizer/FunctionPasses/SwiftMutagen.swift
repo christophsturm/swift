@@ -31,6 +31,7 @@ private struct SwiftMutagenConfig {
   let activeMutantID: String
   let mutantsPath: String
   let manifestFragmentsDirectory: String
+  let compilerEventsPath: String
   let packageRoot: String
   let excludePathFragments: [String]
   let sourceFiles: [String]
@@ -62,6 +63,7 @@ private struct SwiftMutagenConfig {
 
     let activeMutantID = swiftMutagenJSONStringValue("activeMutantID", in: json) ?? ""
     let manifestFragmentsDirectory = swiftMutagenJSONStringValue("manifestFragmentsDirectory", in: json) ?? ""
+    let compilerEventsPath = swiftMutagenJSONStringValue("compilerEventsPath", in: json) ?? ""
     let packageRoot = swiftMutagenJSONStringValue("packageRoot", in: json) ?? ""
     let excludePaths = swiftMutagenJSONStringArray("excludePaths", in: json)
     let sourceFiles = swiftMutagenJSONStringArray("sourceFiles", in: json)
@@ -72,6 +74,7 @@ private struct SwiftMutagenConfig {
       activeMutantID: activeMutantID,
       mutantsPath: mutantsPath,
       manifestFragmentsDirectory: manifestFragmentsDirectory,
+      compilerEventsPath: compilerEventsPath,
       packageRoot: packageRoot,
       excludePathFragments: excludePaths,
       sourceFiles: sourceFiles,
@@ -168,11 +171,44 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
   }
 
   let moduleName = context.moduleDecl.name.string
+  let shouldLogFunction = swiftMutagenShouldLog(function: function, moduleName: moduleName, config: config)
+  if shouldLogFunction {
+    swiftMutagenLogEvent(
+      "functionVisit",
+      config: config,
+      fields: [
+        ("mode", swiftMutagenModeName(config.mode)),
+        ("module", moduleName),
+        ("function", function.name.string),
+        ("location", function.location.description)
+      ])
+  }
+
   guard swiftMutagenFunctionName(function.name.string, belongsToModule: moduleName) else {
+    if shouldLogFunction {
+      swiftMutagenLogEvent(
+        "functionSkip",
+        config: config,
+        fields: [
+          ("reason", "moduleNameMismatch"),
+          ("module", moduleName),
+          ("function", function.name.string)
+        ])
+    }
     return
   }
 
   if swiftMutagenShouldExclude(function: function, config: config) {
+    if shouldLogFunction {
+      swiftMutagenLogEvent(
+        "functionSkip",
+        config: config,
+        fields: [
+          ("reason", "excludedPath"),
+          ("module", moduleName),
+          ("function", function.name.string)
+        ])
+    }
     return
   }
 
@@ -346,6 +382,15 @@ private func swiftMutagenInstrumentMetamutantConditionSites(
     moduleName: moduleName,
     config: config
   )
+  swiftMutagenLogEvent(
+    "metamutantConditionDiscovery",
+    config: config,
+    fields: [
+      ("module", moduleName),
+      ("function", function.name.string),
+      ("conditionBranches", "\(swiftMutagenConditionBranchCount(in: function))"),
+      ("sites", "\(sites.count)")
+    ])
   guard !sites.isEmpty else {
     return false
   }
@@ -440,6 +485,16 @@ private func swiftMutagenDiscoverConditionSites(
   }
 
   return sites
+}
+
+private func swiftMutagenConditionBranchCount(in function: Function) -> Int {
+  var count = 0
+  for block in function.blocks {
+    if block.terminator is CondBranchInst {
+      count += 1
+    }
+  }
+  return count
 }
 
 private func swiftMutagenConditionSiteMutations(
@@ -696,6 +751,54 @@ private func swiftMutagenConditionAlternativeJSON(_ alternative: SwiftMutagenCon
   fields.append(#""sourceMutated":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceMutated))""#)
   fields.append(#""behaviorKey":"\#(swiftMutagenEscapeJSON(alternative.mutation.silMutated))""#)
   return "{\(fields.joined(separator: ","))}"
+}
+
+private func swiftMutagenModeName(_ mode: SwiftMutagenMode) -> String {
+  switch mode {
+  case .discover:
+    return "discover"
+  case .apply:
+    return "apply"
+  case .metamutant:
+    return "metamutant"
+  }
+}
+
+private func swiftMutagenShouldLog(
+  function: Function,
+  moduleName: String,
+  config: SwiftMutagenConfig
+) -> Bool {
+  if config.compilerEventsPath.isEmpty {
+    return false
+  }
+  if swiftMutagenFunctionName(function.name.string, belongsToModule: moduleName) {
+    return true
+  }
+  let location = function.location.description
+  for path in config.sourceFiles {
+    if location.contains(path) {
+      return true
+    }
+  }
+  return false
+}
+
+private func swiftMutagenLogEvent(
+  _ event: String,
+  config: SwiftMutagenConfig,
+  fields: [(String, String)]
+) {
+  guard !config.compilerEventsPath.isEmpty else {
+    return
+  }
+
+  var jsonFields = [#""event":"\#(swiftMutagenEscapeJSON(event))""#]
+  for (key, value) in fields {
+    jsonFields.append(#""\#(swiftMutagenEscapeJSON(key))":"\#(swiftMutagenEscapeJSON(value))""#)
+  }
+  swiftMutagenCreateParentDirectories(forFile: config.compilerEventsPath)
+  swiftMutagenWrite("{\(jsonFields.joined(separator: ","))}\n", to: config.compilerEventsPath, append: true)
 }
 
 private func swiftMutagenFunctionName(_ functionName: String, belongsToModule moduleName: String) -> Bool {

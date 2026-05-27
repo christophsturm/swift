@@ -24,6 +24,26 @@ private enum SwiftMutagenMode {
   case metamutant
 }
 
+private struct SwiftMutagenConditionMutationRule {
+  let builtinID: String
+  let mutator: String
+  let mutatedBuiltinName: String
+  let sourceOriginal: String
+  let sourceMutated: String
+
+  init?(wireFormat: String) {
+    let fields = wireFormat.split(separator: "|", omittingEmptySubsequences: false).map { String($0) }
+    guard fields.count == 5 else {
+      return nil
+    }
+    builtinID = fields[0]
+    mutator = fields[1]
+    mutatedBuiltinName = fields[2]
+    sourceOriginal = fields[3]
+    sourceMutated = fields[4]
+  }
+}
+
 private struct SwiftMutagenConfig {
   static let defaultPath = ".mutagen/session/compiler-config.json"
 
@@ -36,6 +56,7 @@ private struct SwiftMutagenConfig {
   let excludePathFragments: [String]
   let sourceFiles: [String]
   let enabledMutators: [String]
+  let conditionMutationRules: [SwiftMutagenConditionMutationRule]
 
   static func load() -> SwiftMutagenConfig? {
     let configPath = swiftMutagenEnvironmentValue("SWIFT_MUTAGEN_CONFIG") ?? Self.defaultPath
@@ -68,6 +89,9 @@ private struct SwiftMutagenConfig {
     let excludePaths = swiftMutagenJSONStringArray("excludePaths", in: json)
     let sourceFiles = swiftMutagenJSONStringArray("sourceFiles", in: json)
     let enabledMutators = swiftMutagenJSONStringArray("enabledMutators", in: json)
+    let conditionMutationRules = swiftMutagenJSONStringArray("conditionMutationRules", in: json).compactMap {
+      SwiftMutagenConditionMutationRule(wireFormat: $0)
+    }
 
     return SwiftMutagenConfig(
       mode: mode,
@@ -78,7 +102,8 @@ private struct SwiftMutagenConfig {
       packageRoot: packageRoot,
       excludePathFragments: excludePaths,
       sourceFiles: sourceFiles,
-      enabledMutators: enabledMutators)
+      enabledMutators: enabledMutators,
+      conditionMutationRules: conditionMutationRules)
   }
 }
 
@@ -517,30 +542,52 @@ private func swiftMutagenConditionSiteMutations(
   for builtin: BuiltinInst,
   config: SwiftMutagenConfig
 ) -> [SwiftMutagenMutation] {
-  var mutations = swiftMutagenMutations(for: builtin)
-  mutations.append(SwiftMutagenMutation(
-    originalID: builtin.id,
-    mutator: "CONDITION_TRUE",
-    mutatedBuiltinName: "condition_true",
-    sourceOriginal: builtin.name.string,
-    sourceMutated: "true",
-    silOriginal: builtin.name.string,
-    silMutated: "condition_true"))
-  mutations.append(SwiftMutagenMutation(
-    originalID: builtin.id,
-    mutator: "CONDITION_FALSE",
-    mutatedBuiltinName: "condition_false",
-    sourceOriginal: builtin.name.string,
-    sourceMutated: "false",
-    silOriginal: builtin.name.string,
-    silMutated: "condition_false"))
+  guard let builtinID = swiftMutagenComparisonBuiltinIDName(builtin) else {
+    return []
+  }
 
-  return mutations.filter {
-    ($0.mutator == "CONDITIONALS_BOUNDARY"
-      || $0.mutator == "NEGATE_CONDITIONALS"
-      || $0.mutator == "CONDITION_TRUE"
-      || $0.mutator == "CONDITION_FALSE")
-      && swiftMutagenMutatorIsEnabled($0.mutator, config: config)
+  var mutations: [SwiftMutagenMutation] = []
+  for rule in config.conditionMutationRules {
+    let appliesToBuiltin = rule.builtinID == builtinID || rule.builtinID == "COMPARISON"
+    guard appliesToBuiltin, swiftMutagenMutatorIsEnabled(rule.mutator, config: config) else {
+      continue
+    }
+    mutations.append(SwiftMutagenMutation(
+      originalID: builtin.id,
+      mutator: rule.mutator,
+      mutatedBuiltinName: rule.mutatedBuiltinName,
+      sourceOriginal: rule.sourceOriginal,
+      sourceMutated: rule.sourceMutated,
+      silOriginal: builtin.name.string,
+      silMutated: rule.mutatedBuiltinName))
+  }
+  return mutations
+}
+
+private func swiftMutagenComparisonBuiltinIDName(_ builtin: BuiltinInst) -> String? {
+  switch builtin.id {
+  case .ICMP_EQ:
+    return "ICMP_EQ"
+  case .ICMP_NE:
+    return "ICMP_NE"
+  case .ICMP_SGE:
+    return "ICMP_SGE"
+  case .ICMP_SGT:
+    return "ICMP_SGT"
+  case .ICMP_SLE:
+    return "ICMP_SLE"
+  case .ICMP_SLT:
+    return "ICMP_SLT"
+  case .ICMP_UGE:
+    return "ICMP_UGE"
+  case .ICMP_UGT:
+    return "ICMP_UGT"
+  case .ICMP_ULE:
+    return "ICMP_ULE"
+  case .ICMP_ULT:
+    return "ICMP_ULT"
+  default:
+    return nil
   }
 }
 

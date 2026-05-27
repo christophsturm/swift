@@ -1952,7 +1952,72 @@ private func swiftMutagenIsSourceComparisonOperator(
   if operatorEnd < bytes.count && swiftMutagenIsOperatorByte(bytes[operatorEnd]) {
     return false
   }
+  if swiftMutagenIsLikelyGenericAngleBracket(
+    bytes: bytes,
+    operatorStart: operatorStart,
+    operatorEnd: operatorEnd
+  ) {
+    return false
+  }
   return true
+}
+
+private func swiftMutagenIsLikelyGenericAngleBracket(
+  bytes: [UInt8],
+  operatorStart: Int,
+  operatorEnd: Int
+) -> Bool {
+  guard operatorEnd == operatorStart + 1 else {
+    return false
+  }
+  if bytes[operatorStart] == 60 {
+    return swiftMutagenHasIdentifierBefore(bytes: bytes, index: operatorStart)
+      && swiftMutagenHasIdentifierAfter(bytes: bytes, index: operatorEnd)
+      && swiftMutagenHasClosingAngleBeforeExpressionDelimiter(bytes: bytes, index: operatorEnd)
+  }
+  if bytes[operatorStart] == 62 {
+    return swiftMutagenHasIdentifierBefore(bytes: bytes, index: operatorStart)
+      && swiftMutagenHasOpeningAngleBeforeExpressionDelimiter(bytes: bytes, index: operatorStart)
+  }
+  return false
+}
+
+private func swiftMutagenHasIdentifierBefore(bytes: [UInt8], index: Int) -> Bool {
+  index > 0 && swiftMutagenIsExpressionByte(bytes[index - 1])
+}
+
+private func swiftMutagenHasIdentifierAfter(bytes: [UInt8], index: Int) -> Bool {
+  index < bytes.count && swiftMutagenIsExpressionByte(bytes[index])
+}
+
+private func swiftMutagenHasClosingAngleBeforeExpressionDelimiter(bytes: [UInt8], index: Int) -> Bool {
+  var offset = index
+  while offset < bytes.count {
+    let byte = bytes[offset]
+    if byte == 62 {
+      return true
+    }
+    if byte == 10 || byte == 59 || byte == 123 || byte == 125 || byte == 61 {
+      return false
+    }
+    offset += 1
+  }
+  return false
+}
+
+private func swiftMutagenHasOpeningAngleBeforeExpressionDelimiter(bytes: [UInt8], index: Int) -> Bool {
+  var offset = index
+  while offset > 0 {
+    offset -= 1
+    let byte = bytes[offset]
+    if byte == 60 {
+      return true
+    }
+    if byte == 10 || byte == 59 || byte == 123 || byte == 125 || byte == 61 {
+      return false
+    }
+  }
+  return false
 }
 
 private func swiftMutagenIsOperatorByte(_ byte: UInt8) -> Bool {

@@ -2359,23 +2359,26 @@ private func swiftMutagenFindSourceOperator(
   }
 
   let preferredPrefix = config.packageRoot + "/Sources/" + moduleName + "/"
-  let sourcePaths = swiftMutagenSwiftSourcePaths(config: config)
-  let orderedSourcePaths = sourcePaths.sorted {
-    let lhsMatches = functionLocation.contains($0)
-    let rhsMatches = functionLocation.contains($1)
-    if lhsMatches != rhsMatches {
-      return lhsMatches
+  let locatedSourcePaths = swiftMutagenSwiftSourcePaths(config: config).compactMap { path
+    -> (path: String, preferredLine: Int)? in
+    guard functionLocation.contains(path),
+          let preferredLine = swiftMutagenPreferredLine(in: functionLocation, path: path) else {
+      return nil
     }
-    return $0 < $1
+    return (path, preferredLine)
+  }.sorted { lhs, rhs in
+    lhs.path < rhs.path
+  }
+  guard !locatedSourcePaths.isEmpty else {
+    return nil
   }
 
   var fallback: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
 
-  for path in orderedSourcePaths {
+  for (path, preferredLine) in locatedSourcePaths {
     guard let text = swiftMutagenRead(path) else {
       continue
     }
-    let preferredLine = swiftMutagenPreferredLine(in: functionLocation, path: path)
     var bestForPath: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
     for pair in operatorPairs {
       if let position = swiftMutagenFindOperator(
@@ -2394,7 +2397,6 @@ private func swiftMutagenFindSourceOperator(
           position.sourceOriginal,
           sourceMutated)
         if let existing = bestForPath,
-           let preferredLine = preferredLine,
            swiftMutagenLineDistance(existing.line, preferredLine) <= swiftMutagenLineDistance(result.1, preferredLine) {
           continue
         }

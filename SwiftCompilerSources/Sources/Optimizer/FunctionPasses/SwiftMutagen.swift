@@ -293,6 +293,12 @@ private struct SwiftMutagenReturnAlternative {
   let mutation: SwiftMutagenMutation
 }
 
+private struct SwiftMutagenArithmeticAlternative {
+  let mutantID: String
+  let alternativeIndex: UInt32
+  let mutation: SwiftMutagenMutation
+}
+
 private struct SwiftMutagenReturnSite {
   let siteID: UInt64
   let module: String
@@ -302,6 +308,17 @@ private struct SwiftMutagenReturnSite {
   let column: Int
   let returnInst: ReturnInst
   let alternatives: [SwiftMutagenReturnAlternative]
+}
+
+private struct SwiftMutagenArithmeticSite {
+  let siteID: UInt64
+  let module: String
+  let function: String
+  let file: String
+  let line: Int
+  let column: Int
+  let builtin: BuiltinInst
+  let alternatives: [SwiftMutagenArithmeticAlternative]
 }
 
 private var swiftMutagenNextOrdinal = 1
@@ -542,6 +559,11 @@ private func swiftMutagenInstrumentMetamutantSites(
     moduleName: moduleName,
     config: config
   )
+  let arithmeticSites = swiftMutagenDiscoverArithmeticSites(
+    in: function,
+    moduleName: moduleName,
+    config: config
+  )
   let returnSites = swiftMutagenDiscoverReturnSites(
     in: function,
     moduleName: moduleName,
@@ -555,14 +577,17 @@ private func swiftMutagenInstrumentMetamutantSites(
       ("function", function.name.string),
       ("conditionBranches", "\(swiftMutagenConditionBranchCount(in: function))"),
       ("conditionSites", "\(conditionSites.count)"),
+      ("arithmeticSites", "\(arithmeticSites.count)"),
+      ("voidCallSites", "0"),
       ("returnSites", "\(returnSites.count)")
     ])
-  guard !conditionSites.isEmpty || !returnSites.isEmpty else {
+  guard !conditionSites.isEmpty || !arithmeticSites.isEmpty || !returnSites.isEmpty else {
     return false
   }
 
   swiftMutagenWriteMetamutantFragment(
     conditionSites.map(swiftMutagenConditionSiteJSON)
+      + arithmeticSites.map(swiftMutagenArithmeticSiteJSON)
       + returnSites.map(swiftMutagenReturnSiteJSON),
     moduleName: moduleName,
     functionName: function.name.string,
@@ -570,6 +595,11 @@ private func swiftMutagenInstrumentMetamutantSites(
   )
 
   var changed = false
+  for site in arithmeticSites {
+    if swiftMutagenInjectArithmeticSite(site, context) {
+      changed = true
+    }
+  }
   for site in conditionSites {
     if swiftMutagenInjectConditionSite(site, context) {
       changed = true
@@ -738,6 +768,83 @@ private func swiftMutagenDiscoverReturnSites(
   return sites
 }
 
+private func swiftMutagenDiscoverArithmeticSites(
+  in function: Function,
+  moduleName: String,
+  config: SwiftMutagenConfig
+) -> [SwiftMutagenArithmeticSite] {
+  var sites: [SwiftMutagenArithmeticSite] = []
+  var localOrdinal = 1
+  let functionName = function.name.string
+
+  for block in function.blocks {
+    for instruction in block.instructions {
+      guard let builtin = instruction as? BuiltinInst else {
+        continue
+      }
+      let mutations = swiftMutagenArithmeticSiteMutations(for: builtin, config: config)
+      guard !mutations.isEmpty else {
+        continue
+      }
+
+      var alternatives: [SwiftMutagenArithmeticAlternative] = []
+      var sourceLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
+      for mutation in mutations {
+        guard let location = swiftMutagenSourceLocation(
+          for: builtin,
+          function: function,
+          moduleName: moduleName,
+          mutation: mutation,
+          config: config
+        ) else {
+          continue
+        }
+        if sourceLocation == nil {
+          sourceLocation = location
+        }
+        let displayMutation = mutation.withSource(
+          original: location.sourceOriginal,
+          mutated: location.sourceMutated
+        )
+        alternatives.append(SwiftMutagenArithmeticAlternative(
+          mutantID: "local-arithmetic-\(localOrdinal)-\(alternatives.count + 1)",
+          alternativeIndex: UInt32(alternatives.count + 1),
+          mutation: displayMutation
+        ))
+      }
+
+      guard let location = sourceLocation, !alternatives.isEmpty else {
+        continue
+      }
+
+      let siteID = swiftMutagenStableSiteID(
+        packageRoot: config.packageRoot,
+        module: moduleName,
+        file: location.file,
+        line: location.line,
+        column: location.column,
+        function: functionName,
+        siteKind: "arithmetic",
+        localOrdinal: localOrdinal
+      )
+      localOrdinal += 1
+
+      sites.append(SwiftMutagenArithmeticSite(
+        siteID: siteID,
+        module: moduleName,
+        function: functionName,
+        file: location.file,
+        line: location.line,
+        column: location.column,
+        builtin: builtin,
+        alternatives: alternatives
+      ))
+    }
+  }
+
+  return sites
+}
+
 private func swiftMutagenMetamutantReturnMutations(
   for returnInst: ReturnInst,
   config: SwiftMutagenConfig
@@ -785,6 +892,44 @@ private func swiftMutagenConditionSiteMutations(
       silOriginal: builtin.name.string,
       silMutated: rule.mutatedBuiltinName))
   }
+  return mutations
+}
+
+private func swiftMutagenArithmeticSiteMutations(
+  for builtin: BuiltinInst,
+  config: SwiftMutagenConfig
+) -> [SwiftMutagenMutation] {
+  var mutations: [SwiftMutagenMutation] = []
+
+  switch builtin.id {
+  case .SAddOver:
+    if let rule = swiftMutagenContextualArithmeticRule(for: builtin, builtinID: "SAddOver", config: config),
+       swiftMutagenMutatorIsEnabled(rule.mutator, config: config) {
+      mutations.append(swiftMutagenContextualArithmeticMutation(rule, for: builtin))
+    }
+  case .SSubOver:
+    if let rule = swiftMutagenContextualArithmeticRule(for: builtin, builtinID: "SSubOver", config: config),
+       swiftMutagenMutatorIsEnabled(rule.mutator, config: config) {
+      mutations.append(swiftMutagenContextualArithmeticMutation(rule, for: builtin))
+    }
+  default:
+    break
+  }
+
+  if let builtinID = swiftMutagenArithmeticBuiltinIDName(builtin) {
+    for rule in config.arithmeticMutationRules where rule.builtinID == builtinID {
+      guard swiftMutagenMutatorIsEnabled("MATH", config: config) else {
+        continue
+      }
+      mutations.append(swiftMutagenBinaryMutation(
+        builtin,
+        mutator: "MATH",
+        mutatedBuiltinName: rule.mutatedBuiltinName,
+        sourceOriginal: rule.sourceOriginal,
+        sourceMutated: rule.sourceMutated))
+    }
+  }
+
   return mutations
 }
 
@@ -1001,6 +1146,90 @@ private func swiftMutagenInjectReturnSite(
   return true
 }
 
+private func swiftMutagenInjectArithmeticSite(
+  _ site: SwiftMutagenArithmeticSite,
+  _ context: FunctionPassContext
+) -> Bool {
+  guard let visitFunction = context.lookupFunction(name: "__swift_mutagen_visit"),
+        let siteID = swiftMutagenMakeRuntimeSiteID(
+          site.siteID,
+          visitFunction: visitFunction,
+          insertionPoint: site.builtin,
+          context
+        ) else {
+    return false
+  }
+  guard let firstArgument = site.builtin.arguments.first,
+        let originalBuiltinName = swiftMutagenBuiltinFunctionName(site.builtin) else {
+    return false
+  }
+
+  let function = site.builtin.parentFunction
+  let originalPredecessorBlock = site.builtin.parentBlock
+  let continuationBlock = context.splitBlock(before: site.builtin)
+  let selectedValue = continuationBlock.addArgument(
+    type: site.builtin.type,
+    ownership: site.builtin.ownership,
+    context
+  )
+  let originalBlock = function.appendNewBlock(context)
+  let alternativeBlocks = site.alternatives.map { _ in function.appendNewBlock(context) }
+  let checkBlocks = site.alternatives.dropFirst().map { _ in function.appendNewBlock(context) }
+
+  let dispatchBuilder = Builder(atEndOf: originalPredecessorBlock, location: site.builtin.location, context)
+  let visitRef = dispatchBuilder.createFunctionRef(visitFunction)
+  let choice = dispatchBuilder.createApply(
+    function: visitRef,
+    SubstitutionMap(),
+    arguments: [siteID]
+  )
+  let rawChoice = dispatchBuilder.createStructExtract(struct: choice, fieldIndex: 0)
+
+  for (index, alternative) in site.alternatives.enumerated() {
+    let builder = Builder(atEndOf: alternativeBlocks[index], location: site.builtin.location, context)
+    let replacement = builder.createBuiltinBinaryFunction(
+      name: alternative.mutation.mutatedBuiltinName,
+      operandType: firstArgument.type,
+      resultType: site.builtin.type,
+      arguments: Array(site.builtin.arguments)
+    )
+    builder.createBranch(to: continuationBlock, arguments: [replacement])
+  }
+
+  let originalBuilder = Builder(atEndOf: originalBlock, location: site.builtin.location, context)
+  let originalValue = originalBuilder.createBuiltinBinaryFunction(
+    name: originalBuiltinName,
+    operandType: firstArgument.type,
+    resultType: site.builtin.type,
+    arguments: Array(site.builtin.arguments)
+  )
+  originalBuilder.createBranch(to: continuationBlock, arguments: [originalValue])
+
+  for (index, alternative) in site.alternatives.enumerated() {
+    let builder = index == 0
+      ? dispatchBuilder
+      : Builder(atEndOf: checkBlocks[index - 1], location: site.builtin.location, context)
+    let nextBlock = index + 1 < site.alternatives.count
+      ? checkBlocks[index]
+      : originalBlock
+    let alternativeLiteral = builder.createIntegerLiteral(alternative.alternativeIndex, type: rawChoice.type)
+    let isSelected = builder.createBuiltinBinaryFunction(
+      name: "cmp_eq",
+      operandType: rawChoice.type,
+      resultType: context.getBuiltinIntegerType(bitWidth: 1),
+      arguments: [rawChoice, alternativeLiteral]
+    )
+    builder.createCondBranch(
+      condition: isSelected,
+      trueBlock: alternativeBlocks[index],
+      falseBlock: nextBlock
+    )
+  }
+
+  site.builtin.replace(with: selectedValue, context)
+  return true
+}
+
 private func swiftMutagenCanMakeReturnAlternative(
   _ mutation: SwiftMutagenMutation,
   returnType: Type,
@@ -1148,6 +1377,29 @@ private func swiftMutagenConditionSiteJSON(_ site: SwiftMutagenConditionSite) ->
 }
 
 private func swiftMutagenConditionAlternativeJSON(_ alternative: SwiftMutagenConditionAlternative) -> String {
+  var fields: [String] = []
+  fields.append(#""mutantID":"\#(swiftMutagenEscapeJSON(alternative.mutantID))""#)
+  fields.append(#""alternativeIndex":\#(alternative.alternativeIndex)"#)
+  fields.append(#""mutator":"\#(swiftMutagenEscapeJSON(alternative.mutation.mutator))""#)
+  fields.append(#""sourceOriginal":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceOriginal))""#)
+  fields.append(#""sourceMutated":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceMutated))""#)
+  fields.append(#""behaviorKey":"\#(swiftMutagenEscapeJSON(alternative.mutation.silMutated))""#)
+  return "{\(fields.joined(separator: ","))}"
+}
+
+private func swiftMutagenArithmeticSiteJSON(_ site: SwiftMutagenArithmeticSite) -> String {
+  var fields: [String] = []
+  fields.append(#""siteID":\#(site.siteID)"#)
+  fields.append(#""module":"\#(swiftMutagenEscapeJSON(site.module))""#)
+  fields.append(#""function":"\#(swiftMutagenEscapeJSON(site.function))""#)
+  fields.append(#""sourceLocation":{"file":"\#(swiftMutagenEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#)
+  fields.append(#""siteKind":"arithmetic""#)
+  fields.append(#""resultKind":"value""#)
+  fields.append(#""alternatives":[\#(site.alternatives.map(swiftMutagenArithmeticAlternativeJSON).joined(separator: ","))]"#)
+  return "{\(fields.joined(separator: ","))}"
+}
+
+private func swiftMutagenArithmeticAlternativeJSON(_ alternative: SwiftMutagenArithmeticAlternative) -> String {
   var fields: [String] = []
   fields.append(#""mutantID":"\#(swiftMutagenEscapeJSON(alternative.mutantID))""#)
   fields.append(#""alternativeIndex":\#(alternative.alternativeIndex)"#)
@@ -1678,6 +1930,53 @@ private func swiftMutagenArithmeticBuiltinIDName(_ builtin: BuiltinInst) -> Stri
     return "AShr"
   case .LShr:
     return "LShr"
+  default:
+    return nil
+  }
+}
+
+private func swiftMutagenBuiltinFunctionName(_ builtin: BuiltinInst) -> String? {
+  switch builtin.id {
+  case .Add:
+    return "add"
+  case .Sub:
+    return "sub"
+  case .Mul:
+    return "mul"
+  case .SDiv:
+    return "sdiv"
+  case .SRem:
+    return "srem"
+  case .UDiv:
+    return "udiv"
+  case .URem:
+    return "urem"
+  case .FAdd:
+    return "fadd"
+  case .FSub:
+    return "fsub"
+  case .FMul:
+    return "fmul"
+  case .FDiv:
+    return "fdiv"
+  case .FRem:
+    return "frem"
+  case .And:
+    return "and"
+  case .Or:
+    return "or"
+  case .Xor:
+    return "xor"
+  case .Shl:
+    return "shl"
+  case .AShr:
+    return "ashr"
+  case .LShr:
+    return "lshr"
+  case .SAddOver:
+    return "sadd_with_overflow"
+  case .SSubOver:
+    return "ssub_with_overflow"
   default:
     return nil
   }

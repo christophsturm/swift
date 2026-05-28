@@ -1682,28 +1682,7 @@ private func swiftMutagenMutations(
     for: builtin,
     config: config,
     includeGenericComparisonRules: false)
-  switch builtin.id {
-  case .SAddOver:
-    if let rule = swiftMutagenContextualArithmeticRule(for: builtin, builtinID: "SAddOver", config: config) {
-      mutations.append(swiftMutagenContextualArithmeticMutation(rule, for: builtin))
-    }
-  case .SSubOver:
-    if let rule = swiftMutagenContextualArithmeticRule(for: builtin, builtinID: "SSubOver", config: config) {
-      mutations.append(swiftMutagenContextualArithmeticMutation(rule, for: builtin))
-    }
-  default:
-    break
-  }
-  if let builtinID = swiftMutagenArithmeticBuiltinIDName(builtin) {
-    for rule in config.arithmeticMutationRules where rule.builtinID == builtinID {
-      mutations.append(swiftMutagenBinaryMutation(
-        builtin,
-        mutator: "MATH",
-        mutatedBuiltinName: rule.mutatedBuiltinName,
-        sourceOriginal: rule.sourceOriginal,
-        sourceMutated: rule.sourceMutated))
-    }
-  }
+  mutations += swiftMutagenArithmeticSiteMutations(for: builtin, config: config)
   return mutations
 }
 

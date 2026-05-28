@@ -2385,7 +2385,8 @@ private func swiftMutagenFindSourceOperator(
         pair.0,
         mutatedOperator: pair.1,
         in: text,
-        preferredLine: preferredLine
+        preferredLine: preferredLine,
+        maxPreferredLineDistance: 4
       ) {
         let sourceMutated = mutation.mutator == "CONDITION_TRUE" || mutation.mutator == "CONDITION_FALSE"
           ? mutation.sourceMutated
@@ -2420,7 +2421,8 @@ private func swiftMutagenFindOperator(
   _ op: String,
   mutatedOperator: String,
   in text: String,
-  preferredLine: Int?
+  preferredLine: Int?,
+  maxPreferredLineDistance: Int? = nil
 ) -> (line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   let bytes = Array(text.utf8)
   let opBytes = Array(op.utf8)
@@ -2463,6 +2465,17 @@ private func swiftMutagenFindOperator(
       let candidate = (line, column, expression.original, expression.mutated)
       guard let preferredLine = preferredLine else {
         return candidate
+      }
+      if let maxPreferredLineDistance = maxPreferredLineDistance,
+         swiftMutagenLineDistance(line, preferredLine) > maxPreferredLineDistance {
+        if bytes[index] == 10 {
+          line += 1
+          column = 1
+        } else {
+          column += 1
+        }
+        index += 1
+        continue
       }
       if line == preferredLine {
         return candidate

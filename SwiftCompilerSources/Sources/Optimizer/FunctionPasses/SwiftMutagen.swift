@@ -585,30 +585,33 @@ private func swiftMutagenInstrumentMetamutantSites(
     return false
   }
 
-  swiftMutagenWriteMetamutantFragment(
-    conditionSites.map(swiftMutagenConditionSiteJSON)
-      + arithmeticSites.map(swiftMutagenArithmeticSiteJSON)
-      + returnSites.map(swiftMutagenReturnSiteJSON),
-    moduleName: moduleName,
-    functionName: function.name.string,
-    config: config
-  )
-
   var changed = false
+  var injectedSiteJSON: [String] = []
   for site in arithmeticSites {
     if swiftMutagenInjectArithmeticSite(site, context) {
+      injectedSiteJSON.append(swiftMutagenArithmeticSiteJSON(site))
       changed = true
     }
   }
   for site in conditionSites {
     if swiftMutagenInjectConditionSite(site, context) {
+      injectedSiteJSON.append(swiftMutagenConditionSiteJSON(site))
       changed = true
     }
   }
   for site in returnSites {
     if swiftMutagenInjectReturnSite(site, context) {
+      injectedSiteJSON.append(swiftMutagenReturnSiteJSON(site))
       changed = true
     }
+  }
+  if !injectedSiteJSON.isEmpty {
+    swiftMutagenWriteMetamutantFragment(
+      injectedSiteJSON,
+      moduleName: moduleName,
+      functionName: function.name.string,
+      config: config
+    )
   }
   return changed
 }

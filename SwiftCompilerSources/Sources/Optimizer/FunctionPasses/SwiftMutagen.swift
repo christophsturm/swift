@@ -297,7 +297,7 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
     return
   }
 
-  let moduleName = context.moduleDecl.name.string
+  let moduleName = context.currentModuleContext.name.string
   let shouldLogFunction = swiftMutagenShouldLog(function: function, moduleName: moduleName, config: config)
   let functionStartedAt = swiftMutagenClockMicroseconds()
   if shouldLogFunction {
@@ -1495,7 +1495,7 @@ private func swiftMutagenApplyReturn(
   case "return_true":
     replacement = swiftMutagenMakeBool(true, type: returnType, builder: builder)
   case "return_nil":
-    replacement = builder.createOptionalNone(type: returnType)
+    replacement = swiftMutagenMakeOptionalNone(type: returnType, builder: builder)
   case "return_zero":
     replacement = swiftMutagenMakeIntegerZero(type: returnType, in: returnInst.parentFunction, builder: builder)
   default:
@@ -1530,6 +1530,13 @@ private func swiftMutagenMakeIntegerZero(
   }
   let zero = builder.createIntegerLiteral(0, type: fields[0])
   return builder.createStruct(type: type, elements: [zero])
+}
+
+private func swiftMutagenMakeOptionalNone(
+  type: Type,
+  builder: Builder
+) -> Value {
+  return builder.createEnum(caseIndex: 0, payload: nil, enumType: type)
 }
 
 private func swiftMutagenIsBoolType(_ type: Type, in function: Function) -> Bool {
@@ -1579,7 +1586,7 @@ private func swiftMutagenIsOptionalNone(_ value: Value) -> Bool {
   guard let enumInst = value as? EnumInst else {
     return false
   }
-  return enumInst.type.isOptional && enumInst.caseIndex == Builder.optionalNoneCaseIndex
+  return enumInst.type.isOptional && enumInst.caseIndex == 0
 }
 
 private func swiftMutagenMutatorIsEnabled(

@@ -943,7 +943,11 @@ private func swiftMutagenInjectReturnSite(
   let alternativeBlocks = site.alternatives.map { _ in function.appendNewBlock(context) }
   let checkBlocks = site.alternatives.dropFirst().map { _ in function.appendNewBlock(context) }
   let returnBlock = function.appendNewBlock(context)
-  let selectedReturnValue = returnBlock.addArgument(type: returnType, ownership: .none, context)
+  let selectedReturnValue = returnBlock.addArgument(
+    type: returnType,
+    ownership: originalValue.ownership,
+    context
+  )
 
   let dispatchBuilder = Builder(before: site.returnInst, context)
   let visitRef = dispatchBuilder.createFunctionRef(visitFunction)

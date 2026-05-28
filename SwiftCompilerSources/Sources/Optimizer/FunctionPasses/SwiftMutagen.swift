@@ -873,13 +873,22 @@ private func swiftMutagenConditionSiteMutations(
   for builtin: BuiltinInst,
   config: SwiftMutagenConfig
 ) -> [SwiftMutagenMutation] {
+  swiftMutagenConditionMutations(for: builtin, config: config, includeGenericComparisonRules: true)
+}
+
+private func swiftMutagenConditionMutations(
+  for builtin: BuiltinInst,
+  config: SwiftMutagenConfig,
+  includeGenericComparisonRules: Bool
+) -> [SwiftMutagenMutation] {
   guard let builtinID = swiftMutagenComparisonBuiltinIDName(builtin) else {
     return []
   }
 
   var mutations: [SwiftMutagenMutation] = []
   for rule in config.conditionMutationRules {
-    let appliesToBuiltin = rule.builtinID == builtinID || rule.builtinID == "COMPARISON"
+    let appliesToBuiltin = rule.builtinID == builtinID
+      || (includeGenericComparisonRules && rule.builtinID == "COMPARISON")
     guard appliesToBuiltin, swiftMutagenMutatorIsEnabled(rule.mutator, config: config) else {
       continue
     }
@@ -1669,162 +1678,11 @@ private func swiftMutagenMutations(
   for builtin: BuiltinInst,
   config: SwiftMutagenConfig
 ) -> [SwiftMutagenMutation] {
-  var mutations: [SwiftMutagenMutation] = []
+  var mutations = swiftMutagenConditionMutations(
+    for: builtin,
+    config: config,
+    includeGenericComparisonRules: false)
   switch builtin.id {
-  case .ICMP_EQ:
-    mutations.append(SwiftMutagenMutation(
-      originalID: .ICMP_EQ,
-      mutator: "NEGATE_CONDITIONALS",
-      mutatedBuiltinName: "cmp_ne",
-      sourceOriginal: "==",
-      sourceMutated: "!=",
-      silOriginal: builtin.name.string,
-      silMutated: "cmp_ne"))
-  case .ICMP_NE:
-    mutations.append(SwiftMutagenMutation(
-      originalID: .ICMP_NE,
-      mutator: "NEGATE_CONDITIONALS",
-      mutatedBuiltinName: "cmp_eq",
-      sourceOriginal: "!=",
-      sourceMutated: "==",
-      silOriginal: builtin.name.string,
-      silMutated: "cmp_eq"))
-  case .ICMP_SGE:
-    mutations.append(SwiftMutagenMutation(
-      originalID: .ICMP_SGE,
-      mutator: "CONDITIONALS_BOUNDARY",
-      mutatedBuiltinName: "cmp_sgt",
-      sourceOriginal: ">=",
-      sourceMutated: ">",
-      silOriginal: builtin.name.string,
-      silMutated: "cmp_sgt"))
-    mutations.append(SwiftMutagenMutation(
-      originalID: .ICMP_SGE,
-      mutator: "NEGATE_CONDITIONALS",
-      mutatedBuiltinName: "cmp_slt",
-      sourceOriginal: ">=",
-      sourceMutated: "<",
-      silOriginal: builtin.name.string,
-      silMutated: "cmp_slt"))
-  case .ICMP_SGT:
-    mutations.append(SwiftMutagenMutation(
-      originalID: .ICMP_SGT,
-      mutator: "CONDITIONALS_BOUNDARY",
-      mutatedBuiltinName: "cmp_sge",
-      sourceOriginal: ">",
-      sourceMutated: ">=",
-      silOriginal: builtin.name.string,
-      silMutated: "cmp_sge"))
-    mutations.append(SwiftMutagenMutation(
-      originalID: .ICMP_SGT,
-      mutator: "NEGATE_CONDITIONALS",
-      mutatedBuiltinName: "cmp_sle",
-      sourceOriginal: ">",
-      sourceMutated: "<=",
-      silOriginal: builtin.name.string,
-      silMutated: "cmp_sle"))
-  case .ICMP_SLE:
-    mutations.append(SwiftMutagenMutation(
-      originalID: .ICMP_SLE,
-      mutator: "CONDITIONALS_BOUNDARY",
-      mutatedBuiltinName: "cmp_slt",
-      sourceOriginal: "<=",
-      sourceMutated: "<",
-      silOriginal: builtin.name.string,
-      silMutated: "cmp_slt"))
-    mutations.append(SwiftMutagenMutation(
-      originalID: .ICMP_SLE,
-      mutator: "NEGATE_CONDITIONALS",
-      mutatedBuiltinName: "cmp_sgt",
-      sourceOriginal: "<=",
-      sourceMutated: ">",
-      silOriginal: builtin.name.string,
-      silMutated: "cmp_sgt"))
-  case .ICMP_SLT:
-    mutations.append(SwiftMutagenMutation(
-      originalID: .ICMP_SLT,
-      mutator: "CONDITIONALS_BOUNDARY",
-      mutatedBuiltinName: "cmp_sle",
-      sourceOriginal: "<",
-      sourceMutated: "<=",
-      silOriginal: builtin.name.string,
-      silMutated: "cmp_sle"))
-    mutations.append(SwiftMutagenMutation(
-      originalID: .ICMP_SLT,
-      mutator: "NEGATE_CONDITIONALS",
-      mutatedBuiltinName: "cmp_sge",
-      sourceOriginal: "<",
-      sourceMutated: ">=",
-      silOriginal: builtin.name.string,
-      silMutated: "cmp_sge"))
-  case .ICMP_UGE:
-    mutations.append(SwiftMutagenMutation(
-      originalID: .ICMP_UGE,
-      mutator: "CONDITIONALS_BOUNDARY",
-      mutatedBuiltinName: "cmp_ugt",
-      sourceOriginal: ">=",
-      sourceMutated: ">",
-      silOriginal: builtin.name.string,
-      silMutated: "cmp_ugt"))
-    mutations.append(SwiftMutagenMutation(
-      originalID: .ICMP_UGE,
-      mutator: "NEGATE_CONDITIONALS",
-      mutatedBuiltinName: "cmp_ult",
-      sourceOriginal: ">=",
-      sourceMutated: "<",
-      silOriginal: builtin.name.string,
-      silMutated: "cmp_ult"))
-  case .ICMP_UGT:
-    mutations.append(SwiftMutagenMutation(
-      originalID: .ICMP_UGT,
-      mutator: "CONDITIONALS_BOUNDARY",
-      mutatedBuiltinName: "cmp_uge",
-      sourceOriginal: ">",
-      sourceMutated: ">=",
-      silOriginal: builtin.name.string,
-      silMutated: "cmp_uge"))
-    mutations.append(SwiftMutagenMutation(
-      originalID: .ICMP_UGT,
-      mutator: "NEGATE_CONDITIONALS",
-      mutatedBuiltinName: "cmp_ule",
-      sourceOriginal: ">",
-      sourceMutated: "<=",
-      silOriginal: builtin.name.string,
-      silMutated: "cmp_ule"))
-  case .ICMP_ULE:
-    mutations.append(SwiftMutagenMutation(
-      originalID: .ICMP_ULE,
-      mutator: "CONDITIONALS_BOUNDARY",
-      mutatedBuiltinName: "cmp_ult",
-      sourceOriginal: "<=",
-      sourceMutated: "<",
-      silOriginal: builtin.name.string,
-      silMutated: "cmp_ult"))
-    mutations.append(SwiftMutagenMutation(
-      originalID: .ICMP_ULE,
-      mutator: "NEGATE_CONDITIONALS",
-      mutatedBuiltinName: "cmp_ugt",
-      sourceOriginal: "<=",
-      sourceMutated: ">",
-      silOriginal: builtin.name.string,
-      silMutated: "cmp_ugt"))
-  case .ICMP_ULT:
-    mutations.append(SwiftMutagenMutation(
-      originalID: .ICMP_ULT,
-      mutator: "CONDITIONALS_BOUNDARY",
-      mutatedBuiltinName: "cmp_ule",
-      sourceOriginal: "<",
-      sourceMutated: "<=",
-      silOriginal: builtin.name.string,
-      silMutated: "cmp_ule"))
-    mutations.append(SwiftMutagenMutation(
-      originalID: .ICMP_ULT,
-      mutator: "NEGATE_CONDITIONALS",
-      mutatedBuiltinName: "cmp_uge",
-      sourceOriginal: "<",
-      sourceMutated: ">=",
-      silOriginal: builtin.name.string,
-      silMutated: "cmp_uge"))
   case .SAddOver:
     if let rule = swiftMutagenContextualArithmeticRule(for: builtin, builtinID: "SAddOver", config: config) {
       mutations.append(swiftMutagenContextualArithmeticMutation(rule, for: builtin))

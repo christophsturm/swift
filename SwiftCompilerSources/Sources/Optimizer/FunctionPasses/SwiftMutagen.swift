@@ -287,6 +287,23 @@ private struct SwiftMutagenConditionSite {
   let alternatives: [SwiftMutagenConditionAlternative]
 }
 
+private struct SwiftMutagenReturnAlternative {
+  let mutantID: String
+  let alternativeIndex: UInt32
+  let mutation: SwiftMutagenMutation
+}
+
+private struct SwiftMutagenReturnSite {
+  let siteID: UInt64
+  let module: String
+  let function: String
+  let file: String
+  let line: Int
+  let column: Int
+  let returnInst: ReturnInst
+  let alternatives: [SwiftMutagenReturnAlternative]
+}
+
 private var swiftMutagenNextOrdinal = 1
 private var swiftMutagenHasTruncatedDiscoveryOutput = false
 
@@ -356,7 +373,7 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
   }
 
   if config.mode == .metamutant {
-    if swiftMutagenInstrumentMetamutantConditionSites(
+    if swiftMutagenInstrumentMetamutantSites(
       in: function,
       moduleName: moduleName,
       config: config,
@@ -514,35 +531,52 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
   }
 }
 
-private func swiftMutagenInstrumentMetamutantConditionSites(
+private func swiftMutagenInstrumentMetamutantSites(
   in function: Function,
   moduleName: String,
   config: SwiftMutagenConfig,
   _ context: FunctionPassContext
 ) -> Bool {
-  let sites = swiftMutagenDiscoverConditionSites(
+  let conditionSites = swiftMutagenDiscoverConditionSites(
+    in: function,
+    moduleName: moduleName,
+    config: config
+  )
+  let returnSites = swiftMutagenDiscoverReturnSites(
     in: function,
     moduleName: moduleName,
     config: config
   )
   swiftMutagenLogEvent(
-    "metamutantConditionDiscovery",
+    "metamutantDiscovery",
     config: config,
     fields: [
       ("module", moduleName),
       ("function", function.name.string),
       ("conditionBranches", "\(swiftMutagenConditionBranchCount(in: function))"),
-      ("sites", "\(sites.count)")
+      ("conditionSites", "\(conditionSites.count)"),
+      ("returnSites", "\(returnSites.count)")
     ])
-  guard !sites.isEmpty else {
+  guard !conditionSites.isEmpty || !returnSites.isEmpty else {
     return false
   }
 
-  swiftMutagenWriteMetamutantFragment(sites, config: config)
+  swiftMutagenWriteMetamutantFragment(
+    conditionSites.map(swiftMutagenConditionSiteJSON)
+      + returnSites.map(swiftMutagenReturnSiteJSON),
+    moduleName: moduleName,
+    functionName: function.name.string,
+    config: config
+  )
 
   var changed = false
-  for site in sites {
+  for site in conditionSites {
     if swiftMutagenInjectConditionSite(site, context) {
+      changed = true
+    }
+  }
+  for site in returnSites {
+    if swiftMutagenInjectReturnSite(site, context) {
       changed = true
     }
   }
@@ -628,6 +662,94 @@ private func swiftMutagenDiscoverConditionSites(
   }
 
   return sites
+}
+
+private func swiftMutagenDiscoverReturnSites(
+  in function: Function,
+  moduleName: String,
+  config: SwiftMutagenConfig
+) -> [SwiftMutagenReturnSite] {
+  var sites: [SwiftMutagenReturnSite] = []
+  var localOrdinal = 1
+  let functionName = function.name.string
+
+  for block in function.blocks {
+    guard let returnInst = block.terminator as? ReturnInst else {
+      continue
+    }
+
+    let mutations = swiftMutagenMetamutantReturnMutations(for: returnInst, config: config)
+    guard !mutations.isEmpty else {
+      continue
+    }
+
+    var alternatives: [SwiftMutagenReturnAlternative] = []
+    var sourceLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
+    for mutation in mutations {
+      guard let location = swiftMutagenReturnSourceLocation(
+        for: returnInst,
+        mutation: mutation,
+        config: config
+      ) else {
+        continue
+      }
+      if sourceLocation == nil {
+        sourceLocation = location
+      }
+      let displayMutation = mutation.withSource(
+        original: location.sourceOriginal,
+        mutated: location.sourceMutated
+      )
+      alternatives.append(SwiftMutagenReturnAlternative(
+        mutantID: "local-return-\(localOrdinal)-\(alternatives.count + 1)",
+        alternativeIndex: UInt32(alternatives.count + 1),
+        mutation: displayMutation
+      ))
+    }
+
+    guard let location = sourceLocation, !alternatives.isEmpty else {
+      continue
+    }
+
+    let siteID = swiftMutagenStableSiteID(
+      packageRoot: config.packageRoot,
+      module: moduleName,
+      file: location.file,
+      line: location.line,
+      column: location.column,
+      function: functionName,
+      siteKind: "returnValue",
+      localOrdinal: localOrdinal
+    )
+    localOrdinal += 1
+
+    sites.append(SwiftMutagenReturnSite(
+      siteID: siteID,
+      module: moduleName,
+      function: functionName,
+      file: location.file,
+      line: location.line,
+      column: location.column,
+      returnInst: returnInst,
+      alternatives: alternatives
+    ))
+  }
+
+  return sites
+}
+
+private func swiftMutagenMetamutantReturnMutations(
+  for returnInst: ReturnInst,
+  config: SwiftMutagenConfig
+) -> [SwiftMutagenMutation] {
+  swiftMutagenReturnMutations(for: returnInst, config: config).filter { mutation in
+    switch mutation.mutatedBuiltinName {
+    case "return_false", "return_true", "return_zero":
+      return true
+    default:
+      return false
+    }
+  }
 }
 
 private func swiftMutagenConditionBranchCount(in function: Function) -> Int {
@@ -794,6 +916,120 @@ private func swiftMutagenInjectConditionSite(
   return true
 }
 
+private func swiftMutagenInjectReturnSite(
+  _ site: SwiftMutagenReturnSite,
+  _ context: FunctionPassContext
+) -> Bool {
+  guard let visitFunction = context.lookupFunction(name: "__swift_mutagen_visit"),
+        let siteID = swiftMutagenMakeRuntimeSiteID(
+          site.siteID,
+          visitFunction: visitFunction,
+          insertionPoint: site.returnInst,
+          context
+        ) else {
+    return false
+  }
+
+  let returnType = site.returnInst.returnedValue.type
+  let function = site.returnInst.parentFunction
+  guard site.alternatives.allSatisfy({
+    swiftMutagenCanMakeReturnAlternative($0.mutation, returnType: returnType, in: function)
+  }) else {
+    return false
+  }
+
+  let originalValue = site.returnInst.returnedValue
+  let originalBlock = function.appendNewBlock(context)
+  let alternativeBlocks = site.alternatives.map { _ in function.appendNewBlock(context) }
+  let checkBlocks = site.alternatives.dropFirst().map { _ in function.appendNewBlock(context) }
+  let returnBlock = function.appendNewBlock(context)
+  let selectedReturnValue = returnBlock.addArgument(type: returnType, ownership: .none, context)
+
+  let dispatchBuilder = Builder(before: site.returnInst, context)
+  let visitRef = dispatchBuilder.createFunctionRef(visitFunction)
+  let choice = dispatchBuilder.createApply(
+    function: visitRef,
+    SubstitutionMap(),
+    arguments: [siteID]
+  )
+  let rawChoice = dispatchBuilder.createStructExtract(struct: choice, fieldIndex: 0)
+
+  for (index, alternative) in site.alternatives.enumerated() {
+    let builder = Builder(atEndOf: alternativeBlocks[index], location: site.returnInst.location, context)
+    guard let replacement = swiftMutagenMakeReturnAlternative(
+      alternative.mutation,
+      returnType: returnType,
+      function: function,
+      builder: builder
+    ) else {
+      return false
+    }
+    builder.createBranch(to: returnBlock, arguments: [replacement])
+  }
+
+  Builder(atEndOf: originalBlock, location: site.returnInst.location, context)
+    .createBranch(to: returnBlock, arguments: [originalValue])
+  Builder(atEndOf: returnBlock, location: site.returnInst.location, context)
+    .createReturn(of: selectedReturnValue)
+
+  for (index, alternative) in site.alternatives.enumerated() {
+    let builder = index == 0
+      ? dispatchBuilder
+      : Builder(atEndOf: checkBlocks[index - 1], location: site.returnInst.location, context)
+    let nextBlock = index + 1 < site.alternatives.count
+      ? checkBlocks[index]
+      : originalBlock
+    let alternativeLiteral = builder.createIntegerLiteral(alternative.alternativeIndex, type: rawChoice.type)
+    let isSelected = builder.createBuiltinBinaryFunction(
+      name: "cmp_eq",
+      operandType: rawChoice.type,
+      resultType: context.getBuiltinIntegerType(bitWidth: 1),
+      arguments: [rawChoice, alternativeLiteral]
+    )
+    builder.createCondBranch(
+      condition: isSelected,
+      trueBlock: alternativeBlocks[index],
+      falseBlock: nextBlock
+    )
+  }
+
+  context.erase(instruction: site.returnInst)
+  return true
+}
+
+private func swiftMutagenCanMakeReturnAlternative(
+  _ mutation: SwiftMutagenMutation,
+  returnType: Type,
+  in function: Function
+) -> Bool {
+  switch mutation.mutatedBuiltinName {
+  case "return_false", "return_true":
+    return swiftMutagenIsBoolType(returnType, in: function)
+  case "return_zero":
+    return swiftMutagenIsIntegerStructType(returnType, in: function)
+  default:
+    return false
+  }
+}
+
+private func swiftMutagenMakeReturnAlternative(
+  _ mutation: SwiftMutagenMutation,
+  returnType: Type,
+  function: Function,
+  builder: Builder
+) -> Value? {
+  switch mutation.mutatedBuiltinName {
+  case "return_false":
+    return swiftMutagenMakeBool(false, type: returnType, builder: builder)
+  case "return_true":
+    return swiftMutagenMakeBool(true, type: returnType, builder: builder)
+  case "return_zero":
+    return swiftMutagenMakeIntegerZero(type: returnType, in: function, builder: builder)
+  default:
+    return nil
+  }
+}
+
 private func swiftMutagenMakeConditionAlternative(
   _ mutation: SwiftMutagenMutation,
   originalCondition: BuiltinInst,
@@ -859,7 +1095,9 @@ private func swiftMutagenMakeRuntimeSiteID(
 }
 
 private func swiftMutagenWriteMetamutantFragment(
-  _ sites: [SwiftMutagenConditionSite],
+  _ siteJSON: [String],
+  moduleName: String,
+  functionName: String,
   config: SwiftMutagenConfig
 ) {
   guard !config.manifestFragmentsDirectory.isEmpty else {
@@ -867,23 +1105,21 @@ private func swiftMutagenWriteMetamutantFragment(
   }
 
   var output = #"{"sites":["#
-  for (siteIndex, site) in sites.enumerated() {
+  for (siteIndex, site) in siteJSON.enumerated() {
     if siteIndex != 0 {
       output += ","
     }
-    output += swiftMutagenConditionSiteJSON(site)
+    output += site
   }
   output += "]}\n"
 
-  let module = sites.first?.module ?? "module"
-  let function = sites.first?.function ?? "function"
   let path = config.manifestFragmentsDirectory
     + "/"
-    + swiftMutagenSanitizeFileComponent(module)
+    + swiftMutagenSanitizeFileComponent(moduleName)
     + "-"
     + "\(swiftMutagenProcessID())"
     + "-"
-    + swiftMutagenHex(swiftMutagenStableHash(function))
+    + swiftMutagenHex(swiftMutagenStableHash(functionName))
     + ".json"
   swiftMutagenCreateParentDirectories(forFile: path)
   swiftMutagenWrite(output, to: path, append: false)
@@ -908,6 +1144,35 @@ private func swiftMutagenConditionSiteJSON(_ site: SwiftMutagenConditionSite) ->
 }
 
 private func swiftMutagenConditionAlternativeJSON(_ alternative: SwiftMutagenConditionAlternative) -> String {
+  var fields: [String] = []
+  fields.append(#""mutantID":"\#(swiftMutagenEscapeJSON(alternative.mutantID))""#)
+  fields.append(#""alternativeIndex":\#(alternative.alternativeIndex)"#)
+  fields.append(#""mutator":"\#(swiftMutagenEscapeJSON(alternative.mutation.mutator))""#)
+  fields.append(#""sourceOriginal":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceOriginal))""#)
+  fields.append(#""sourceMutated":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceMutated))""#)
+  fields.append(#""behaviorKey":"\#(swiftMutagenEscapeJSON(alternative.mutation.silMutated))""#)
+  return "{\(fields.joined(separator: ","))}"
+}
+
+private func swiftMutagenReturnSiteJSON(_ site: SwiftMutagenReturnSite) -> String {
+  var fields: [String] = []
+  fields.append(#""siteID":\#(site.siteID)"#)
+  fields.append(#""module":"\#(swiftMutagenEscapeJSON(site.module))""#)
+  fields.append(#""function":"\#(swiftMutagenEscapeJSON(site.function))""#)
+  fields.append(
+    #""sourceLocation":{"file":"\#(swiftMutagenEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#
+  )
+  fields.append(#""siteKind":"returnValue""#)
+  fields.append(#""resultKind":"returnValue""#)
+  var alternatives: [String] = []
+  for alternative in site.alternatives {
+    alternatives.append(swiftMutagenReturnAlternativeJSON(alternative))
+  }
+  fields.append(#""alternatives":[\#(alternatives.joined(separator: ","))]"#)
+  return "{\(fields.joined(separator: ","))}"
+}
+
+private func swiftMutagenReturnAlternativeJSON(_ alternative: SwiftMutagenReturnAlternative) -> String {
   var fields: [String] = []
   fields.append(#""mutantID":"\#(swiftMutagenEscapeJSON(alternative.mutantID))""#)
   fields.append(#""alternativeIndex":\#(alternative.alternativeIndex)"#)

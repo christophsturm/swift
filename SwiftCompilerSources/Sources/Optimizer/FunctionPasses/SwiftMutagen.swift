@@ -368,6 +368,12 @@ private struct SwiftMutagenReturnDiscoveryStats {
   var mutationEligibleTerminators = 0
   var mutationAlternatives = 0
   var missingSourceLocations = 0
+  var missingBoolSourceLocations = 0
+  var missingOptionalSourceLocations = 0
+  var missingIntegerSourceLocations = 0
+  var missingStringSourceLocations = 0
+  var missingCollectionSourceLocations = 0
+  var missingOtherSourceLocations = 0
   var nonStatementSourceLocations = 0
 }
 
@@ -689,6 +695,12 @@ private func swiftMutagenInstrumentMetamutantSites(
       ("returnMutationEligibleTerminators", "\(returnDiscovery.stats.mutationEligibleTerminators)"),
       ("returnMutationAlternatives", "\(returnDiscovery.stats.mutationAlternatives)"),
       ("returnSourceLocationMisses", "\(returnDiscovery.stats.missingSourceLocations)"),
+      ("returnBoolSourceLocationMisses", "\(returnDiscovery.stats.missingBoolSourceLocations)"),
+      ("returnOptionalSourceLocationMisses", "\(returnDiscovery.stats.missingOptionalSourceLocations)"),
+      ("returnIntegerSourceLocationMisses", "\(returnDiscovery.stats.missingIntegerSourceLocations)"),
+      ("returnStringSourceLocationMisses", "\(returnDiscovery.stats.missingStringSourceLocations)"),
+      ("returnCollectionSourceLocationMisses", "\(returnDiscovery.stats.missingCollectionSourceLocations)"),
+      ("returnOtherSourceLocationMisses", "\(returnDiscovery.stats.missingOtherSourceLocations)"),
       ("returnNonStatementSourceLocations", "\(returnDiscovery.stats.nonStatementSourceLocations)")
     ])
   guard !conditionSites.isEmpty || !arithmeticSites.isEmpty || !returnSites.isEmpty || !voidCallSites.isEmpty else {
@@ -944,7 +956,8 @@ private func swiftMutagenDiscoverReturnSites(
       continue
     }
     stats.terminators += 1
-    swiftMutagenRecordReturnType(returnInst.returnedValue.type, in: function, stats: &stats)
+    let returnType = returnInst.returnedValue.type
+    swiftMutagenRecordReturnType(returnType, in: function, stats: &stats)
 
     let mutations = swiftMutagenMetamutantReturnMutations(for: returnInst, config: config)
     guard !mutations.isEmpty else {
@@ -962,6 +975,7 @@ private func swiftMutagenDiscoverReturnSites(
         config: config
       ) else {
         stats.missingSourceLocations += 1
+        swiftMutagenRecordReturnSourceLocationMiss(returnType, in: function, stats: &stats)
         continue
       }
       if mutation.sourceOriginal == "return",
@@ -1099,7 +1113,7 @@ private func swiftMutagenMetamutantReturnMutations(
 ) -> [SwiftMutagenMutation] {
   swiftMutagenReturnMutations(for: returnInst, config: config).filter { mutation in
     switch mutation.mutatedBuiltinName {
-    case "return_false", "return_true", "return_nil", "return_zero":
+    case "return_false", "return_true", "return_nil", "return_zero", "return_empty_string":
       return true
     default:
       return false
@@ -1359,7 +1373,7 @@ private func swiftMutagenInjectReturnSite(
   let returnType = site.returnInst.returnedValue.type
   let function = site.returnInst.parentFunction
   guard site.alternatives.allSatisfy({
-    swiftMutagenCanMakeReturnAlternative($0.mutation, returnType: returnType, in: function)
+    swiftMutagenCanMakeReturnAlternative($0.mutation, returnType: returnType, in: function, context)
   }) else {
     return false
   }
@@ -1396,6 +1410,7 @@ private func swiftMutagenInjectReturnSite(
       alternative.mutation,
       returnType: returnType,
       function: function,
+      context: context,
       builder: builder
     ) else {
       return false
@@ -1643,7 +1658,8 @@ private func swiftMutagenRuntimeVisitThunkName(file: String, config: SwiftMutage
 private func swiftMutagenCanMakeReturnAlternative(
   _ mutation: SwiftMutagenMutation,
   returnType: Type,
-  in function: Function
+  in function: Function,
+  _ context: FunctionPassContext
 ) -> Bool {
   switch mutation.mutatedBuiltinName {
   case "return_false", "return_true":
@@ -1652,6 +1668,8 @@ private func swiftMutagenCanMakeReturnAlternative(
     return returnType.isOptional
   case "return_zero":
     return swiftMutagenIsIntegerStructType(returnType, in: function)
+  case "return_empty_string":
+    return swiftMutagenIsStringType(returnType) && swiftMutagenEmptyStringFunction(context) != nil
   default:
     return false
   }
@@ -1661,6 +1679,7 @@ private func swiftMutagenMakeReturnAlternative(
   _ mutation: SwiftMutagenMutation,
   returnType: Type,
   function: Function,
+  context: FunctionPassContext,
   builder: Builder
 ) -> Value? {
   switch mutation.mutatedBuiltinName {
@@ -1672,6 +1691,8 @@ private func swiftMutagenMakeReturnAlternative(
     return swiftMutagenMakeOptionalNone(type: returnType, builder: builder)
   case "return_zero":
     return swiftMutagenMakeIntegerZero(type: returnType, in: function, builder: builder)
+  case "return_empty_string":
+    return swiftMutagenMakeEmptyString(type: returnType, context: context, builder: builder)
   default:
     return nil
   }
@@ -2065,6 +2086,11 @@ private func swiftMutagenReturnMutations(
     mutations.append(swiftMutagenReturnMutation(rule, silOriginal: returnType.description))
   }
 
+  if swiftMutagenIsStringType(returnType),
+     let rule = swiftMutagenFirstReturnRule(context: "stringToEmpty", config: config) {
+    mutations.append(swiftMutagenReturnMutation(rule, silOriginal: returnType.description))
+  }
+
   return mutations
 }
 
@@ -2425,6 +2451,8 @@ private func swiftMutagenApplyReturn(
     replacement = swiftMutagenMakeOptionalNone(type: returnType, builder: builder)
   case "return_zero":
     replacement = swiftMutagenMakeIntegerZero(type: returnType, in: returnInst.parentFunction, builder: builder)
+  case "return_empty_string":
+    replacement = swiftMutagenMakeEmptyString(type: returnType, context: context, builder: builder)
   default:
     replacement = nil
   }
@@ -2466,6 +2494,29 @@ private func swiftMutagenMakeOptionalNone(
   return builder.createEnum(caseIndex: 0, payload: nil, enumType: type)
 }
 
+private func swiftMutagenMakeEmptyString(
+  type: Type,
+  context: FunctionPassContext,
+  builder: Builder
+) -> Value? {
+  guard swiftMutagenIsStringType(type),
+        let emptyStringFunction = swiftMutagenEmptyStringFunction(context) else {
+    return nil
+  }
+  let functionRef = builder.createFunctionRef(emptyStringFunction)
+  return builder.createApply(
+    function: functionRef,
+    SubstitutionMap(),
+    arguments: [],
+    isNonThrowing: true
+  )
+}
+
+private func swiftMutagenEmptyStringFunction(_ context: FunctionPassContext) -> Function? {
+  context.lookupFunction(name: "__swift_mutagen_empty_string")
+    ?? context.lookupFunction(name: "@__swift_mutagen_empty_string")
+}
+
 private func swiftMutagenIsBoolType(_ type: Type, in function: Function) -> Bool {
   guard let nominal = type.nominal,
         nominal.name.string == "Bool",
@@ -2486,6 +2537,13 @@ private func swiftMutagenIsIntegerStructType(_ type: Type, in function: Function
   return fields[0].canonicalType.isBuiltinInteger
 }
 
+private func swiftMutagenIsStringType(_ type: Type) -> Bool {
+  guard let nominal = type.nominal else {
+    return false
+  }
+  return nominal.name.string == "String"
+}
+
 private func swiftMutagenRecordReturnType(
   _ type: Type,
   in function: Function,
@@ -2503,17 +2561,52 @@ private func swiftMutagenRecordReturnType(
     stats.integerTerminators += 1
     return
   }
+  if swiftMutagenIsStringType(type) {
+    stats.stringTerminators += 1
+    return
+  }
   guard let nominal = type.nominal else {
     stats.otherTerminators += 1
     return
   }
   switch nominal.name.string {
-  case "String":
-    stats.stringTerminators += 1
   case "Array", "Dictionary", "Set":
     stats.collectionTerminators += 1
   default:
     stats.otherTerminators += 1
+  }
+}
+
+private func swiftMutagenRecordReturnSourceLocationMiss(
+  _ type: Type,
+  in function: Function,
+  stats: inout SwiftMutagenReturnDiscoveryStats
+) {
+  if swiftMutagenIsBoolType(type, in: function) {
+    stats.missingBoolSourceLocations += 1
+    return
+  }
+  if type.isOptional {
+    stats.missingOptionalSourceLocations += 1
+    return
+  }
+  if swiftMutagenIsIntegerStructType(type, in: function) {
+    stats.missingIntegerSourceLocations += 1
+    return
+  }
+  if swiftMutagenIsStringType(type) {
+    stats.missingStringSourceLocations += 1
+    return
+  }
+  guard let nominal = type.nominal else {
+    stats.missingOtherSourceLocations += 1
+    return
+  }
+  switch nominal.name.string {
+  case "Array", "Dictionary", "Set":
+    stats.missingCollectionSourceLocations += 1
+  default:
+    stats.missingOtherSourceLocations += 1
   }
 }
 
@@ -2748,9 +2841,21 @@ private func swiftMutagenReturnLineIsEligible(
     return !swiftMutagenASCIIHasToken(bytes, start: valueStart, token: "nil")
   case "return_zero":
     return !swiftMutagenASCIIHasNumericZeroToken(bytes, start: valueStart)
+  case "return_empty_string":
+    return !swiftMutagenASCIIHasEmptyStringLiteral(bytes, start: valueStart)
   default:
     return true
   }
+}
+
+private func swiftMutagenASCIIHasEmptyStringLiteral(_ bytes: [UInt8], start: Int) -> Bool {
+  guard start >= 0 && start + 2 <= bytes.count,
+        bytes[start] == 34,
+        bytes[start + 1] == 34 else {
+    return false
+  }
+  let end = start + 2
+  return end == bytes.count || !swiftMutagenIsASCIILetterNumberOrUnderscore(bytes[end])
 }
 
 private func swiftMutagenASCIIHasToken(_ bytes: [UInt8], start: Int, token: String) -> Bool {

@@ -277,6 +277,7 @@ private struct SwiftMutagenConditionAlternative {
 
 private struct SwiftMutagenConditionSite {
   let siteID: UInt64
+  let runtimeFunctionName: String
   let module: String
   let function: String
   let file: String
@@ -301,6 +302,7 @@ private struct SwiftMutagenArithmeticAlternative {
 
 private struct SwiftMutagenReturnSite {
   let siteID: UInt64
+  let runtimeFunctionName: String
   let module: String
   let function: String
   let file: String
@@ -312,6 +314,7 @@ private struct SwiftMutagenReturnSite {
 
 private struct SwiftMutagenArithmeticSite {
   let siteID: UInt64
+  let runtimeFunctionName: String
   let module: String
   let function: String
   let file: String
@@ -587,24 +590,50 @@ private func swiftMutagenInstrumentMetamutantSites(
 
   var changed = false
   var injectedSiteJSON: [String] = []
+  var injectedArithmeticSites = 0
+  var injectedConditionSites = 0
+  var injectedReturnSites = 0
   for site in arithmeticSites {
     if swiftMutagenInjectArithmeticSite(site, context) {
       injectedSiteJSON.append(swiftMutagenArithmeticSiteJSON(site))
+      injectedArithmeticSites += 1
       changed = true
     }
   }
   for site in conditionSites {
     if swiftMutagenInjectConditionSite(site, context) {
       injectedSiteJSON.append(swiftMutagenConditionSiteJSON(site))
+      injectedConditionSites += 1
       changed = true
     }
   }
   for site in returnSites {
     if swiftMutagenInjectReturnSite(site, context) {
       injectedSiteJSON.append(swiftMutagenReturnSiteJSON(site))
+      injectedReturnSites += 1
       changed = true
     }
   }
+  let runtimeVisitAvailable = swiftMutagenAnyRuntimeVisitFunctionAvailable(
+    conditionSites: conditionSites,
+    arithmeticSites: arithmeticSites,
+    returnSites: returnSites,
+    context
+  )
+  swiftMutagenLogEvent(
+    "metamutantInjection",
+    config: config,
+      fields: [
+      ("module", moduleName),
+      ("function", function.name.string),
+      ("attemptedConditionSites", "\(conditionSites.count)"),
+      ("injectedConditionSites", "\(injectedConditionSites)"),
+      ("attemptedArithmeticSites", "\(arithmeticSites.count)"),
+      ("injectedArithmeticSites", "\(injectedArithmeticSites)"),
+      ("attemptedReturnSites", "\(returnSites.count)"),
+      ("injectedReturnSites", "\(injectedReturnSites)"),
+      ("runtimeVisitAvailable", "\(runtimeVisitAvailable)")
+    ])
   if !injectedSiteJSON.isEmpty {
     swiftMutagenWriteMetamutantFragment(
       injectedSiteJSON,
@@ -683,6 +712,7 @@ private func swiftMutagenDiscoverConditionSites(
 
     sites.append(SwiftMutagenConditionSite(
       siteID: siteID,
+      runtimeFunctionName: swiftMutagenRuntimeVisitThunkName(file: location.file, config: config),
       module: moduleName,
       function: functionName,
       file: location.file,
@@ -758,6 +788,7 @@ private func swiftMutagenDiscoverReturnSites(
 
     sites.append(SwiftMutagenReturnSite(
       siteID: siteID,
+      runtimeFunctionName: swiftMutagenRuntimeVisitThunkName(file: location.file, config: config),
       module: moduleName,
       function: functionName,
       file: location.file,
@@ -834,6 +865,7 @@ private func swiftMutagenDiscoverArithmeticSites(
 
       sites.append(SwiftMutagenArithmeticSite(
         siteID: siteID,
+        runtimeFunctionName: swiftMutagenRuntimeVisitThunkName(file: location.file, config: config),
         module: moduleName,
         function: functionName,
         file: location.file,
@@ -987,7 +1019,7 @@ private func swiftMutagenInjectConditionSite(
   _ site: SwiftMutagenConditionSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = context.lookupFunction(name: "__swift_mutagen_visit"),
+  guard let visitFunction = swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context),
         let siteID = swiftMutagenMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,
@@ -1016,7 +1048,13 @@ private func swiftMutagenInjectConditionSite(
     SubstitutionMap(),
     arguments: [siteID]
   )
-  let rawChoice = dispatchBuilder.createStructExtract(struct: choice, fieldIndex: 0)
+  guard let rawChoice = swiftMutagenRuntimeChoiceRawValue(
+    choice,
+    builder: dispatchBuilder,
+    function: function
+  ) else {
+    return false
+  }
 
   for (index, alternative) in site.alternatives.enumerated() {
     let builder = Builder(atEndOf: alternativeBlocks[index], location: site.branch.location, context)
@@ -1077,7 +1115,7 @@ private func swiftMutagenInjectReturnSite(
   _ site: SwiftMutagenReturnSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = context.lookupFunction(name: "__swift_mutagen_visit"),
+  guard let visitFunction = swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context),
         let siteID = swiftMutagenMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,
@@ -1113,7 +1151,13 @@ private func swiftMutagenInjectReturnSite(
     SubstitutionMap(),
     arguments: [siteID]
   )
-  let rawChoice = dispatchBuilder.createStructExtract(struct: choice, fieldIndex: 0)
+  guard let rawChoice = swiftMutagenRuntimeChoiceRawValue(
+    choice,
+    builder: dispatchBuilder,
+    function: function
+  ) else {
+    return false
+  }
 
   for (index, alternative) in site.alternatives.enumerated() {
     let builder = Builder(atEndOf: alternativeBlocks[index], location: site.returnInst.location, context)
@@ -1162,7 +1206,7 @@ private func swiftMutagenInjectArithmeticSite(
   _ site: SwiftMutagenArithmeticSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = context.lookupFunction(name: "__swift_mutagen_visit"),
+  guard let visitFunction = swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context),
         let siteID = swiftMutagenMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,
@@ -1195,7 +1239,13 @@ private func swiftMutagenInjectArithmeticSite(
     SubstitutionMap(),
     arguments: [siteID]
   )
-  let rawChoice = dispatchBuilder.createStructExtract(struct: choice, fieldIndex: 0)
+  guard let rawChoice = swiftMutagenRuntimeChoiceRawValue(
+    choice,
+    builder: dispatchBuilder,
+    function: function
+  ) else {
+    return false
+  }
 
   for (index, alternative) in site.alternatives.enumerated() {
     let builder = Builder(atEndOf: alternativeBlocks[index], location: site.builtin.location, context)
@@ -1240,6 +1290,52 @@ private func swiftMutagenInjectArithmeticSite(
 
   site.builtin.replace(with: selectedValue, context)
   return true
+}
+
+private func swiftMutagenRuntimeVisitFunction(_ context: FunctionPassContext) -> Function? {
+  context.lookupFunction(name: "__swift_mutagen_visit")
+    ?? context.lookupFunction(name: "@__swift_mutagen_visit")
+    ?? context.loadFunction(name: "__swift_mutagen_visit", loadCalleesRecursively: false)
+    ?? context.loadFunction(name: "@__swift_mutagen_visit", loadCalleesRecursively: false)
+}
+
+private func swiftMutagenRuntimeVisitFunction(
+  named functionName: String,
+  _ context: FunctionPassContext
+) -> Function? {
+  context.lookupFunction(name: functionName)
+    ?? context.lookupFunction(name: "@\(functionName)")
+    ?? swiftMutagenRuntimeVisitFunction(context)
+}
+
+private func swiftMutagenAnyRuntimeVisitFunctionAvailable(
+  conditionSites: [SwiftMutagenConditionSite],
+  arithmeticSites: [SwiftMutagenArithmeticSite],
+  returnSites: [SwiftMutagenReturnSite],
+  _ context: FunctionPassContext
+) -> Bool {
+  for site in conditionSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+    return true
+  }
+  for site in arithmeticSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+    return true
+  }
+  for site in returnSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+    return true
+  }
+  return swiftMutagenRuntimeVisitFunction(context) != nil
+}
+
+private func swiftMutagenRuntimeVisitThunkName(file: String, config: SwiftMutagenConfig) -> String {
+  let absolutePath: String
+  if file.hasPrefix("/") {
+    absolutePath = file
+  } else if config.packageRoot.isEmpty {
+    absolutePath = file
+  } else {
+    absolutePath = config.packageRoot + "/" + file
+  }
+  return "__swift_mutagen_visit_\(swiftMutagenHex(swiftMutagenStableHash(absolutePath)))"
 }
 
 private func swiftMutagenCanMakeReturnAlternative(
@@ -1329,14 +1425,32 @@ private func swiftMutagenMakeRuntimeSiteID(
     return nil
   }
   let parameterType = parameter.type.loweredType(in: insertionPoint.parentFunction)
+  let builder = Builder(before: insertionPoint, context)
+  if parameterType.canonicalType.isBuiltinInteger {
+    return builder.createIntegerLiteral(siteID, type: parameterType)
+  }
   guard let fields = parameterType.getNominalFields(in: insertionPoint.parentFunction),
         fields.count == 1 else {
     return nil
   }
-
-  let builder = Builder(before: insertionPoint, context)
   let literal = builder.createIntegerLiteral(siteID, type: fields[0])
   return builder.createStruct(type: parameterType, elements: [literal])
+}
+
+private func swiftMutagenRuntimeChoiceRawValue(
+  _ choice: Value,
+  builder: Builder,
+  function: Function
+) -> Value? {
+  if choice.type.canonicalType.isBuiltinInteger {
+    return choice
+  }
+  guard let fields = choice.type.getNominalFields(in: function),
+        fields.count == 1,
+        fields[0].canonicalType.isBuiltinInteger else {
+    return nil
+  }
+  return builder.createStructExtract(struct: choice, fieldIndex: 0)
 }
 
 private func swiftMutagenWriteMetamutantFragment(

@@ -2535,6 +2535,14 @@ private func swiftMutagenReturnSourceLocation(
       if swiftMutagenReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
         return candidate
       }
+      if let anchored = swiftMutagenFindUniqueExplicitReturnSourceLocation(
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
+      ) {
+        return anchored
+      }
     }
   }
 
@@ -2551,6 +2559,14 @@ private func swiftMutagenReturnSourceLocation(
       if swiftMutagenReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
         return candidate
       }
+      if let anchored = swiftMutagenFindUniqueExplicitReturnSourceLocation(
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
+      ) {
+        return anchored
+      }
     }
   }
 
@@ -2560,12 +2576,23 @@ private func swiftMutagenReturnSourceLocation(
           let line = swiftMutagenPreferredLine(in: location, path: path) else {
       continue
     }
-    return (
+    let candidate = (
       swiftMutagenTrimPackageRoot(path, config: config),
       line,
       1,
       mutation.sourceOriginal,
       mutation.sourceMutated)
+    if swiftMutagenReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
+      return candidate
+    }
+    if let anchored = swiftMutagenFindUniqueExplicitReturnSourceLocation(
+      path: path,
+      preferredLine: line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
   }
   return nil
 }
@@ -2579,6 +2606,129 @@ private func swiftMutagenReturnSourceLocationIsUsable(
     return swiftMutagenReturnSourceLooksLikeStatement(file: location.file, line: location.line, config: config)
   }
   return true
+}
+
+private func swiftMutagenFindUniqueExplicitReturnSourceLocation(
+  path: String,
+  preferredLine: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard preferredLine > 0,
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+
+  var matches: [(line: Int, column: Int)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  var braceDepth = 0
+  var sawOpeningBrace = false
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard line >= preferredLine,
+          line <= preferredLine + 120,
+          matches.count < 2 else {
+      return
+    }
+    let bytes = Array(lineText.utf8)
+    let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+    if swiftMutagenReturnLineIsEligible(bytes: bytes, start: start, mutation: mutation) {
+      matches.append((line, start + 1))
+    }
+  }
+
+  func updateBraceDepth(_ lineText: String) {
+    for byte in lineText.utf8 {
+      if byte == 123 {
+        braceDepth += 1
+        sawOpeningBrace = true
+      } else if byte == 125 {
+        braceDepth -= 1
+      }
+    }
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      let lineText = String(text[lineStart..<index])
+      inspectLine(lineText, line: currentLine)
+      if currentLine >= preferredLine {
+        updateBraceDepth(lineText)
+        if sawOpeningBrace && braceDepth <= 0 {
+          break
+        }
+        if currentLine >= preferredLine + 120 {
+          break
+        }
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine >= preferredLine {
+    let lineText = String(text[lineStart..<text.endIndex])
+    inspectLine(lineText, line: currentLine)
+  }
+
+  guard matches.count == 1,
+        let match = matches.first else {
+    return nil
+  }
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    mutation.sourceOriginal,
+    mutation.sourceMutated)
+}
+
+private func swiftMutagenReturnLineIsEligible(
+  bytes: [UInt8],
+  start: Int,
+  mutation: SwiftMutagenMutation
+) -> Bool {
+  guard swiftMutagenASCIIHasExactPrefix(bytes, start: start, prefix: "return ") else {
+    return false
+  }
+  let valueStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: start + 7)
+  switch mutation.mutatedBuiltinName {
+  case "return_false":
+    return !swiftMutagenASCIIHasToken(bytes, start: valueStart, token: "false")
+  case "return_true":
+    return !swiftMutagenASCIIHasToken(bytes, start: valueStart, token: "true")
+  case "return_nil":
+    return !swiftMutagenASCIIHasToken(bytes, start: valueStart, token: "nil")
+  case "return_zero":
+    return !swiftMutagenASCIIHasNumericZeroToken(bytes, start: valueStart)
+  default:
+    return true
+  }
+}
+
+private func swiftMutagenASCIIHasToken(_ bytes: [UInt8], start: Int, token: String) -> Bool {
+  let tokenBytes = Array(token.utf8)
+  guard start >= 0 && start + tokenBytes.count <= bytes.count else {
+    return false
+  }
+  for offset in 0..<tokenBytes.count {
+    if bytes[start + offset] != tokenBytes[offset] {
+      return false
+    }
+  }
+  let end = start + tokenBytes.count
+  return end == bytes.count || !swiftMutagenIsASCIILetterNumberOrUnderscore(bytes[end])
+}
+
+private func swiftMutagenASCIIHasNumericZeroToken(_ bytes: [UInt8], start: Int) -> Bool {
+  guard start >= 0 && start < bytes.count && bytes[start] == 48 else {
+    return false
+  }
+  let end = start + 1
+  return end == bytes.count || bytes[end] < 48 || bytes[end] > 57
 }
 
 private func swiftMutagenInstructionSourceLocation(

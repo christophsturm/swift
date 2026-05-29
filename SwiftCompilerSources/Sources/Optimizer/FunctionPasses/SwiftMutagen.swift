@@ -753,6 +753,9 @@ private func swiftMutagenDiscoverVoidCallSites(
             ) else {
         continue
       }
+      guard swiftMutagenVoidCallSourceLooksLikeStatement(file: location.file, line: location.line, config: config) else {
+        continue
+      }
 
       let displayMutation = mutation.withSource(
         original: location.sourceOriginal,
@@ -2696,12 +2699,119 @@ private func swiftMutagenSourceLineLooksLikeOptionalBindingCondition(bytes: [UIn
     || swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "guard var ")
 }
 
+private func swiftMutagenVoidCallSourceLooksLikeStatement(
+  file: String,
+  line: Int,
+  config: SwiftMutagenConfig
+) -> Bool {
+  guard let sourceLine = swiftMutagenSourceLine(file: file, line: line, config: config) else {
+    return true
+  }
+  return swiftMutagenSourceLineLooksLikeVoidCallStatement(sourceLine)
+}
+
+private func swiftMutagenSourceLineLooksLikeVoidCallStatement(_ line: String) -> Bool {
+  let bytes = Array(line.utf8)
+  let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard start < end else {
+    return false
+  }
+
+  let nonStatementPrefixes = [
+    "let ", "var ", "return ", "if ", "if(", "guard ", "guard(",
+    "while ", "while(", "for ", "for(", "switch ", "catch ",
+    "public ", "private ", "internal ", "fileprivate ", "open ",
+    "static ", "func ", "init(", "deinit", ".", "}", ")", "]"
+  ]
+  for prefix in nonStatementPrefixes {
+    if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: prefix) {
+      return false
+    }
+  }
+  if swiftMutagenASCIIContains(bytes, start: start, end: end, pattern: " = ") {
+    return false
+  }
+  if swiftMutagenSourceLineLooksLikeArgumentLabel(bytes: bytes, start: start, end: end) {
+    return false
+  }
+  if swiftMutagenASCIIContains(bytes, start: start, end: end, pattern: ":")
+      && !swiftMutagenASCIIContains(bytes, start: start, end: end, pattern: "(") {
+    return false
+  }
+  return swiftMutagenASCIIContains(bytes, start: start, end: end, pattern: "(")
+}
+
+private func swiftMutagenTrimTrailingHorizontalWhitespace(_ bytes: [UInt8], end: Int) -> Int {
+  var index = end
+  while index > 0 && swiftMutagenIsHorizontalWhitespace(bytes[index - 1]) {
+    index -= 1
+  }
+  return index
+}
+
+private func swiftMutagenSourceLineLooksLikeArgumentLabel(bytes: [UInt8], start: Int, end: Int) -> Bool {
+  var colonIndex: Int?
+  var index = start
+  while index < end {
+    if bytes[index] == 58 {
+      colonIndex = index
+      break
+    }
+    index += 1
+  }
+  guard let colonIndex else {
+    return false
+  }
+
+  var labelEnd = colonIndex
+  while labelEnd > start && swiftMutagenIsHorizontalWhitespace(bytes[labelEnd - 1]) {
+    labelEnd -= 1
+  }
+  guard start < labelEnd else {
+    return false
+  }
+  for labelIndex in start..<labelEnd {
+    guard swiftMutagenIsASCIILetterNumberOrUnderscore(bytes[labelIndex]) else {
+      return false
+    }
+  }
+  return true
+}
+
 private func swiftMutagenSkipHorizontalWhitespace(_ bytes: [UInt8], from start: Int) -> Int {
   var index = start
   while index < bytes.count && swiftMutagenIsHorizontalWhitespace(bytes[index]) {
     index += 1
   }
   return index
+}
+
+private func swiftMutagenASCIIContains(_ bytes: [UInt8], start: Int, end: Int, pattern: String) -> Bool {
+  let patternBytes = Array(pattern.utf8)
+  guard !patternBytes.isEmpty,
+        start >= 0,
+        start <= end,
+        end <= bytes.count,
+        patternBytes.count <= end - start else {
+    return false
+  }
+
+  var index = start
+  while index <= end - patternBytes.count {
+    var matched = true
+    for offset in 0..<patternBytes.count {
+      if bytes[index + offset] != patternBytes[offset] {
+        matched = false
+        break
+      }
+    }
+    if matched {
+      return true
+    }
+    index += 1
+  }
+  return false
 }
 
 private func swiftMutagenASCIIHasPrefix(_ bytes: [UInt8], start: Int, prefix: String) -> Bool {
@@ -2722,6 +2832,19 @@ private func swiftMutagenASCIILowercase(_ byte: UInt8) -> UInt8 {
     return byte + 32
   }
   return byte
+}
+
+private func swiftMutagenIsASCIILetterNumberOrUnderscore(_ byte: UInt8) -> Bool {
+  if byte >= 48 && byte <= 57 {
+    return true
+  }
+  if byte >= 65 && byte <= 90 {
+    return true
+  }
+  if byte >= 97 && byte <= 122 {
+    return true
+  }
+  return byte == 95
 }
 
 private func swiftMutagenShouldExclude(

@@ -359,6 +359,12 @@ private struct SwiftMutagenReturnSite {
 
 private struct SwiftMutagenReturnDiscoveryStats {
   var terminators = 0
+  var boolTerminators = 0
+  var optionalTerminators = 0
+  var integerTerminators = 0
+  var stringTerminators = 0
+  var collectionTerminators = 0
+  var otherTerminators = 0
   var mutationEligibleTerminators = 0
   var mutationAlternatives = 0
   var missingSourceLocations = 0
@@ -674,6 +680,12 @@ private func swiftMutagenInstrumentMetamutantSites(
       ("voidCallSites", "\(voidCallSites.count)"),
       ("returnSites", "\(returnSites.count)"),
       ("returnTerminators", "\(returnDiscovery.stats.terminators)"),
+      ("returnBoolTerminators", "\(returnDiscovery.stats.boolTerminators)"),
+      ("returnOptionalTerminators", "\(returnDiscovery.stats.optionalTerminators)"),
+      ("returnIntegerTerminators", "\(returnDiscovery.stats.integerTerminators)"),
+      ("returnStringTerminators", "\(returnDiscovery.stats.stringTerminators)"),
+      ("returnCollectionTerminators", "\(returnDiscovery.stats.collectionTerminators)"),
+      ("returnOtherTerminators", "\(returnDiscovery.stats.otherTerminators)"),
       ("returnMutationEligibleTerminators", "\(returnDiscovery.stats.mutationEligibleTerminators)"),
       ("returnMutationAlternatives", "\(returnDiscovery.stats.mutationAlternatives)"),
       ("returnSourceLocationMisses", "\(returnDiscovery.stats.missingSourceLocations)"),
@@ -932,6 +944,7 @@ private func swiftMutagenDiscoverReturnSites(
       continue
     }
     stats.terminators += 1
+    swiftMutagenRecordReturnType(returnInst.returnedValue.type, in: function, stats: &stats)
 
     let mutations = swiftMutagenMetamutantReturnMutations(for: returnInst, config: config)
     guard !mutations.isEmpty else {
@@ -2471,6 +2484,37 @@ private func swiftMutagenIsIntegerStructType(_ type: Type, in function: Function
     return false
   }
   return fields[0].canonicalType.isBuiltinInteger
+}
+
+private func swiftMutagenRecordReturnType(
+  _ type: Type,
+  in function: Function,
+  stats: inout SwiftMutagenReturnDiscoveryStats
+) {
+  if swiftMutagenIsBoolType(type, in: function) {
+    stats.boolTerminators += 1
+    return
+  }
+  if type.isOptional {
+    stats.optionalTerminators += 1
+    return
+  }
+  if swiftMutagenIsIntegerStructType(type, in: function) {
+    stats.integerTerminators += 1
+    return
+  }
+  guard let nominal = type.nominal else {
+    stats.otherTerminators += 1
+    return
+  }
+  switch nominal.name.string {
+  case "String":
+    stats.stringTerminators += 1
+  case "Array", "Dictionary", "Set":
+    stats.collectionTerminators += 1
+  default:
+    stats.otherTerminators += 1
+  }
 }
 
 private func swiftMutagenBoolLiteralValue(_ value: Value) -> Bool? {

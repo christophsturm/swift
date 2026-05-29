@@ -327,6 +327,22 @@ private struct SwiftMutagenConditionSite {
   let alternatives: [SwiftMutagenConditionAlternative]
 }
 
+private struct SwiftMutagenConditionDiscoveryStats {
+  var branches = 0
+  var branchesWithArguments = 0
+  var comparisonBranches = 0
+  var genericBranches = 0
+  var noMutationBranches = 0
+  var mutationAlternatives = 0
+  var sourceLocationMisses = 0
+  var genericNonExplicitSourceLocations = 0
+}
+
+private struct SwiftMutagenConditionDiscoveryResult {
+  let sites: [SwiftMutagenConditionSite]
+  let stats: SwiftMutagenConditionDiscoveryStats
+}
+
 private struct SwiftMutagenReturnAlternative {
   let mutantID: String
   let alternativeIndex: UInt32
@@ -653,11 +669,12 @@ private func swiftMutagenInstrumentMetamutantSites(
   config: SwiftMutagenConfig,
   _ context: FunctionPassContext
 ) -> Bool {
-  let conditionSites = swiftMutagenDiscoverConditionSites(
+  let conditionDiscovery = swiftMutagenDiscoverConditionSites(
     in: function,
     moduleName: moduleName,
     config: config
   )
+  let conditionSites = conditionDiscovery.sites
   let arithmeticSites = swiftMutagenDiscoverArithmeticSites(
     in: function,
     moduleName: moduleName,
@@ -682,6 +699,13 @@ private func swiftMutagenInstrumentMetamutantSites(
       ("function", function.name.string),
       ("conditionBranches", "\(swiftMutagenConditionBranchCount(in: function))"),
       ("conditionSites", "\(conditionSites.count)"),
+      ("conditionBranchesWithArguments", "\(conditionDiscovery.stats.branchesWithArguments)"),
+      ("conditionComparisonBranches", "\(conditionDiscovery.stats.comparisonBranches)"),
+      ("conditionGenericBranches", "\(conditionDiscovery.stats.genericBranches)"),
+      ("conditionNoMutationBranches", "\(conditionDiscovery.stats.noMutationBranches)"),
+      ("conditionMutationAlternatives", "\(conditionDiscovery.stats.mutationAlternatives)"),
+      ("conditionSourceLocationMisses", "\(conditionDiscovery.stats.sourceLocationMisses)"),
+      ("conditionGenericNonExplicitSourceLocations", "\(conditionDiscovery.stats.genericNonExplicitSourceLocations)"),
       ("arithmeticSites", "\(arithmeticSites.count)"),
       ("voidCallSites", "\(voidCallSites.count)"),
       ("returnSites", "\(returnSites.count)"),
@@ -842,30 +866,37 @@ private func swiftMutagenDiscoverConditionSites(
   in function: Function,
   moduleName: String,
   config: SwiftMutagenConfig
-) -> [SwiftMutagenConditionSite] {
+) -> SwiftMutagenConditionDiscoveryResult {
   var sites: [SwiftMutagenConditionSite] = []
+  var stats = SwiftMutagenConditionDiscoveryStats()
   var localOrdinal = 1
   let functionName = function.name.string
 
   for block in function.blocks {
-    guard let branch = block.terminator as? CondBranchInst,
-          branch.trueOperands.isEmpty,
-          branch.falseOperands.isEmpty else {
+    guard let branch = block.terminator as? CondBranchInst else {
       continue
+    }
+    stats.branches += 1
+    if !branch.trueOperands.isEmpty || !branch.falseOperands.isEmpty {
+      stats.branchesWithArguments += 1
     }
 
     var comparison: BuiltinInst?
     let mutations: [SwiftMutagenMutation]
     if let branchComparison = branch.condition as? BuiltinInst,
        swiftMutagenIsComparisonBuiltin(branchComparison) {
+      stats.comparisonBranches += 1
       comparison = branchComparison
       mutations = swiftMutagenConditionSiteMutations(for: branchComparison, config: config)
     } else {
+      stats.genericBranches += 1
       mutations = swiftMutagenGenericConditionSiteMutations(config: config)
     }
     guard !mutations.isEmpty else {
+      stats.noMutationBranches += 1
       continue
     }
+    stats.mutationAlternatives += mutations.count
 
     var alternatives: [SwiftMutagenConditionAlternative] = []
     var sourceLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
@@ -885,10 +916,12 @@ private func swiftMutagenDiscoverConditionSites(
           config: config)
         if let location,
            !swiftMutagenGenericConditionSourceIsExplicit(file: location.file, line: location.line, config: config) {
+          stats.genericNonExplicitSourceLocations += 1
           continue
         }
       }
       guard let location else {
+        stats.sourceLocationMisses += 1
         continue
       }
       if sourceLocation == nil {
@@ -935,7 +968,7 @@ private func swiftMutagenDiscoverConditionSites(
     ))
   }
 
-  return sites
+  return SwiftMutagenConditionDiscoveryResult(sites: sites, stats: stats)
 }
 
 private func swiftMutagenDiscoverReturnSites(
@@ -1280,6 +1313,8 @@ private func swiftMutagenInjectConditionSite(
   let originalCondition = site.branch.condition
   let trueBlock = site.branch.trueBlock
   let falseBlock = site.branch.falseBlock
+  let trueArguments = site.branch.trueOperands.map(\.value)
+  let falseArguments = site.branch.falseOperands.map(\.value)
   let originalBlock = function.appendNewBlock(context)
   let alternativeBlocks = site.alternatives.map { _ in function.appendNewBlock(context) }
   let checkBlocks = site.alternatives.dropFirst().map { _ in function.appendNewBlock(context) }
@@ -1313,6 +1348,8 @@ private func swiftMutagenInjectConditionSite(
       condition: mutatedCondition,
       trueBlock: trueBlock,
       falseBlock: falseBlock,
+      trueArguments: trueArguments,
+      falseArguments: falseArguments,
       insertionBuilder: builder,
       function: function,
       location: site.branch.location,
@@ -1325,6 +1362,8 @@ private func swiftMutagenInjectConditionSite(
     condition: originalCondition,
     trueBlock: trueBlock,
     falseBlock: falseBlock,
+    trueArguments: trueArguments,
+    falseArguments: falseArguments,
     insertionBuilder: originalBuilder,
     function: function,
     location: site.branch.location,
@@ -1726,6 +1765,8 @@ private func swiftMutagenCreateConditionBranch(
   condition: Value,
   trueBlock: BasicBlock,
   falseBlock: BasicBlock,
+  trueArguments: [Value],
+  falseArguments: [Value],
   insertionBuilder: Builder,
   function: Function,
   location: Location,
@@ -1738,8 +1779,14 @@ private func swiftMutagenCreateConditionBranch(
     trueBlock: trueEdgeBlock,
     falseBlock: falseEdgeBlock
   )
-  Builder(atEndOf: trueEdgeBlock, location: location, context).createBranch(to: trueBlock)
-  Builder(atEndOf: falseEdgeBlock, location: location, context).createBranch(to: falseBlock)
+  Builder(atEndOf: trueEdgeBlock, location: location, context).createBranch(
+    to: trueBlock,
+    arguments: trueArguments
+  )
+  Builder(atEndOf: falseEdgeBlock, location: location, context).createBranch(
+    to: falseBlock,
+    arguments: falseArguments
+  )
 }
 
 private func swiftMutagenMakeRuntimeSiteID(

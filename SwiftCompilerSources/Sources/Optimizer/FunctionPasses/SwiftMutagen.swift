@@ -126,6 +126,40 @@ private struct SwiftMutagenVoidCallMutationRule {
   }
 }
 
+private struct SwiftMutagenSourceMutationDisplayRule {
+  let mutator: String
+  let builtinID: String
+  let sourceOriginal: String
+  let sourceMutated: String
+  let sourceMutatedOverride: String
+
+  init(
+    mutator: String,
+    builtinID: String,
+    sourceOriginal: String,
+    sourceMutated: String,
+    sourceMutatedOverride: String
+  ) {
+    self.mutator = mutator
+    self.builtinID = builtinID
+    self.sourceOriginal = sourceOriginal
+    self.sourceMutated = sourceMutated
+    self.sourceMutatedOverride = sourceMutatedOverride
+  }
+
+  init?(wireFormat: String) {
+    let fields = wireFormat.split(separator: "|", omittingEmptySubsequences: false).map { String($0) }
+    guard fields.count == 5 else {
+      return nil
+    }
+    mutator = fields[0]
+    builtinID = fields[1]
+    sourceOriginal = fields[2]
+    sourceMutated = fields[3]
+    sourceMutatedOverride = fields[4]
+  }
+}
+
 private struct SwiftMutagenConfig {
   static let defaultPath = ".mutagen/session/compiler-config.json"
 
@@ -143,6 +177,7 @@ private struct SwiftMutagenConfig {
   let contextualArithmeticMutationRules: [SwiftMutagenContextualArithmeticMutationRule]
   let returnMutationRules: [SwiftMutagenReturnMutationRule]
   let voidCallMutationRules: [SwiftMutagenVoidCallMutationRule]
+  let sourceMutationDisplayRules: [SwiftMutagenSourceMutationDisplayRule]
 
   static func load() -> SwiftMutagenConfig? {
     let configPath = swiftMutagenEnvironmentValue("SWIFT_MUTAGEN_CONFIG") ?? Self.defaultPath
@@ -190,6 +225,9 @@ private struct SwiftMutagenConfig {
     let voidCallMutationRules = swiftMutagenJSONStringArray("voidCallMutationRules", in: json).compactMap {
       SwiftMutagenVoidCallMutationRule(wireFormat: $0)
     }
+    let sourceMutationDisplayRules = swiftMutagenJSONStringArray("sourceMutationDisplayRules", in: json).compactMap {
+      SwiftMutagenSourceMutationDisplayRule(wireFormat: $0)
+    }
 
     return SwiftMutagenConfig(
       mode: mode,
@@ -205,7 +243,8 @@ private struct SwiftMutagenConfig {
       arithmeticMutationRules: arithmeticMutationRules,
       contextualArithmeticMutationRules: contextualArithmeticMutationRules,
       returnMutationRules: returnMutationRules,
-      voidCallMutationRules: voidCallMutationRules)
+      voidCallMutationRules: voidCallMutationRules,
+      sourceMutationDisplayRules: sourceMutationDisplayRules)
   }
 }
 
@@ -1972,6 +2011,76 @@ private func swiftMutagenBuiltinFunctionName(_ builtin: BuiltinInst) -> String? 
   }
 }
 
+private func swiftMutagenBuiltinIDName(_ id: BuiltinInst.ID?) -> String? {
+  guard let id else {
+    return nil
+  }
+  switch id {
+  case .ICMP_EQ:
+    return "ICMP_EQ"
+  case .ICMP_NE:
+    return "ICMP_NE"
+  case .ICMP_SGE:
+    return "ICMP_SGE"
+  case .ICMP_SGT:
+    return "ICMP_SGT"
+  case .ICMP_SLE:
+    return "ICMP_SLE"
+  case .ICMP_SLT:
+    return "ICMP_SLT"
+  case .ICMP_UGE:
+    return "ICMP_UGE"
+  case .ICMP_UGT:
+    return "ICMP_UGT"
+  case .ICMP_ULE:
+    return "ICMP_ULE"
+  case .ICMP_ULT:
+    return "ICMP_ULT"
+  case .Add:
+    return "Add"
+  case .Sub:
+    return "Sub"
+  case .Mul:
+    return "Mul"
+  case .SDiv:
+    return "SDiv"
+  case .SRem:
+    return "SRem"
+  case .UDiv:
+    return "UDiv"
+  case .URem:
+    return "URem"
+  case .FAdd:
+    return "FAdd"
+  case .FSub:
+    return "FSub"
+  case .FMul:
+    return "FMul"
+  case .FDiv:
+    return "FDiv"
+  case .FRem:
+    return "FRem"
+  case .And:
+    return "And"
+  case .Or:
+    return "Or"
+  case .Xor:
+    return "Xor"
+  case .Shl:
+    return "Shl"
+  case .AShr:
+    return "AShr"
+  case .LShr:
+    return "LShr"
+  case .SAddOver:
+    return "SAddOver"
+  case .SSubOver:
+    return "SSubOver"
+  default:
+    return nil
+  }
+}
+
 private func swiftMutagenBinaryMutation(
   _ builtin: BuiltinInst,
   mutator: String,
@@ -2312,74 +2421,7 @@ private func swiftMutagenFindSourceOperator(
     return nil
   }
 
-  let operatorPairs: [(String, String)]
-  if mutation.mutator == "INCREMENTS" {
-    if mutation.originalID == .some(.SAddOver) {
-      operatorPairs = [("+=", "-="), ("+", "-")]
-    } else if mutation.originalID == .some(.SSubOver) {
-      operatorPairs = [("-=", "+="), ("-", "+")]
-    } else {
-      operatorPairs = [(mutation.sourceOriginal, mutation.sourceMutated)]
-    }
-  } else if mutation.mutator == "INVERT_NEGS" {
-    operatorPairs = [("-", "")]
-  } else if mutation.mutator == "CONDITION_TRUE" || mutation.mutator == "CONDITION_FALSE" {
-    switch mutation.originalID {
-    case .some(.ICMP_EQ):
-      operatorPairs = [("==", "==")]
-    case .some(.ICMP_NE):
-      operatorPairs = [("!=", "!=")]
-    case .some(.ICMP_SGE), .some(.ICMP_UGE):
-      operatorPairs = [(">=", ">="), ("<=", "<=")]
-    case .some(.ICMP_SGT), .some(.ICMP_UGT):
-      operatorPairs = [(">", ">"), ("<", "<")]
-    case .some(.ICMP_SLE), .some(.ICMP_ULE):
-      operatorPairs = [("<=", "<="), (">=", ">=")]
-    case .some(.ICMP_SLT), .some(.ICMP_ULT):
-      operatorPairs = [("<", "<"), (">", ">")]
-    default:
-      operatorPairs = [(mutation.sourceOriginal, mutation.sourceOriginal)]
-    }
-  } else if mutation.mutator == "NEGATE_CONDITIONALS" {
-    switch mutation.originalID {
-    case .some(.ICMP_EQ):
-      operatorPairs = [("==", "!=")]
-    case .some(.ICMP_NE):
-      operatorPairs = [("!=", "==")]
-    case .some(.ICMP_SGE), .some(.ICMP_UGE):
-      operatorPairs = [(">=", "<"), ("<=", ">")]
-    case .some(.ICMP_SGT), .some(.ICMP_UGT):
-      operatorPairs = [(">", "<="), ("<", ">=")]
-    case .some(.ICMP_SLE), .some(.ICMP_ULE):
-      operatorPairs = [("<=", ">"), (">=", "<")]
-    case .some(.ICMP_SLT), .some(.ICMP_ULT):
-      operatorPairs = [("<", ">="), (">", "<=")]
-    default:
-      operatorPairs = [(mutation.sourceOriginal, mutation.sourceMutated)]
-    }
-  } else if mutation.mutator == "CONDITIONALS_BOUNDARY" {
-    switch mutation.originalID {
-    case .some(.ICMP_SGE), .some(.ICMP_UGE):
-      operatorPairs = [(">=", ">"), ("<=", "<")]
-    case .some(.ICMP_SGT), .some(.ICMP_UGT):
-      operatorPairs = [(">", ">="), ("<", "<=")]
-    case .some(.ICMP_SLE), .some(.ICMP_ULE):
-      operatorPairs = [("<=", "<"), (">=", ">")]
-    case .some(.ICMP_SLT), .some(.ICMP_ULT):
-      operatorPairs = [("<", "<="), (">", ">=")]
-    default:
-      operatorPairs = [(mutation.sourceOriginal, mutation.sourceMutated)]
-    }
-  } else {
-    switch mutation.originalID {
-    case .some(.SAddOver), .some(.Add), .some(.FAdd):
-      operatorPairs = [("+", "-")]
-    case .some(.SSubOver), .some(.Sub), .some(.FSub):
-      operatorPairs = [("-", "+")]
-    default:
-      operatorPairs = [(mutation.sourceOriginal, mutation.sourceMutated)]
-    }
-  }
+  let displayRules = swiftMutagenSourceMutationDisplayRules(for: mutation, config: config)
 
   let preferredPrefix = config.packageRoot + "/Sources/" + moduleName + "/"
   let locatedSourcePaths = swiftMutagenSwiftSourcePaths(config: config).compactMap { path
@@ -2403,17 +2445,17 @@ private func swiftMutagenFindSourceOperator(
       continue
     }
     var bestForPath: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
-    for pair in operatorPairs {
+    for rule in displayRules {
       if let position = swiftMutagenFindOperator(
-        pair.0,
-        mutatedOperator: pair.1,
+        rule.sourceOriginal,
+        mutatedOperator: rule.sourceMutated,
         in: text,
         preferredLine: preferredLine,
         maxPreferredLineDistance: 4
       ) {
-        let sourceMutated = mutation.mutator == "CONDITION_TRUE" || mutation.mutator == "CONDITION_FALSE"
-          ? mutation.sourceMutated
-          : position.sourceMutated
+        let sourceMutated = rule.sourceMutatedOverride.isEmpty
+          ? position.sourceMutated
+          : rule.sourceMutatedOverride
         let result = (
           swiftMutagenTrimPackageRoot(path, config: config),
           position.line,
@@ -2438,6 +2480,28 @@ private func swiftMutagenFindSourceOperator(
   }
 
   return fallback
+}
+
+private func swiftMutagenSourceMutationDisplayRules(
+  for mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> [SwiftMutagenSourceMutationDisplayRule] {
+  let builtinID = swiftMutagenBuiltinIDName(mutation.originalID) ?? ""
+  let rules = config.sourceMutationDisplayRules.filter {
+    $0.mutator == mutation.mutator && $0.builtinID == builtinID
+  }
+  if !rules.isEmpty {
+    return rules
+  }
+  return [
+    SwiftMutagenSourceMutationDisplayRule(
+      mutator: mutation.mutator,
+      builtinID: builtinID,
+      sourceOriginal: mutation.sourceOriginal,
+      sourceMutated: mutation.sourceMutated,
+      sourceMutatedOverride: ""
+    )
+  ]
 }
 
 private func swiftMutagenFindOperator(

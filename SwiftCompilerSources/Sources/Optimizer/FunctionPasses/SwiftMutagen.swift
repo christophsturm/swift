@@ -903,6 +903,9 @@ private func swiftMutagenDiscoverReturnSites(
   var sites: [SwiftMutagenReturnSite] = []
   var localOrdinal = 1
   let functionName = function.name.string
+  guard !functionName.hasSuffix("TW") else {
+    return []
+  }
 
   for block in function.blocks {
     guard let returnInst = block.terminator as? ReturnInst else {
@@ -922,6 +925,10 @@ private func swiftMutagenDiscoverReturnSites(
         mutation: mutation,
         config: config
       ) else {
+        continue
+      }
+      if mutation.sourceOriginal == "return",
+         !swiftMutagenReturnSourceLooksLikeStatement(file: location.file, line: location.line, config: config) {
         continue
       }
       if sourceLocation == nil {
@@ -2699,6 +2706,19 @@ private func swiftMutagenSourceLineLooksLikeOptionalBindingCondition(bytes: [UIn
     || swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "guard var ")
 }
 
+private func swiftMutagenReturnSourceLooksLikeStatement(
+  file: String,
+  line: Int,
+  config: SwiftMutagenConfig
+) -> Bool {
+  guard let sourceLine = swiftMutagenSourceLine(file: file, line: line, config: config) else {
+    return true
+  }
+  let bytes = Array(sourceLine.utf8)
+  let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  return swiftMutagenASCIIHasExactPrefix(bytes, start: start, prefix: "return ")
+}
+
 private func swiftMutagenVoidCallSourceLooksLikeStatement(
   file: String,
   line: Int,
@@ -2812,6 +2832,19 @@ private func swiftMutagenASCIIContains(_ bytes: [UInt8], start: Int, end: Int, p
     index += 1
   }
   return false
+}
+
+private func swiftMutagenASCIIHasExactPrefix(_ bytes: [UInt8], start: Int, prefix: String) -> Bool {
+  let prefixBytes = Array(prefix.utf8)
+  guard start >= 0 && start + prefixBytes.count <= bytes.count else {
+    return false
+  }
+  for offset in 0..<prefixBytes.count {
+    if bytes[start + offset] != prefixBytes[offset] {
+      return false
+    }
+  }
+  return true
 }
 
 private func swiftMutagenASCIIHasPrefix(_ bytes: [UInt8], start: Int, prefix: String) -> Bool {

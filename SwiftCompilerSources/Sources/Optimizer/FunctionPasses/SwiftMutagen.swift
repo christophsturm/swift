@@ -1033,7 +1033,7 @@ private func swiftMutagenMetamutantReturnMutations(
 ) -> [SwiftMutagenMutation] {
   swiftMutagenReturnMutations(for: returnInst, config: config).filter { mutation in
     switch mutation.mutatedBuiltinName {
-    case "return_false", "return_true", "return_zero":
+    case "return_false", "return_true", "return_nil", "return_zero":
       return true
     default:
       return false
@@ -1582,6 +1582,8 @@ private func swiftMutagenCanMakeReturnAlternative(
   switch mutation.mutatedBuiltinName {
   case "return_false", "return_true":
     return swiftMutagenIsBoolType(returnType, in: function)
+  case "return_nil":
+    return returnType.isOptional
   case "return_zero":
     return swiftMutagenIsIntegerStructType(returnType, in: function)
   default:
@@ -1600,6 +1602,8 @@ private func swiftMutagenMakeReturnAlternative(
     return swiftMutagenMakeBool(false, type: returnType, builder: builder)
   case "return_true":
     return swiftMutagenMakeBool(true, type: returnType, builder: builder)
+  case "return_nil":
+    return swiftMutagenMakeOptionalNone(type: returnType, builder: builder)
   case "return_zero":
     return swiftMutagenMakeIntegerZero(type: returnType, in: function, builder: builder)
   default:

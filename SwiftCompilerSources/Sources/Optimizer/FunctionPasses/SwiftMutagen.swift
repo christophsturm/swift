@@ -339,6 +339,12 @@ private struct SwiftMutagenArithmeticAlternative {
   let mutation: SwiftMutagenMutation
 }
 
+private struct SwiftMutagenVoidCallAlternative {
+  let mutantID: String
+  let alternativeIndex: UInt32
+  let mutation: SwiftMutagenMutation
+}
+
 private struct SwiftMutagenReturnSite {
   let siteID: UInt64
   let runtimeFunctionName: String
@@ -361,6 +367,18 @@ private struct SwiftMutagenArithmeticSite {
   let column: Int
   let builtin: BuiltinInst
   let alternatives: [SwiftMutagenArithmeticAlternative]
+}
+
+private struct SwiftMutagenVoidCallSite {
+  let siteID: UInt64
+  let runtimeFunctionName: String
+  let module: String
+  let function: String
+  let file: String
+  let line: Int
+  let column: Int
+  let apply: ApplyInst
+  let alternatives: [SwiftMutagenVoidCallAlternative]
 }
 
 private var swiftMutagenNextOrdinal = 1
@@ -611,6 +629,11 @@ private func swiftMutagenInstrumentMetamutantSites(
     moduleName: moduleName,
     config: config
   )
+  let voidCallSites = swiftMutagenDiscoverVoidCallSites(
+    in: function,
+    moduleName: moduleName,
+    config: config
+  )
   swiftMutagenLogEvent(
     "metamutantDiscovery",
     config: config,
@@ -620,10 +643,10 @@ private func swiftMutagenInstrumentMetamutantSites(
       ("conditionBranches", "\(swiftMutagenConditionBranchCount(in: function))"),
       ("conditionSites", "\(conditionSites.count)"),
       ("arithmeticSites", "\(arithmeticSites.count)"),
-      ("voidCallSites", "0"),
+      ("voidCallSites", "\(voidCallSites.count)"),
       ("returnSites", "\(returnSites.count)")
     ])
-  guard !conditionSites.isEmpty || !arithmeticSites.isEmpty || !returnSites.isEmpty else {
+  guard !conditionSites.isEmpty || !arithmeticSites.isEmpty || !returnSites.isEmpty || !voidCallSites.isEmpty else {
     return false
   }
 
@@ -632,6 +655,7 @@ private func swiftMutagenInstrumentMetamutantSites(
   var injectedArithmeticSites = 0
   var injectedConditionSites = 0
   var injectedReturnSites = 0
+  var injectedVoidCallSites = 0
   for site in arithmeticSites {
     if swiftMutagenInjectArithmeticSite(site, context) {
       injectedSiteJSON.append(swiftMutagenArithmeticSiteJSON(site))
@@ -653,10 +677,18 @@ private func swiftMutagenInstrumentMetamutantSites(
       changed = true
     }
   }
+  for site in voidCallSites {
+    if swiftMutagenInjectVoidCallSite(site, context) {
+      injectedSiteJSON.append(swiftMutagenVoidCallSiteJSON(site))
+      injectedVoidCallSites += 1
+      changed = true
+    }
+  }
   let runtimeVisitAvailable = swiftMutagenAnyRuntimeVisitFunctionAvailable(
     conditionSites: conditionSites,
     arithmeticSites: arithmeticSites,
     returnSites: returnSites,
+    voidCallSites: voidCallSites,
     context
   )
   swiftMutagenLogEvent(
@@ -671,6 +703,8 @@ private func swiftMutagenInstrumentMetamutantSites(
       ("injectedArithmeticSites", "\(injectedArithmeticSites)"),
       ("attemptedReturnSites", "\(returnSites.count)"),
       ("injectedReturnSites", "\(injectedReturnSites)"),
+      ("attemptedVoidCallSites", "\(voidCallSites.count)"),
+      ("injectedVoidCallSites", "\(injectedVoidCallSites)"),
       ("runtimeVisitAvailable", "\(runtimeVisitAvailable)")
     ])
   if !injectedSiteJSON.isEmpty {
@@ -682,6 +716,66 @@ private func swiftMutagenInstrumentMetamutantSites(
     )
   }
   return changed
+}
+
+private func swiftMutagenDiscoverVoidCallSites(
+  in function: Function,
+  moduleName: String,
+  config: SwiftMutagenConfig
+) -> [SwiftMutagenVoidCallSite] {
+  var sites: [SwiftMutagenVoidCallSite] = []
+  var localOrdinal = 1
+  let functionName = function.name.string
+
+  for block in function.blocks {
+    for instruction in block.instructions {
+      guard let apply = instruction as? ApplyInst,
+            let mutation = swiftMutagenVoidCallMutation(for: apply, config: config),
+            swiftMutagenMutatorIsEnabled(mutation.mutator, config: config),
+            let location = swiftMutagenInstructionSourceLocation(
+              for: apply,
+              mutation: mutation,
+              config: config
+            ) else {
+        continue
+      }
+
+      let displayMutation = mutation.withSource(
+        original: location.sourceOriginal,
+        mutated: location.sourceMutated
+      )
+      let siteID = swiftMutagenStableSiteID(
+        packageRoot: config.packageRoot,
+        module: moduleName,
+        file: location.file,
+        line: location.line,
+        column: location.column,
+        function: functionName,
+        siteKind: "voidCall",
+        localOrdinal: localOrdinal
+      )
+      sites.append(SwiftMutagenVoidCallSite(
+        siteID: siteID,
+        runtimeFunctionName: swiftMutagenRuntimeVisitThunkName(file: location.file, config: config),
+        module: moduleName,
+        function: functionName,
+        file: location.file,
+        line: location.line,
+        column: location.column,
+        apply: apply,
+        alternatives: [
+          SwiftMutagenVoidCallAlternative(
+            mutantID: "local-void-call-\(localOrdinal)-1",
+            alternativeIndex: 1,
+            mutation: displayMutation
+          )
+        ]
+      ))
+      localOrdinal += 1
+    }
+  }
+
+  return sites
 }
 
 private func swiftMutagenDiscoverConditionSites(
@@ -1363,6 +1457,73 @@ private func swiftMutagenInjectArithmeticSite(
   return true
 }
 
+private func swiftMutagenInjectVoidCallSite(
+  _ site: SwiftMutagenVoidCallSite,
+  _ context: FunctionPassContext
+) -> Bool {
+  guard let visitFunction = swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+        let siteID = swiftMutagenMakeRuntimeSiteID(
+          site.siteID,
+          visitFunction: visitFunction,
+          insertionPoint: site.apply,
+          context
+        ) else {
+    return false
+  }
+
+  let function = site.apply.parentFunction
+  let dispatchBlock = site.apply.parentBlock
+  let continuationBlock = context.splitBlock(after: site.apply)
+  let callBlock = context.splitBlock(before: site.apply)
+  let alternativeBlocks = site.alternatives.map { _ in function.appendNewBlock(context) }
+  let checkBlocks = site.alternatives.dropFirst().map { _ in function.appendNewBlock(context) }
+
+  let dispatchBuilder = Builder(atEndOf: dispatchBlock, location: site.apply.location, context)
+  let visitRef = dispatchBuilder.createFunctionRef(visitFunction)
+  let choice = dispatchBuilder.createApply(
+    function: visitRef,
+    SubstitutionMap(),
+    arguments: [siteID]
+  )
+  guard let rawChoice = swiftMutagenRuntimeChoiceRawValue(
+    choice,
+    builder: dispatchBuilder,
+    function: function
+  ) else {
+    return false
+  }
+
+  for (index, _) in site.alternatives.enumerated() {
+    Builder(atEndOf: alternativeBlocks[index], location: site.apply.location, context)
+      .createBranch(to: continuationBlock)
+  }
+  Builder(atEndOf: callBlock, location: site.apply.location, context)
+    .createBranch(to: continuationBlock)
+
+  for (index, alternative) in site.alternatives.enumerated() {
+    let builder = index == 0
+      ? dispatchBuilder
+      : Builder(atEndOf: checkBlocks[index - 1], location: site.apply.location, context)
+    let nextBlock = index + 1 < site.alternatives.count
+      ? checkBlocks[index]
+      : callBlock
+    let alternativeLiteral = builder.createIntegerLiteral(alternative.alternativeIndex, type: rawChoice.type)
+    let isSelected = builder.createBuiltinBinaryFunction(
+      name: "cmp_eq",
+      operandType: rawChoice.type,
+      resultType: context.getBuiltinIntegerType(bitWidth: 1),
+      arguments: [rawChoice, alternativeLiteral]
+    )
+    builder.createCondBranch(
+      condition: isSelected,
+      trueBlock: alternativeBlocks[index],
+      falseBlock: nextBlock
+    )
+  }
+
+  return true
+}
+
 private func swiftMutagenRuntimeVisitFunction(_ context: FunctionPassContext) -> Function? {
   context.lookupFunction(name: "__swift_mutagen_visit")
     ?? context.lookupFunction(name: "@__swift_mutagen_visit")
@@ -1383,6 +1544,7 @@ private func swiftMutagenAnyRuntimeVisitFunctionAvailable(
   conditionSites: [SwiftMutagenConditionSite],
   arithmeticSites: [SwiftMutagenArithmeticSite],
   returnSites: [SwiftMutagenReturnSite],
+  voidCallSites: [SwiftMutagenVoidCallSite],
   _ context: FunctionPassContext
 ) -> Bool {
   for site in conditionSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
@@ -1392,6 +1554,9 @@ private func swiftMutagenAnyRuntimeVisitFunctionAvailable(
     return true
   }
   for site in returnSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+    return true
+  }
+  for site in voidCallSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
     return true
   }
   return swiftMutagenRuntimeVisitFunction(context) != nil
@@ -1630,6 +1795,31 @@ private func swiftMutagenReturnSiteJSON(_ site: SwiftMutagenReturnSite) -> Strin
 }
 
 private func swiftMutagenReturnAlternativeJSON(_ alternative: SwiftMutagenReturnAlternative) -> String {
+  var fields: [String] = []
+  fields.append(#""mutantID":"\#(swiftMutagenEscapeJSON(alternative.mutantID))""#)
+  fields.append(#""alternativeIndex":\#(alternative.alternativeIndex)"#)
+  fields.append(#""mutator":"\#(swiftMutagenEscapeJSON(alternative.mutation.mutator))""#)
+  fields.append(#""sourceOriginal":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceOriginal))""#)
+  fields.append(#""sourceMutated":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceMutated))""#)
+  fields.append(#""behaviorKey":"\#(swiftMutagenEscapeJSON(alternative.mutation.silMutated))""#)
+  return "{\(fields.joined(separator: ","))}"
+}
+
+private func swiftMutagenVoidCallSiteJSON(_ site: SwiftMutagenVoidCallSite) -> String {
+  var fields: [String] = []
+  fields.append(#""siteID":\#(site.siteID)"#)
+  fields.append(#""module":"\#(swiftMutagenEscapeJSON(site.module))""#)
+  fields.append(#""function":"\#(swiftMutagenEscapeJSON(site.function))""#)
+  fields.append(
+    #""sourceLocation":{"file":"\#(swiftMutagenEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#
+  )
+  fields.append(#""siteKind":"voidCall""#)
+  fields.append(#""resultKind":"statement""#)
+  fields.append(#""alternatives":[\#(site.alternatives.map(swiftMutagenVoidCallAlternativeJSON).joined(separator: ","))]"#)
+  return "{\(fields.joined(separator: ","))}"
+}
+
+private func swiftMutagenVoidCallAlternativeJSON(_ alternative: SwiftMutagenVoidCallAlternative) -> String {
   var fields: [String] = []
   fields.append(#""mutantID":"\#(swiftMutagenEscapeJSON(alternative.mutantID))""#)
   fields.append(#""alternativeIndex":\#(alternative.alternativeIndex)"#)

@@ -357,6 +357,19 @@ private struct SwiftMutagenReturnSite {
   let alternatives: [SwiftMutagenReturnAlternative]
 }
 
+private struct SwiftMutagenReturnDiscoveryStats {
+  var terminators = 0
+  var mutationEligibleTerminators = 0
+  var mutationAlternatives = 0
+  var missingSourceLocations = 0
+  var nonStatementSourceLocations = 0
+}
+
+private struct SwiftMutagenReturnDiscoveryResult {
+  let sites: [SwiftMutagenReturnSite]
+  let stats: SwiftMutagenReturnDiscoveryStats
+}
+
 private struct SwiftMutagenArithmeticSite {
   let siteID: UInt64
   let runtimeFunctionName: String
@@ -638,11 +651,12 @@ private func swiftMutagenInstrumentMetamutantSites(
     moduleName: moduleName,
     config: config
   )
-  let returnSites = swiftMutagenDiscoverReturnSites(
+  let returnDiscovery = swiftMutagenDiscoverReturnSites(
     in: function,
     moduleName: moduleName,
     config: config
   )
+  let returnSites = returnDiscovery.sites
   let voidCallSites = swiftMutagenDiscoverVoidCallSites(
     in: function,
     moduleName: moduleName,
@@ -658,7 +672,12 @@ private func swiftMutagenInstrumentMetamutantSites(
       ("conditionSites", "\(conditionSites.count)"),
       ("arithmeticSites", "\(arithmeticSites.count)"),
       ("voidCallSites", "\(voidCallSites.count)"),
-      ("returnSites", "\(returnSites.count)")
+      ("returnSites", "\(returnSites.count)"),
+      ("returnTerminators", "\(returnDiscovery.stats.terminators)"),
+      ("returnMutationEligibleTerminators", "\(returnDiscovery.stats.mutationEligibleTerminators)"),
+      ("returnMutationAlternatives", "\(returnDiscovery.stats.mutationAlternatives)"),
+      ("returnSourceLocationMisses", "\(returnDiscovery.stats.missingSourceLocations)"),
+      ("returnNonStatementSourceLocations", "\(returnDiscovery.stats.nonStatementSourceLocations)")
     ])
   guard !conditionSites.isEmpty || !arithmeticSites.isEmpty || !returnSites.isEmpty || !voidCallSites.isEmpty else {
     return false
@@ -899,23 +918,27 @@ private func swiftMutagenDiscoverReturnSites(
   in function: Function,
   moduleName: String,
   config: SwiftMutagenConfig
-) -> [SwiftMutagenReturnSite] {
+) -> SwiftMutagenReturnDiscoveryResult {
   var sites: [SwiftMutagenReturnSite] = []
+  var stats = SwiftMutagenReturnDiscoveryStats()
   var localOrdinal = 1
   let functionName = function.name.string
   guard !functionName.hasSuffix("TW") else {
-    return []
+    return SwiftMutagenReturnDiscoveryResult(sites: [], stats: stats)
   }
 
   for block in function.blocks {
     guard let returnInst = block.terminator as? ReturnInst else {
       continue
     }
+    stats.terminators += 1
 
     let mutations = swiftMutagenMetamutantReturnMutations(for: returnInst, config: config)
     guard !mutations.isEmpty else {
       continue
     }
+    stats.mutationEligibleTerminators += 1
+    stats.mutationAlternatives += mutations.count
 
     var alternatives: [SwiftMutagenReturnAlternative] = []
     var sourceLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
@@ -925,10 +948,12 @@ private func swiftMutagenDiscoverReturnSites(
         mutation: mutation,
         config: config
       ) else {
+        stats.missingSourceLocations += 1
         continue
       }
       if mutation.sourceOriginal == "return",
          !swiftMutagenReturnSourceLooksLikeStatement(file: location.file, line: location.line, config: config) {
+        stats.nonStatementSourceLocations += 1
         continue
       }
       if sourceLocation == nil {
@@ -974,7 +999,7 @@ private func swiftMutagenDiscoverReturnSites(
     ))
   }
 
-  return sites
+  return SwiftMutagenReturnDiscoveryResult(sites: sites, stats: stats)
 }
 
 private func swiftMutagenDiscoverArithmeticSites(
@@ -2500,15 +2525,33 @@ private func swiftMutagenReturnSourceLocation(
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   if let fileNameAndPosition = returnInst.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
-    guard let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) else {
-      return nil
+    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
+      let candidate = (
+        swiftMutagenTrimPackageRoot(matchedPath, config: config),
+        fileNameAndPosition.line,
+        fileNameAndPosition.column,
+        mutation.sourceOriginal,
+        mutation.sourceMutated)
+      if swiftMutagenReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
+        return candidate
+      }
     }
-    return (
-      swiftMutagenTrimPackageRoot(matchedPath, config: config),
-      fileNameAndPosition.line,
-      fileNameAndPosition.column,
-      mutation.sourceOriginal,
-      mutation.sourceMutated)
+  }
+
+  if let definingInstruction = returnInst.returnedValue.definingInstruction,
+     let fileNameAndPosition = definingInstruction.location.fileNameAndPosition {
+    let path = fileNameAndPosition.path.string
+    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
+      let candidate = (
+        swiftMutagenTrimPackageRoot(matchedPath, config: config),
+        fileNameAndPosition.line,
+        fileNameAndPosition.column,
+        mutation.sourceOriginal,
+        mutation.sourceMutated)
+      if swiftMutagenReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
+        return candidate
+      }
+    }
   }
 
   let location = returnInst.parentFunction.location.description
@@ -2525,6 +2568,17 @@ private func swiftMutagenReturnSourceLocation(
       mutation.sourceMutated)
   }
   return nil
+}
+
+private func swiftMutagenReturnSourceLocationIsUsable(
+  _ location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String),
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> Bool {
+  if mutation.sourceOriginal == "return" {
+    return swiftMutagenReturnSourceLooksLikeStatement(file: location.file, line: location.line, config: config)
+  }
+  return true
 }
 
 private func swiftMutagenInstructionSourceLocation(

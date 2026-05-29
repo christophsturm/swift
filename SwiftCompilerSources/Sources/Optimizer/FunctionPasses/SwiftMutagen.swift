@@ -283,7 +283,7 @@ private struct SwiftMutagenConditionSite {
   let file: String
   let line: Int
   let column: Int
-  let condition: BuiltinInst
+  let comparison: BuiltinInst?
   let branch: CondBranchInst
   let alternatives: [SwiftMutagenConditionAlternative]
 }
@@ -657,13 +657,19 @@ private func swiftMutagenDiscoverConditionSites(
   for block in function.blocks {
     guard let branch = block.terminator as? CondBranchInst,
           branch.trueOperands.isEmpty,
-          branch.falseOperands.isEmpty,
-          let condition = branch.condition as? BuiltinInst,
-          swiftMutagenIsComparisonBuiltin(condition) else {
+          branch.falseOperands.isEmpty else {
       continue
     }
 
-    let mutations = swiftMutagenConditionSiteMutations(for: condition, config: config)
+    var comparison: BuiltinInst?
+    let mutations: [SwiftMutagenMutation]
+    if let branchComparison = branch.condition as? BuiltinInst,
+       swiftMutagenIsComparisonBuiltin(branchComparison) {
+      comparison = branchComparison
+      mutations = swiftMutagenConditionSiteMutations(for: branchComparison, config: config)
+    } else {
+      mutations = swiftMutagenGenericConditionSiteMutations(config: config)
+    }
     guard !mutations.isEmpty else {
       continue
     }
@@ -671,13 +677,21 @@ private func swiftMutagenDiscoverConditionSites(
     var alternatives: [SwiftMutagenConditionAlternative] = []
     var sourceLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
     for mutation in mutations {
-      guard let location = swiftMutagenSourceLocation(
-        for: condition,
-        function: function,
-        moduleName: moduleName,
-        mutation: mutation,
-        config: config
-      ) else {
+      let location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
+      if let comparison {
+        location = swiftMutagenSourceLocation(
+          for: comparison,
+          function: function,
+          moduleName: moduleName,
+          mutation: mutation,
+          config: config)
+      } else {
+        location = swiftMutagenBranchSourceLocation(
+          for: branch,
+          mutation: mutation,
+          config: config)
+      }
+      guard let location else {
         continue
       }
       if sourceLocation == nil {
@@ -718,7 +732,7 @@ private func swiftMutagenDiscoverConditionSites(
       file: location.file,
       line: location.line,
       column: location.column,
-      condition: condition,
+      comparison: comparison,
       branch: branch,
       alternatives: alternatives
     ))
@@ -911,6 +925,26 @@ private func swiftMutagenConditionSiteMutations(
   swiftMutagenConditionMutations(for: builtin, config: config, includeGenericComparisonRules: true)
 }
 
+private func swiftMutagenGenericConditionSiteMutations(
+  config: SwiftMutagenConfig
+) -> [SwiftMutagenMutation] {
+  var mutations: [SwiftMutagenMutation] = []
+  for rule in config.conditionMutationRules where rule.builtinID == "COMPARISON" {
+    guard swiftMutagenMutatorIsEnabled(rule.mutator, config: config) else {
+      continue
+    }
+    mutations.append(SwiftMutagenMutation(
+      originalID: nil,
+      mutator: rule.mutator,
+      mutatedBuiltinName: rule.mutatedBuiltinName,
+      sourceOriginal: rule.sourceOriginal,
+      sourceMutated: rule.sourceMutated,
+      silOriginal: "condition",
+      silMutated: rule.mutatedBuiltinName))
+  }
+  return mutations
+}
+
 private func swiftMutagenConditionMutations(
   for builtin: BuiltinInst,
   config: SwiftMutagenConfig,
@@ -1029,10 +1063,6 @@ private func swiftMutagenInjectConditionSite(
     return false
   }
 
-  guard let firstArgument = site.condition.arguments.first else {
-    return false
-  }
-
   let function = site.branch.parentFunction
   let originalCondition = site.branch.condition
   let trueBlock = site.branch.trueBlock
@@ -1058,12 +1088,14 @@ private func swiftMutagenInjectConditionSite(
 
   for (index, alternative) in site.alternatives.enumerated() {
     let builder = Builder(atEndOf: alternativeBlocks[index], location: site.branch.location, context)
-    let mutatedCondition = swiftMutagenMakeConditionAlternative(
+    guard let mutatedCondition = swiftMutagenMakeConditionAlternative(
       alternative.mutation,
-      originalCondition: site.condition,
-      firstArgumentType: firstArgument.type,
+      comparison: site.comparison,
+      originalCondition: originalCondition,
       builder: builder
-    )
+    ) else {
+      return false
+    }
     swiftMutagenCreateConditionBranch(
       condition: mutatedCondition,
       trueBlock: trueBlock,
@@ -1373,21 +1405,25 @@ private func swiftMutagenMakeReturnAlternative(
 
 private func swiftMutagenMakeConditionAlternative(
   _ mutation: SwiftMutagenMutation,
-  originalCondition: BuiltinInst,
-  firstArgumentType: Type,
+  comparison: BuiltinInst?,
+  originalCondition: Value,
   builder: Builder
-) -> Value {
+) -> Value? {
   switch mutation.mutatedBuiltinName {
   case "condition_true":
     return builder.createBoolLiteral(true)
   case "condition_false":
     return builder.createBoolLiteral(false)
   default:
+    guard let comparison,
+          let firstArgument = comparison.arguments.first else {
+      return nil
+    }
     return builder.createBuiltinBinaryFunction(
       name: mutation.mutatedBuiltinName,
-      operandType: firstArgumentType,
+      operandType: firstArgument.type,
       resultType: originalCondition.type,
-      arguments: Array(originalCondition.arguments))
+      arguments: Array(comparison.arguments))
   }
 }
 
@@ -2178,6 +2214,39 @@ private func swiftMutagenInstructionSourceLocation(
   }
 
   let location = instruction.parentFunction.location.description
+  for path in swiftMutagenSwiftSourcePaths(config: config) {
+    guard location.contains(path),
+          let line = swiftMutagenPreferredLine(in: location, path: path) else {
+      continue
+    }
+    return (
+      swiftMutagenTrimPackageRoot(path, config: config),
+      line,
+      1,
+      mutation.sourceOriginal,
+      mutation.sourceMutated)
+  }
+  return nil
+}
+
+private func swiftMutagenBranchSourceLocation(
+  for branch: CondBranchInst,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  if let fileNameAndPosition = branch.location.fileNameAndPosition {
+    let path = fileNameAndPosition.path.string
+    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
+      return (
+        swiftMutagenTrimPackageRoot(matchedPath, config: config),
+        fileNameAndPosition.line,
+        fileNameAndPosition.column,
+        mutation.sourceOriginal,
+        mutation.sourceMutated)
+    }
+  }
+
+  let location = branch.parentFunction.location.description
   for path in swiftMutagenSwiftSourcePaths(config: config) {
     guard location.contains(path),
           let line = swiftMutagenPreferredLine(in: location, path: path) else {

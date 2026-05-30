@@ -3629,6 +3629,9 @@ private func swiftMutagenShouldExclude(
   function: Function,
   config: SwiftMutagenConfig
 ) -> Bool {
+  if swiftMutagenIsGeneratedInvalidLocationFunction(function) {
+    return true
+  }
   let location = function.location.description
   for fragment in config.excludePathFragments {
     if location.contains(fragment) {
@@ -3636,6 +3639,18 @@ private func swiftMutagenShouldExclude(
     }
   }
   return false
+}
+
+private func swiftMutagenIsGeneratedInvalidLocationFunction(_ function: Function) -> Bool {
+  let location = function.location.description
+  guard location.contains("<invalid loc>") else {
+    return false
+  }
+
+  let name = function.name.string
+  return name.contains("__derived_")
+    || name.contains("CodingKeys")
+    || name.hasSuffix("TW")
 }
 
 private func swiftMutagenFindSourceOperator(

@@ -3966,7 +3966,8 @@ private func swiftMutagenScalarValueSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
-        config: config
+        config: config,
+        requiresDirectValueExpression: true
       )
     }
   }
@@ -3981,7 +3982,8 @@ private func swiftMutagenScalarValueSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
-      config: config
+      config: config,
+      requiresDirectValueExpression: true
     ) {
       return anchored
     }
@@ -4247,7 +4249,7 @@ private func swiftMutagenAssignmentValueRHSIsDirectValueExpression(
   }
   for index in start..<end {
     switch bytes[index] {
-    case 40, 123:
+    case 40, 63, 91, 123:
       return false
     default:
       continue

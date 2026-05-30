@@ -2746,6 +2746,14 @@ private func swiftMutagenReturnSourceLocation(
       if swiftMutagenReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
         return candidate
       }
+      if let anchored = swiftMutagenFindAssignmentReturnSourceLocation(
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
+      ) {
+        return anchored
+      }
       if let anchored = swiftMutagenFindUniqueExplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
@@ -2777,6 +2785,14 @@ private func swiftMutagenReturnSourceLocation(
         mutation.sourceMutated)
       if swiftMutagenReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
         return candidate
+      }
+      if let anchored = swiftMutagenFindAssignmentReturnSourceLocation(
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
+      ) {
+        return anchored
       }
       if let anchored = swiftMutagenFindUniqueExplicitReturnSourceLocation(
         path: matchedPath,
@@ -2812,6 +2828,14 @@ private func swiftMutagenReturnSourceLocation(
     if swiftMutagenReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
       return candidate
     }
+    if let anchored = swiftMutagenFindAssignmentReturnSourceLocation(
+      path: path,
+      preferredLine: line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
     if let anchored = swiftMutagenFindUniqueExplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
@@ -2830,6 +2854,148 @@ private func swiftMutagenReturnSourceLocation(
     }
   }
   return nil
+}
+
+private func swiftMutagenFindAssignmentReturnSourceLocation(
+  path: String,
+  preferredLine: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard preferredLine > 0,
+        mutation.sourceOriginal == "return",
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+
+  if let exact = swiftMutagenAssignmentReturnSourceLocation(
+    in: text,
+    path: path,
+    lineRange: preferredLine...preferredLine,
+    mutation: mutation,
+    config: config
+  ) {
+    return exact
+  }
+
+  let firstLine = preferredLine > 2 ? preferredLine - 2 : 1
+  return swiftMutagenAssignmentReturnSourceLocation(
+    in: text,
+    path: path,
+    lineRange: firstLine...(preferredLine + 8),
+    mutation: mutation,
+    config: config
+  )
+}
+
+private func swiftMutagenAssignmentReturnSourceLocation(
+  in text: String,
+  path: String,
+  lineRange: ClosedRange<Int>,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard lineRange.contains(line),
+          matches.count < 2,
+          let expression = swiftMutagenAssignmentReturnExpression(lineText, mutation: mutation) else {
+      return
+    }
+    matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      inspectLine(String(text[lineStart..<index]), line: currentLine)
+      if currentLine >= lineRange.upperBound || matches.count >= 2 {
+        break
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine <= lineRange.upperBound {
+    inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
+  }
+
+  guard matches.count == 1,
+        let match = matches.first else {
+    return nil
+  }
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    match.sourceOriginal,
+    match.sourceMutated)
+}
+
+private func swiftMutagenAssignmentReturnExpression(
+  _ line: String,
+  mutation: SwiftMutagenMutation
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let bytes = Array(line.utf8)
+  let lineStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard lineStart < lineEnd,
+        !swiftMutagenLineStartsWithAssignmentReturnBlockedPrefix(bytes: bytes, start: lineStart),
+        let equals = swiftMutagenFirstAssignmentOperator(bytes: bytes, start: lineStart, end: lineEnd) else {
+    return nil
+  }
+
+  let valueStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: equals + 1)
+  var valueEnd = lineEnd
+  if valueEnd > valueStart && bytes[valueEnd - 1] == 44 {
+    valueEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: valueEnd - 1)
+  }
+  guard valueStart < valueEnd,
+        swiftMutagenReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
+    return nil
+  }
+
+  let sourceOriginal = String(decoding: bytes[valueStart..<valueEnd], as: UTF8.self)
+  return (
+    valueStart + 1,
+    sourceOriginal,
+    swiftMutagenImplicitReturnSourceMutation(for: mutation))
+}
+
+private func swiftMutagenLineStartsWithAssignmentReturnBlockedPrefix(bytes: [UInt8], start: Int) -> Bool {
+  [
+    "if ", "if(", "guard ", "guard(", "while ", "while(", "for ", "for(",
+    "switch ", "switch(", "return ", "throw ", "import ", "//", "/*"
+  ].contains { swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: $0) }
+}
+
+private func swiftMutagenFirstAssignmentOperator(bytes: [UInt8], start: Int, end: Int) -> Int? {
+  guard start < end else {
+    return nil
+  }
+  for index in start..<end where bytes[index] == 61 {
+    let before = index > start ? bytes[index - 1] : 0
+    let after = index + 1 < end ? bytes[index + 1] : 0
+    if swiftMutagenIsAssignmentOperatorNeighbor(before) || swiftMutagenIsAssignmentOperatorNeighbor(after) {
+      continue
+    }
+    return index
+  }
+  return nil
+}
+
+private func swiftMutagenIsAssignmentOperatorNeighbor(_ byte: UInt8) -> Bool {
+  switch byte {
+  case 33, 37, 38, 42, 43, 45, 47, 60, 61, 62, 63, 94, 124, 126:
+    return true
+  default:
+    return false
+  }
 }
 
 private func swiftMutagenReturnSourceLocationIsUsable(

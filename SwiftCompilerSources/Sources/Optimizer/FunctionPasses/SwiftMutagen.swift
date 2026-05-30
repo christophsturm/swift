@@ -4530,6 +4530,10 @@ private func swiftMutagenValueApplySourceLocation(
   mutation: SwiftMutagenMutation,
   config: SwiftMutagenConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let functionSourceLocation = swiftMutagenFunctionSourceLocation(
+    for: apply.parentFunction,
+    config: config
+  )
   if let fileNameAndPosition = apply.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
@@ -4542,19 +4546,34 @@ private func swiftMutagenValueApplySourceLocation(
       ) {
         return anchored
       }
+      if let functionSourceLocation,
+         functionSourceLocation.path == matchedPath,
+         let anchored = swiftMutagenFindOrdinalValueExpressionSourceLocation(
+           for: apply,
+           path: matchedPath,
+           preferredLine: functionSourceLocation.line,
+           mutation: mutation,
+           config: config
+         ) {
+        return anchored
+      }
     }
   }
 
-  let location = apply.parentFunction.location.description
-  for path in swiftMutagenSwiftSourcePaths(config: config) {
-    guard location.contains(path),
-          let line = swiftMutagenPreferredLine(in: location, path: path) else {
-      continue
-    }
+  if let functionSourceLocation {
     if let anchored = swiftMutagenFindValueExpressionSourceLocation(
       for: apply,
-      path: path,
-      preferredLine: line,
+      path: functionSourceLocation.path,
+      preferredLine: functionSourceLocation.line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
+    if let anchored = swiftMutagenFindOrdinalValueExpressionSourceLocation(
+      for: apply,
+      path: functionSourceLocation.path,
+      preferredLine: functionSourceLocation.line,
       mutation: mutation,
       config: config
     ) {
@@ -4699,6 +4718,147 @@ private func swiftMutagenFindValueExpressionSourceLocation(
   return nil
 }
 
+private func swiftMutagenFindOrdinalValueExpressionSourceLocation(
+  for apply: ApplyInst,
+  path: String,
+  preferredLine: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard let ordinal = swiftMutagenValueApplyOrdinalAndCount(
+    for: apply,
+    mutation: mutation,
+    config: config
+  ), ordinal.count <= 200 else {
+    return nil
+  }
+  return swiftMutagenFindOrdinalValueExpressionSourceLocation(
+    path: path,
+    preferredLine: preferredLine,
+    ordinal: ordinal.ordinal,
+    expectedCount: ordinal.count,
+    mutation: mutation,
+    config: config
+  )
+}
+
+private func swiftMutagenValueApplyOrdinalAndCount(
+  for apply: ApplyInst,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (ordinal: Int, count: Int)? {
+  var ordinal = 0
+  var count = 0
+  var foundApply = false
+
+  for block in apply.parentFunction.blocks {
+    for instruction in block.instructions {
+      guard let candidate = instruction as? ApplyInst,
+            !candidate.type.isVoid else {
+        continue
+      }
+      let mutations = swiftMutagenValueReplacementMutations(
+        for: candidate,
+        valueType: candidate.type,
+        config: config
+      )
+      guard mutations.contains(where: { $0.mutatedBuiltinName == mutation.mutatedBuiltinName }) else {
+        continue
+      }
+      count += 1
+      if candidate === apply {
+        ordinal = count
+        foundApply = true
+      }
+    }
+  }
+
+  guard foundApply else {
+    return nil
+  }
+  return (ordinal, count)
+}
+
+private func swiftMutagenFindOrdinalValueExpressionSourceLocation(
+  path: String,
+  preferredLine: Int,
+  ordinal: Int,
+  expectedCount: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard preferredLine > 0,
+        ordinal > 0,
+        ordinal <= expectedCount,
+        expectedCount > 1,
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+
+  var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  var braceDepth = 0
+  var sawOpeningBrace = false
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard line >= preferredLine,
+          matches.count <= expectedCount,
+          let expression = swiftMutagenOrdinalValueExpression(lineText, mutation: mutation) else {
+      return
+    }
+    matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
+  }
+
+  func updateBraceDepth(_ lineText: String) {
+    for byte in lineText.utf8 {
+      if byte == 123 {
+        braceDepth += 1
+        sawOpeningBrace = true
+      } else if byte == 125 {
+        braceDepth -= 1
+      }
+    }
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      let lineText = String(text[lineStart..<index])
+      if currentLine >= preferredLine {
+        if sawOpeningBrace && braceDepth > 0 {
+          inspectLine(lineText, line: currentLine)
+          if matches.count > expectedCount {
+            break
+          }
+        }
+        updateBraceDepth(lineText)
+        if sawOpeningBrace && braceDepth <= 0 {
+          break
+        }
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine >= preferredLine && sawOpeningBrace && braceDepth > 0 {
+    inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
+  }
+
+  guard matches.count == expectedCount else {
+    return nil
+  }
+  let match = matches[ordinal - 1]
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    match.sourceOriginal,
+    match.sourceMutated)
+}
+
 private func swiftMutagenFindCalleeOrdinalValueExpressionSourceLocation(
   for apply: ApplyInst,
   path: String,
@@ -4834,6 +4994,19 @@ private func swiftMutagenValueExpressionOnLine(
   identifiers: [String],
   mutation: SwiftMutagenMutation
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  if let expression = swiftMutagenOrdinalValueExpression(line, mutation: mutation) {
+    return expression
+  }
+  if let expression = swiftMutagenIdentifierValueExpression(line, identifiers: identifiers, mutation: mutation) {
+    return expression
+  }
+  return nil
+}
+
+private func swiftMutagenOrdinalValueExpression(
+  _ line: String,
+  mutation: SwiftMutagenMutation
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
   if let expression = swiftMutagenAssignmentValueExpression(line, mutation: mutation) {
     return expression
   }
@@ -4843,10 +5016,35 @@ private func swiftMutagenValueExpressionOnLine(
   if let expression = swiftMutagenStandaloneValueExpression(line, mutation: mutation) {
     return expression
   }
-  if let expression = swiftMutagenIdentifierValueExpression(line, identifiers: identifiers, mutation: mutation) {
+  if let expression = swiftMutagenExplicitReturnValueExpression(line, mutation: mutation) {
     return expression
   }
   return nil
+}
+
+private func swiftMutagenExplicitReturnValueExpression(
+  _ line: String,
+  mutation: SwiftMutagenMutation
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let bytes = Array(line.utf8)
+  let lineStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard lineStart < lineEnd,
+        swiftMutagenASCIIHasExactPrefix(bytes, start: lineStart, prefix: "return ") else {
+    return nil
+  }
+
+  let valueStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: lineStart + 7)
+  guard valueStart < lineEnd,
+        swiftMutagenReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
+    return nil
+  }
+
+  let sourceOriginal = String(decoding: bytes[valueStart..<lineEnd], as: UTF8.self)
+  return (
+    valueStart + 1,
+    sourceOriginal,
+    swiftMutagenImplicitReturnSourceMutation(for: mutation))
 }
 
 private func swiftMutagenSourceExpressionIdentifiers(for apply: ApplyInst) -> [String] {

@@ -2964,6 +2964,9 @@ private func swiftMutagenFindUniqueImplicitReturnSourceLocation(
     guard start < end else {
       return
     }
+    if swiftMutagenLineLooksLikeImplicitReturnContinuation(bytes: bytes, start: start) {
+      return
+    }
 
     if line == preferredLine,
        let expression = swiftMutagenInlineImplicitReturnExpression(lineText) {
@@ -3074,6 +3077,18 @@ private func swiftMutagenLineLooksLikeImplicitReturnExpression(bytes: [UInt8], s
     return false
   }
   return true
+}
+
+private func swiftMutagenLineLooksLikeImplicitReturnContinuation(bytes: [UInt8], start: Int) -> Bool {
+  guard start < bytes.count else {
+    return false
+  }
+  switch bytes[start] {
+  case 38, 43, 45, 46, 47, 60, 61, 62, 63, 124:
+    return true
+  default:
+    return false
+  }
 }
 
 private func swiftMutagenImplicitReturnExpressionIsEligible(

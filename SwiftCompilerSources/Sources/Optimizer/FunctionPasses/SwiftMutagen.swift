@@ -4306,6 +4306,7 @@ private func swiftMutagenValueApplySourceLocation(
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
       if let anchored = swiftMutagenFindValueExpressionSourceLocation(
+        for: apply,
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -4323,6 +4324,7 @@ private func swiftMutagenValueApplySourceLocation(
       continue
     }
     if let anchored = swiftMutagenFindValueExpressionSourceLocation(
+      for: apply,
       path: path,
       preferredLine: line,
       mutation: mutation,
@@ -4375,6 +4377,7 @@ private func swiftMutagenAssignmentValueSourceLocation(
 }
 
 private func swiftMutagenFindValueExpressionSourceLocation(
+  for apply: ApplyInst,
   path: String,
   preferredLine: Int,
   mutation: SwiftMutagenMutation,
@@ -4420,7 +4423,45 @@ private func swiftMutagenFindValueExpressionSourceLocation(
   ) {
     return anchored
   }
+  if let anchored = swiftMutagenFindCalleeOrdinalValueExpressionSourceLocation(
+    for: apply,
+    path: path,
+    preferredLine: preferredLine,
+    mutation: mutation,
+    config: config
+  ) {
+    return anchored
+  }
   return nil
+}
+
+private func swiftMutagenFindCalleeOrdinalValueExpressionSourceLocation(
+  for apply: ApplyInst,
+  path: String,
+  preferredLine: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let identifiers = swiftMutagenSourceCalleeIdentifiers(for: apply)
+  guard !identifiers.isEmpty,
+        let ordinal = swiftMutagenValueApplyOrdinal(for: apply, matchingAnyOf: identifiers, config: config),
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+
+  let candidates = swiftMutagenCalleeExpressionSourceCandidates(
+    in: text,
+    path: path,
+    preferredLine: preferredLine,
+    identifiers: identifiers,
+    mutation: mutation,
+    config: config
+  )
+  guard ordinal > 0,
+        ordinal <= candidates.count else {
+    return nil
+  }
+  return candidates[ordinal - 1]
 }
 
 private func swiftMutagenFindStandaloneValueExpressionSourceLocation(
@@ -4440,6 +4481,208 @@ private func swiftMutagenFindStandaloneValueExpressionSourceLocation(
     expression.column,
     expression.sourceOriginal,
     expression.sourceMutated)
+}
+
+private func swiftMutagenValueApplyOrdinal(
+  for apply: ApplyInst,
+  matchingAnyOf identifiers: [String],
+  config: SwiftMutagenConfig
+) -> Int? {
+  var ordinal = 0
+  for block in apply.parentFunction.blocks {
+    for instruction in block.instructions {
+      guard let candidate = instruction as? ApplyInst,
+            !candidate.type.isVoid,
+            !swiftMutagenValueReplacementMutations(
+              for: candidate,
+              valueType: candidate.type,
+              config: config
+            ).isEmpty,
+            swiftMutagenSourceCalleeIdentifiers(for: candidate).contains(where: { identifiers.contains($0) }) else {
+        continue
+      }
+      ordinal += 1
+      if candidate === apply {
+        return ordinal
+      }
+    }
+  }
+  return nil
+}
+
+private func swiftMutagenCalleeExpressionSourceCandidates(
+  in text: String,
+  path: String,
+  preferredLine: Int,
+  identifiers: [String],
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> [(file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] {
+  guard preferredLine > 0 else {
+    return []
+  }
+  let lastLine = preferredLine + 220
+  var candidates: [(file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard line >= preferredLine,
+          line <= lastLine,
+          swiftMutagenSourceLineContainsCallLikeIdentifier(lineText, identifiers: identifiers),
+          let expression = swiftMutagenValueExpressionOnLine(lineText, mutation: mutation) else {
+      return
+    }
+    candidates.append((
+      swiftMutagenTrimPackageRoot(path, config: config),
+      line,
+      expression.column,
+      expression.sourceOriginal,
+      expression.sourceMutated
+    ))
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      inspectLine(String(text[lineStart..<index]), line: currentLine)
+      if currentLine >= lastLine {
+        break
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine <= lastLine {
+    inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
+  }
+  return candidates
+}
+
+private func swiftMutagenValueExpressionOnLine(
+  _ line: String,
+  mutation: SwiftMutagenMutation
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  if let expression = swiftMutagenAssignmentValueExpression(line, mutation: mutation) {
+    return expression
+  }
+  if let expression = swiftMutagenStandaloneLabeledValueExpression(line, mutation: mutation) {
+    return expression
+  }
+  if let expression = swiftMutagenStandaloneValueExpression(line, mutation: mutation) {
+    return expression
+  }
+  return nil
+}
+
+private func swiftMutagenSourceCalleeIdentifiers(for apply: ApplyInst) -> [String] {
+  guard let name = apply.referencedFunction?.name.string else {
+    return []
+  }
+  return swiftMutagenMangledIdentifiers(in: name).filter { identifier in
+    identifier.count >= 3 && !identifier.hasPrefix("__")
+  }
+}
+
+private func swiftMutagenMangledIdentifiers(in name: String) -> [String] {
+  let bytes = Array(name.utf8)
+  var identifiers: [String] = []
+  var index = 0
+  while index < bytes.count {
+    guard bytes[index] >= 48 && bytes[index] <= 57 else {
+      index += 1
+      continue
+    }
+    var length = 0
+    var cursor = index
+    while cursor < bytes.count && bytes[cursor] >= 48 && bytes[cursor] <= 57 {
+      length = (length * 10) + Int(bytes[cursor] - 48)
+      cursor += 1
+    }
+    guard length > 0,
+          cursor + length <= bytes.count,
+          swiftMutagenBytesAreIdentifier(bytes, start: cursor, end: cursor + length) else {
+      index += 1
+      continue
+    }
+    let identifier = String(decoding: bytes[cursor..<(cursor + length)], as: UTF8.self)
+    if !identifiers.contains(identifier) {
+      identifiers.append(identifier)
+    }
+    index = cursor + length
+  }
+  return identifiers
+}
+
+private func swiftMutagenBytesAreIdentifier(_ bytes: [UInt8], start: Int, end: Int) -> Bool {
+  guard start < end else {
+    return false
+  }
+  for index in start..<end {
+    if !swiftMutagenIsASCIILetterNumberOrUnderscore(bytes[index]) {
+      return false
+    }
+  }
+  return true
+}
+
+private func swiftMutagenSourceLineContainsCallLikeIdentifier(_ line: String, identifiers: [String]) -> Bool {
+  let bytes = Array(line.utf8)
+  let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard start < end else {
+    return false
+  }
+  for identifier in identifiers where swiftMutagenSourceLineContainsCallLikeIdentifier(
+    bytes,
+    start: start,
+    end: end,
+    identifier: identifier
+  ) {
+    return true
+  }
+  return false
+}
+
+private func swiftMutagenSourceLineContainsCallLikeIdentifier(
+  _ bytes: [UInt8],
+  start: Int,
+  end: Int,
+  identifier: String
+) -> Bool {
+  let token = Array(identifier.utf8)
+  guard !token.isEmpty,
+        token.count <= end - start else {
+    return false
+  }
+
+  var index = start
+  while index <= end - token.count {
+    var matched = true
+    for offset in 0..<token.count where bytes[index + offset] != token[offset] {
+      matched = false
+      break
+    }
+    if matched {
+      let before = index > start ? bytes[index - 1] : 0
+      let tokenEnd = index + token.count
+      let after = tokenEnd < end ? bytes[tokenEnd] : 0
+      if !swiftMutagenIsASCIILetterNumberOrUnderscore(before)
+          && !swiftMutagenIsASCIILetterNumberOrUnderscore(after) {
+        let callStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: tokenEnd)
+        if callStart < end && bytes[callStart] == 123 {
+          return true
+        }
+        if callStart < end && bytes[callStart] == 40 {
+          return true
+        }
+      }
+    }
+    index += 1
+  }
+  return false
 }
 
 private func swiftMutagenFindLabeledValueExpressionSourceLocation(

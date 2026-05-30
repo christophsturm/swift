@@ -3186,10 +3186,21 @@ private func swiftMutagenFindAssignmentValueSourceLocation(
         let text = swiftMutagenRead(path) else {
     return nil
   }
-  return swiftMutagenAssignmentValueSourceLocation(
+  if let exact = swiftMutagenAssignmentValueSourceLocation(
     in: text,
     path: path,
     lineRange: preferredLine...preferredLine,
+    mutation: mutation,
+    config: config
+  ) {
+    return exact
+  }
+
+  let firstLine = preferredLine > 2 ? preferredLine - 2 : 1
+  return swiftMutagenAssignmentValueSourceLocation(
+    in: text,
+    path: path,
+    lineRange: firstLine...(preferredLine + 8),
     mutation: mutation,
     config: config
   )

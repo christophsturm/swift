@@ -1648,16 +1648,18 @@ private func swiftMutagenAssignmentValueMutations(
   for store: StoreInst,
   config: SwiftMutagenConfig
 ) -> [SwiftMutagenMutation] {
-  guard store.source.type.isTrivial(in: store.parentFunction) else {
+  guard swiftMutagenCanDispatchAssignmentValue(store) else {
     return []
   }
   return swiftMutagenValueReplacementMutations(
     valueType: store.source.type,
     function: store.parentFunction,
     config: config
-  ).filter { mutation in
-    mutation.mutatedBuiltinName != "return_empty_string"
-  }
+  )
+}
+
+private func swiftMutagenCanDispatchAssignmentValue(_ store: StoreInst) -> Bool {
+  store.source.type.isTrivial(in: store.parentFunction) || store.source.ownership == .owned
 }
 
 private func swiftMutagenAssignmentStoreIsEligible(_ store: StoreInst) -> Bool {
@@ -2346,7 +2348,7 @@ private func swiftMutagenInjectAssignmentValueSite(
 
   let valueType = site.store.source.type
   let function = site.store.parentFunction
-  guard valueType.isTrivial(in: function),
+  guard swiftMutagenCanDispatchAssignmentValue(site.store),
         site.alternatives.allSatisfy({
           swiftMutagenCanMakeReturnAlternative(
             $0.mutation,
@@ -4415,14 +4417,27 @@ private func swiftMutagenAssignmentValueExpression(
   let lineStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
   let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard lineStart < lineEnd,
-        !swiftMutagenLineStartsWithAssignmentReturnBlockedPrefix(bytes: bytes, start: lineStart),
-        let equals = swiftMutagenFirstAssignmentOperator(bytes: bytes, start: lineStart, end: lineEnd),
-        swiftMutagenAssignmentLeftHandSideMatchesTargetNames(
-          bytes: bytes,
-          start: lineStart,
-          end: equals,
-          targetNames: targetNames
-        ) else {
+        !swiftMutagenLineStartsWithAssignmentReturnBlockedPrefix(bytes: bytes, start: lineStart) else {
+    return nil
+  }
+
+  guard let equals = swiftMutagenFirstAssignmentOperator(bytes: bytes, start: lineStart, end: lineEnd) else {
+    return swiftMutagenLabeledArgumentValueExpression(
+      bytes: bytes,
+      lineStart: lineStart,
+      lineEnd: lineEnd,
+      mutation: mutation,
+      targetNames: targetNames,
+      requiresDirectValueExpression: requiresDirectValueExpression
+    )
+  }
+
+  guard swiftMutagenAssignmentLeftHandSideMatchesTargetNames(
+    bytes: bytes,
+    start: lineStart,
+    end: equals,
+    targetNames: targetNames
+  ) else {
     return nil
   }
 
@@ -4447,6 +4462,82 @@ private func swiftMutagenAssignmentValueExpression(
     valueStart + 1,
     sourceOriginal,
     swiftMutagenImplicitReturnSourceMutation(for: mutation))
+}
+
+private func swiftMutagenLabeledArgumentValueExpression(
+  bytes: [UInt8],
+  lineStart: Int,
+  lineEnd: Int,
+  mutation: SwiftMutagenMutation,
+  targetNames: [String],
+  requiresDirectValueExpression: Bool
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard !targetNames.isEmpty,
+        let colon = swiftMutagenFirstLabeledArgumentSeparator(bytes: bytes, start: lineStart, end: lineEnd),
+        swiftMutagenAssignmentLeftHandSideMatchesTargetNames(
+          bytes: bytes,
+          start: lineStart,
+          end: colon,
+          targetNames: targetNames
+        ) else {
+    return nil
+  }
+
+  let valueStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: colon + 1)
+  var valueEnd = lineEnd
+  if valueEnd > valueStart && bytes[valueEnd - 1] == 44 {
+    valueEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: valueEnd - 1)
+  }
+  guard valueStart < valueEnd,
+        swiftMutagenLabeledArgumentRHSLooksLikeValueExpression(bytes: bytes, start: valueStart, end: valueEnd),
+        swiftMutagenAssignmentValueRHSIsDirectValueExpression(
+          bytes: bytes,
+          start: valueStart,
+          end: valueEnd,
+          isRequired: requiresDirectValueExpression
+        ),
+        swiftMutagenReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
+    return nil
+  }
+
+  let sourceOriginal = String(decoding: bytes[valueStart..<valueEnd], as: UTF8.self)
+  return (
+    valueStart + 1,
+    sourceOriginal,
+    swiftMutagenImplicitReturnSourceMutation(for: mutation))
+}
+
+private func swiftMutagenFirstLabeledArgumentSeparator(bytes: [UInt8], start: Int, end: Int) -> Int? {
+  guard start < end else {
+    return nil
+  }
+  for index in start..<end where bytes[index] == 58 {
+    let before = index > start ? bytes[index - 1] : 0
+    let after = index + 1 < end ? bytes[index + 1] : 0
+    if before == 58 || after == 58 {
+      continue
+    }
+    return index
+  }
+  return nil
+}
+
+private func swiftMutagenLabeledArgumentRHSLooksLikeValueExpression(
+  bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> Bool {
+  guard start < end else {
+    return false
+  }
+  if bytes[start] >= 65 && bytes[start] <= 90 && !swiftMutagenASCIIContains(bytes, start: start, end: end, pattern: ".") {
+    return false
+  }
+  if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "some ")
+      || swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "any ") {
+    return false
+  }
+  return true
 }
 
 private func swiftMutagenAssignmentValueRHSIsDirectValueExpression(

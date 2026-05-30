@@ -3993,7 +3993,9 @@ private func swiftMutagenFindAssignmentValueSourceLocation(
   path: String,
   preferredLine: Int,
   mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  config: SwiftMutagenConfig,
+  targetNames: [String] = [],
+  requiresDirectValueExpression: Bool = false
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
         let text = swiftMutagenRead(path) else {
@@ -4004,18 +4006,23 @@ private func swiftMutagenFindAssignmentValueSourceLocation(
     path: path,
     lineRange: preferredLine...preferredLine,
     mutation: mutation,
-    config: config
+    config: config,
+    targetNames: targetNames,
+    requiresDirectValueExpression: requiresDirectValueExpression
   ) {
     return exact
   }
 
   let firstLine = preferredLine > 2 ? preferredLine - 2 : 1
+  let lastLine = preferredLine + (targetNames.isEmpty ? 8 : 80)
   return swiftMutagenAssignmentValueSourceLocation(
     in: text,
     path: path,
-    lineRange: firstLine...(preferredLine + 8),
+    lineRange: firstLine...lastLine,
     mutation: mutation,
-    config: config
+    config: config,
+    targetNames: targetNames,
+    requiresDirectValueExpression: requiresDirectValueExpression
   )
 }
 
@@ -4024,7 +4031,9 @@ private func swiftMutagenAssignmentValueSourceLocation(
   path: String,
   lineRange: ClosedRange<Int>,
   mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  config: SwiftMutagenConfig,
+  targetNames: [String] = [],
+  requiresDirectValueExpression: Bool = false
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
   var currentLine = 1
@@ -4034,7 +4043,12 @@ private func swiftMutagenAssignmentValueSourceLocation(
   func inspectLine(_ lineText: String, line: Int) {
     guard lineRange.contains(line),
           matches.count < 2,
-          let expression = swiftMutagenAssignmentValueExpression(lineText, mutation: mutation) else {
+          let expression = swiftMutagenAssignmentValueExpression(
+            lineText,
+            mutation: mutation,
+            targetNames: targetNames,
+            requiresDirectValueExpression: requiresDirectValueExpression
+          ) else {
       return
     }
     matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
@@ -4110,6 +4124,7 @@ private func swiftMutagenAssignmentValueSourceLocation(
   mutation: SwiftMutagenMutation,
   config: SwiftMutagenConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let targetNames = swiftMutagenAssignmentDestinationNames(for: store)
   if let fileNameAndPosition = store.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
@@ -4117,7 +4132,9 @@ private func swiftMutagenAssignmentValueSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
-        config: config
+        config: config,
+        targetNames: targetNames,
+        requiresDirectValueExpression: true
       )
     }
   }
@@ -4132,7 +4149,9 @@ private func swiftMutagenAssignmentValueSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
-      config: config
+      config: config,
+      targetNames: targetNames,
+      requiresDirectValueExpression: true
     ) {
       return anchored
     }
@@ -4175,14 +4194,22 @@ private func swiftMutagenFindValueExpressionSourceLocation(
 
 private func swiftMutagenAssignmentValueExpression(
   _ line: String,
-  mutation: SwiftMutagenMutation
+  mutation: SwiftMutagenMutation,
+  targetNames: [String] = [],
+  requiresDirectValueExpression: Bool = false
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
   let bytes = Array(line.utf8)
   let lineStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
   let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard lineStart < lineEnd,
         !swiftMutagenLineStartsWithAssignmentReturnBlockedPrefix(bytes: bytes, start: lineStart),
-        let equals = swiftMutagenFirstAssignmentOperator(bytes: bytes, start: lineStart, end: lineEnd) else {
+        let equals = swiftMutagenFirstAssignmentOperator(bytes: bytes, start: lineStart, end: lineEnd),
+        swiftMutagenAssignmentLeftHandSideMatchesTargetNames(
+          bytes: bytes,
+          start: lineStart,
+          end: equals,
+          targetNames: targetNames
+        ) else {
     return nil
   }
 
@@ -4192,6 +4219,12 @@ private func swiftMutagenAssignmentValueExpression(
     valueEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: valueEnd - 1)
   }
   guard valueStart < valueEnd,
+        swiftMutagenAssignmentValueRHSIsDirectValueExpression(
+          bytes: bytes,
+          start: valueStart,
+          end: valueEnd,
+          isRequired: requiresDirectValueExpression
+        ),
         swiftMutagenReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
     return nil
   }
@@ -4201,6 +4234,185 @@ private func swiftMutagenAssignmentValueExpression(
     valueStart + 1,
     sourceOriginal,
     swiftMutagenImplicitReturnSourceMutation(for: mutation))
+}
+
+private func swiftMutagenAssignmentValueRHSIsDirectValueExpression(
+  bytes: [UInt8],
+  start: Int,
+  end: Int,
+  isRequired: Bool
+) -> Bool {
+  guard isRequired else {
+    return true
+  }
+  for index in start..<end {
+    switch bytes[index] {
+    case 40, 123:
+      return false
+    default:
+      continue
+    }
+  }
+  return true
+}
+
+private func swiftMutagenAssignmentDestinationNames(for store: StoreInst) -> [String] {
+  var names: [String] = []
+  swiftMutagenCollectAssignmentDestinationNames(
+    from: store.destination,
+    in: store.parentFunction,
+    names: &names,
+    depth: 0
+  )
+  var seen = Set<String>()
+  var uniqueNames: [String] = []
+  for name in names where swiftMutagenIdentifierIsUsable(name) && !seen.contains(name) {
+    seen.insert(name)
+    uniqueNames.append(name)
+  }
+  return uniqueNames
+}
+
+private func swiftMutagenCollectAssignmentDestinationNames(
+  from value: Value,
+  in function: Function,
+  names: inout [String],
+  depth: Int
+) {
+  guard depth < 8,
+        let instruction = value.definingInstruction else {
+    if let argumentName = (value as? Argument)?.findVarDecl()?.userFacingName.string {
+      names.append(argumentName)
+    }
+    return
+  }
+
+  if let declaration = instruction.findVarDecl() {
+    names.append(declaration.userFacingName.string)
+  }
+
+  switch instruction {
+  case let beginAccess as BeginAccessInst:
+    swiftMutagenCollectAssignmentDestinationNames(
+      from: beginAccess.address,
+      in: function,
+      names: &names,
+      depth: depth + 1
+    )
+  case let markUninitialized as MarkUninitializedInst:
+    swiftMutagenCollectAssignmentDestinationNames(
+      from: markUninitialized.operand.value,
+      in: function,
+      names: &names,
+      depth: depth + 1
+    )
+  case let structElementAddr as StructElementAddrInst:
+    let structType = structElementAddr.struct.type.objectType
+    if let fields = structType.getNominalFields(in: function) {
+      names.append(fields.getNameOfField(withIndex: structElementAddr.fieldIndex).string)
+    }
+    swiftMutagenCollectAssignmentDestinationNames(
+      from: structElementAddr.struct,
+      in: function,
+      names: &names,
+      depth: depth + 1
+    )
+  case let refElementAddr as RefElementAddrInst:
+    if let declaration = refElementAddr.varDecl {
+      names.append(declaration.userFacingName.string)
+    }
+    swiftMutagenCollectAssignmentDestinationNames(
+      from: refElementAddr.instance,
+      in: function,
+      names: &names,
+      depth: depth + 1
+    )
+  case let projectBox as ProjectBoxInst:
+    swiftMutagenCollectAssignmentDestinationNames(
+      from: projectBox.box,
+      in: function,
+      names: &names,
+      depth: depth + 1
+    )
+  default:
+    break
+  }
+}
+
+private func swiftMutagenIdentifierIsUsable(_ name: String) -> Bool {
+  guard !name.isEmpty,
+        name != "_",
+        name != "self" else {
+    return false
+  }
+  for byte in name.utf8 {
+    guard swiftMutagenIsIdentifierByte(byte) else {
+      return false
+    }
+  }
+  return true
+}
+
+private func swiftMutagenAssignmentLeftHandSideMatchesTargetNames(
+  bytes: [UInt8],
+  start: Int,
+  end: Int,
+  targetNames: [String]
+) -> Bool {
+  guard !targetNames.isEmpty else {
+    return true
+  }
+  for targetName in targetNames {
+    guard swiftMutagenIdentifierIsUsable(targetName) else {
+      continue
+    }
+    if swiftMutagenLeftHandSideContainsIdentifier(
+      bytes: bytes,
+      start: start,
+      end: end,
+      identifier: Array(targetName.utf8)
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+private func swiftMutagenLeftHandSideContainsIdentifier(
+  bytes: [UInt8],
+  start: Int,
+  end: Int,
+  identifier: [UInt8]
+) -> Bool {
+  guard !identifier.isEmpty,
+        start < end else {
+    return false
+  }
+
+  var index = start
+  while index < end {
+    if swiftMutagenIsIdentifierStartByte(bytes[index]) {
+      let identifierStart = index
+      index += 1
+      while index < end && swiftMutagenIsIdentifierByte(bytes[index]) {
+        index += 1
+      }
+      if bytes[identifierStart..<index].elementsEqual(identifier) {
+        return true
+      }
+      continue
+    }
+    index += 1
+  }
+  return false
+}
+
+private func swiftMutagenIsIdentifierStartByte(_ byte: UInt8) -> Bool {
+  byte == 95 || (byte >= 65 && byte <= 90) || (byte >= 97 && byte <= 122)
+}
+
+private func swiftMutagenIsIdentifierByte(_ byte: UInt8) -> Bool {
+  swiftMutagenIsIdentifierStartByte(byte) || (byte >= 48 && byte <= 57)
 }
 
 private func swiftMutagenFindAssignmentReturnSourceLocation(

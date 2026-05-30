@@ -3809,6 +3809,9 @@ private func swiftMutagenIsSourceComparisonOperator(
   if operatorEnd < bytes.count && swiftMutagenIsOperatorByte(bytes[operatorEnd]) {
     return false
   }
+  if swiftMutagenIsOperatorFunctionDeclaration(bytes: bytes, operatorStart: operatorStart) {
+    return false
+  }
   if swiftMutagenIsLikelyGenericAngleBracket(
     bytes: bytes,
     operatorStart: operatorStart,
@@ -3841,6 +3844,23 @@ private func swiftMutagenIsLikelyGenericAngleBracket(
 
 private func swiftMutagenHasIdentifierBefore(bytes: [UInt8], index: Int) -> Bool {
   index > 0 && swiftMutagenIsExpressionByte(bytes[index - 1])
+}
+
+private func swiftMutagenIsOperatorFunctionDeclaration(bytes: [UInt8], operatorStart: Int) -> Bool {
+  var offset = operatorStart
+  while offset > 0 && swiftMutagenIsHorizontalWhitespace(bytes[offset - 1]) {
+    offset -= 1
+  }
+
+  let tokenEnd = offset
+  while offset > 0 && swiftMutagenIsExpressionByte(bytes[offset - 1]) {
+    offset -= 1
+  }
+
+  guard tokenEnd > offset else {
+    return false
+  }
+  return String(decoding: bytes[offset..<tokenEnd], as: UTF8.self) == "func"
 }
 
 private func swiftMutagenHasIdentifierAfter(bytes: [UInt8], index: Int) -> Bool {

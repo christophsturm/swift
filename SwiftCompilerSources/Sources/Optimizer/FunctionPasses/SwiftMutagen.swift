@@ -6586,6 +6586,15 @@ private func swiftMutagenBranchSourceLocation(
   if let fileNameAndPosition = branch.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
+      if let sourceLocation = swiftMutagenGenericConditionSourceLocation(
+        path: matchedPath,
+        line: fileNameAndPosition.line,
+        fallbackColumn: fileNameAndPosition.column,
+        mutation: mutation,
+        config: config
+      ) {
+        return sourceLocation
+      }
       return (
         swiftMutagenTrimPackageRoot(matchedPath, config: config),
         fileNameAndPosition.line,
@@ -6630,7 +6639,7 @@ private func swiftMutagenFindUniqueExplicitConditionSourceLocation(
     return nil
   }
 
-  var matches: [(line: Int, column: Int)] = []
+  var matches: [(line: Int, column: Int, sourceOriginal: String)] = []
   var currentLine = 1
   var lineStart = text.startIndex
   var index = text.startIndex
@@ -6641,12 +6650,10 @@ private func swiftMutagenFindUniqueExplicitConditionSourceLocation(
     guard line >= preferredLine,
           line <= preferredLine + 120,
           matches.count < 2,
-          swiftMutagenSourceLineLooksLikeExplicitCondition(lineText) else {
+          let expression = swiftMutagenGenericConditionExpression(lineText) else {
       return
     }
-    let bytes = Array(lineText.utf8)
-    let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-    matches.append((line, start + 1))
+    matches.append((line, expression.column, expression.sourceOriginal))
   }
 
   func updateBraceDepth(_ lineText: String) {
@@ -6692,7 +6699,26 @@ private func swiftMutagenFindUniqueExplicitConditionSourceLocation(
     swiftMutagenTrimPackageRoot(path, config: config),
     match.line,
     match.column,
-    mutation.sourceOriginal,
+    match.sourceOriginal,
+    mutation.sourceMutated)
+}
+
+private func swiftMutagenGenericConditionSourceLocation(
+  path: String,
+  line: Int,
+  fallbackColumn: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard let sourceLine = swiftMutagenAbsoluteSourceLine(path: path, line: line),
+        let expression = swiftMutagenGenericConditionExpression(sourceLine) else {
+    return nil
+  }
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    line,
+    expression.column > 0 ? expression.column : fallbackColumn,
+    expression.sourceOriginal,
     mutation.sourceMutated)
 }
 
@@ -6813,6 +6839,210 @@ private func swiftMutagenAbsoluteSourceLine(path: String, line: Int) -> String? 
 
   if currentLine == line {
     return String(text[lineStart..<text.endIndex])
+  }
+  return nil
+}
+
+private func swiftMutagenGenericConditionExpression(
+  _ line: String
+) -> (column: Int, sourceOriginal: String)? {
+  let bytes = Array(line.utf8)
+  let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  var start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  guard start < lineEnd else {
+    return nil
+  }
+
+  if bytes[start] == 125 {
+    start = swiftMutagenSkipHorizontalWhitespace(bytes, from: start + 1)
+    if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "else ") {
+      start = swiftMutagenSkipHorizontalWhitespace(bytes, from: start + 5)
+    }
+  }
+
+  guard !swiftMutagenSourceLineLooksLikeOptionalBindingCondition(bytes: bytes, start: start),
+        !swiftMutagenTopLevelASCIIContains(bytes, start: start, end: lineEnd, pattern: ", let "),
+        !swiftMutagenTopLevelASCIIContains(bytes, start: start, end: lineEnd, pattern: ", var ") else {
+    return nil
+  }
+
+  let expressionRange: (start: Int, end: Int)?
+  if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "if ") {
+    expressionRange = swiftMutagenControlConditionRange(bytes: bytes, start: start + 3, end: lineEnd)
+  } else if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "if(") {
+    expressionRange = swiftMutagenParenthesizedControlConditionRange(bytes: bytes, open: start + 2, end: lineEnd)
+  } else if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "guard ") {
+    expressionRange = swiftMutagenGuardConditionRange(bytes: bytes, start: start + 6, end: lineEnd)
+  } else if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "guard(") {
+    expressionRange = swiftMutagenParenthesizedControlConditionRange(bytes: bytes, open: start + 5, end: lineEnd)
+  } else if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "while ") {
+    expressionRange = swiftMutagenControlConditionRange(bytes: bytes, start: start + 6, end: lineEnd)
+  } else if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "while(") {
+    expressionRange = swiftMutagenParenthesizedControlConditionRange(bytes: bytes, open: start + 5, end: lineEnd)
+  } else if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "for ")
+      || swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "for(") {
+    expressionRange = swiftMutagenForWhereConditionRange(bytes: bytes, start: start, end: lineEnd)
+  } else {
+    expressionRange = nil
+  }
+
+  guard var range = expressionRange else {
+    return nil
+  }
+  range.start = swiftMutagenSkipHorizontalWhitespace(bytes, from: range.start)
+  range.end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: range.end)
+  guard range.start < range.end else {
+    return nil
+  }
+  return (
+    range.start + 1,
+    String(decoding: bytes[range.start..<range.end], as: UTF8.self))
+}
+
+private func swiftMutagenControlConditionRange(
+  bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> (start: Int, end: Int)? {
+  let conditionEnd = swiftMutagenTopLevelByteIndex(bytes, start: start, end: end, byte: 123) ?? end
+  return (start, conditionEnd)
+}
+
+private func swiftMutagenGuardConditionRange(
+  bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> (start: Int, end: Int)? {
+  let elseIndex = swiftMutagenTopLevelASCIIIndex(bytes, start: start, end: end, pattern: " else ")
+  let braceIndex = swiftMutagenTopLevelByteIndex(bytes, start: start, end: end, byte: 123)
+  let conditionEnd = elseIndex ?? braceIndex ?? end
+  return (start, conditionEnd)
+}
+
+private func swiftMutagenForWhereConditionRange(
+  bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> (start: Int, end: Int)? {
+  guard let whereIndex = swiftMutagenTopLevelASCIIIndex(bytes, start: start, end: end, pattern: " where ") else {
+    return nil
+  }
+  let valueStart = whereIndex + 7
+  let valueEnd = swiftMutagenTopLevelByteIndex(bytes, start: valueStart, end: end, byte: 123) ?? end
+  return (valueStart, valueEnd)
+}
+
+private func swiftMutagenParenthesizedControlConditionRange(
+  bytes: [UInt8],
+  open: Int,
+  end: Int
+) -> (start: Int, end: Int)? {
+  guard open < end,
+        bytes[open] == 40,
+        let close = swiftMutagenBalancedExpressionEnd(
+          in: bytes,
+          openIndex: open,
+          close: 41,
+          lineEnd: end
+        ) else {
+    return nil
+  }
+  return (open + 1, close - 1)
+}
+
+private func swiftMutagenTopLevelASCIIContains(
+  _ bytes: [UInt8],
+  start: Int,
+  end: Int,
+  pattern: String
+) -> Bool {
+  swiftMutagenTopLevelASCIIIndex(bytes, start: start, end: end, pattern: pattern) != nil
+}
+
+private func swiftMutagenTopLevelASCIIIndex(
+  _ bytes: [UInt8],
+  start: Int,
+  end: Int,
+  pattern: String
+) -> Int? {
+  let patternBytes = Array(pattern.utf8)
+  guard !patternBytes.isEmpty,
+        start < end,
+        patternBytes.count <= end - start else {
+    return nil
+  }
+  return swiftMutagenFirstTopLevelIndex(bytes, start: start, end: end) { index in
+    guard index + patternBytes.count <= end else {
+      return false
+    }
+    for offset in 0..<patternBytes.count where bytes[index + offset] != patternBytes[offset] {
+      return false
+    }
+    return true
+  }
+}
+
+private func swiftMutagenTopLevelByteIndex(
+  _ bytes: [UInt8],
+  start: Int,
+  end: Int,
+  byte: UInt8
+) -> Int? {
+  swiftMutagenFirstTopLevelIndex(bytes, start: start, end: end) { index in
+    bytes[index] == byte
+  }
+}
+
+private func swiftMutagenFirstTopLevelIndex(
+  _ bytes: [UInt8],
+  start: Int,
+  end: Int,
+  matches: (Int) -> Bool
+) -> Int? {
+  var parenDepth = 0
+  var bracketDepth = 0
+  var braceDepth = 0
+  var quote: UInt8?
+  var escaped = false
+  var index = start
+  while index < end {
+    let byte = bytes[index]
+    if let activeQuote = quote {
+      if escaped {
+        escaped = false
+      } else if byte == 92 {
+        escaped = true
+      } else if byte == activeQuote {
+        quote = nil
+      }
+      index += 1
+      continue
+    }
+    if byte == 34 || byte == 39 {
+      quote = byte
+      index += 1
+      continue
+    }
+    if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 && matches(index) {
+      return index
+    }
+    switch byte {
+    case 40:
+      parenDepth += 1
+    case 41:
+      if parenDepth > 0 { parenDepth -= 1 }
+    case 91:
+      bracketDepth += 1
+    case 93:
+      if bracketDepth > 0 { bracketDepth -= 1 }
+    case 123:
+      braceDepth += 1
+    case 125:
+      if braceDepth > 0 { braceDepth -= 1 }
+    default:
+      break
+    }
+    index += 1
   }
   return nil
 }

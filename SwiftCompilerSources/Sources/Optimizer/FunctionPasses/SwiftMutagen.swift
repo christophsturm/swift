@@ -4396,6 +4396,14 @@ private func swiftMutagenFindValueExpressionSourceLocation(
   ) {
     return anchored
   }
+  if let anchored = swiftMutagenFindStandaloneValueExpressionSourceLocation(
+    path: path,
+    preferredLine: preferredLine,
+    mutation: mutation,
+    config: config
+  ) {
+    return anchored
+  }
   if let anchored = swiftMutagenFindUniqueExplicitReturnSourceLocation(
     path: path,
     preferredLine: preferredLine,
@@ -4413,6 +4421,25 @@ private func swiftMutagenFindValueExpressionSourceLocation(
     return anchored
   }
   return nil
+}
+
+private func swiftMutagenFindStandaloneValueExpressionSourceLocation(
+  path: String,
+  preferredLine: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard preferredLine > 0,
+        let sourceLine = swiftMutagenAbsoluteSourceLine(path: path, line: preferredLine),
+        let expression = swiftMutagenStandaloneValueExpression(sourceLine, mutation: mutation) else {
+    return nil
+  }
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    preferredLine,
+    expression.column,
+    expression.sourceOriginal,
+    expression.sourceMutated)
 }
 
 private func swiftMutagenFindLabeledValueExpressionSourceLocation(
@@ -4524,6 +4551,27 @@ private func swiftMutagenStandaloneLabeledValueExpression(
   let sourceOriginal = String(decoding: bytes[valueStart..<valueEnd], as: UTF8.self)
   return (
     valueStart + 1,
+    sourceOriginal,
+    swiftMutagenImplicitReturnSourceMutation(for: mutation))
+}
+
+private func swiftMutagenStandaloneValueExpression(
+  _ line: String,
+  mutation: SwiftMutagenMutation
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let bytes = Array(line.utf8)
+  let lineStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard lineStart < lineEnd,
+        swiftMutagenLineLooksLikeImplicitReturnExpression(bytes: bytes, start: lineStart, end: lineEnd),
+        !swiftMutagenLineLooksLikeImplicitReturnContinuation(bytes: bytes, start: lineStart),
+        swiftMutagenReturnValueIsEligible(bytes: bytes, start: lineStart, mutation: mutation) else {
+    return nil
+  }
+
+  let sourceOriginal = String(decoding: bytes[lineStart..<lineEnd], as: UTF8.self)
+  return (
+    lineStart + 1,
     sourceOriginal,
     swiftMutagenImplicitReturnSourceMutation(for: mutation))
 }
@@ -5738,6 +5786,32 @@ private func swiftMutagenSourceLine(
   }
   guard let matchedPath = swiftMutagenIncludedSourcePath(path, config: config),
         let text = swiftMutagenRead(matchedPath) else {
+    return nil
+  }
+
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      if currentLine == line {
+        return String(text[lineStart..<index])
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if currentLine == line {
+    return String(text[lineStart..<text.endIndex])
+  }
+  return nil
+}
+
+private func swiftMutagenAbsoluteSourceLine(path: String, line: Int) -> String? {
+  guard line > 0,
+        let text = swiftMutagenRead(path) else {
     return nil
   }
 

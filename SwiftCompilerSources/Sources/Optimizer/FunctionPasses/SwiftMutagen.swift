@@ -489,13 +489,13 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
     return
   }
 
-  if swiftMutagenShouldExclude(function: function, config: config) {
+  if let exclusionReason = swiftMutagenExclusionReason(function: function, config: config) {
     if shouldLogFunction {
       swiftMutagenLogEvent(
         "functionSkip",
         config: config,
         fields: [
-          ("reason", "excludedPath"),
+          ("reason", exclusionReason),
           ("module", moduleName),
           ("function", function.name.string)
         ])
@@ -3625,20 +3625,20 @@ private func swiftMutagenIsASCIILetterNumberOrUnderscore(_ byte: UInt8) -> Bool 
   return byte == 95
 }
 
-private func swiftMutagenShouldExclude(
+private func swiftMutagenExclusionReason(
   function: Function,
   config: SwiftMutagenConfig
-) -> Bool {
+) -> String? {
   if swiftMutagenIsGeneratedInvalidLocationFunction(function) {
-    return true
+    return "generatedInvalidLocation"
   }
   let location = function.location.description
   for fragment in config.excludePathFragments {
     if location.contains(fragment) {
-      return true
+      return "excludedPath"
     }
   }
-  return false
+  return nil
 }
 
 private func swiftMutagenIsGeneratedInvalidLocationFunction(_ function: Function) -> Bool {

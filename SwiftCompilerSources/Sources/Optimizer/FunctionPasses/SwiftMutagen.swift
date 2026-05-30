@@ -5515,6 +5515,9 @@ private func swiftMutagenExclusionReason(
   if swiftMutagenIsGeneratedInvalidLocationFunction(function) {
     return "generatedInvalidLocation"
   }
+  if swiftMutagenIsGeneratedSpecializationFunctionName(function.name.string) {
+    return "generatedSpecialization"
+  }
   let location = function.location.description
   for fragment in config.excludePathFragments {
     if location.contains(fragment) {
@@ -5534,6 +5537,10 @@ private func swiftMutagenIsGeneratedInvalidLocationFunction(_ function: Function
   return name.contains("__derived_")
     || name.contains("CodingKeys")
     || name.hasSuffix("TW")
+}
+
+private func swiftMutagenIsGeneratedSpecializationFunctionName(_ name: String) -> Bool {
+  name.contains("Tf4")
 }
 
 private func swiftMutagenFindSourceOperator(

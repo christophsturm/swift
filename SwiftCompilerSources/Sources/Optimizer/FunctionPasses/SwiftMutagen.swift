@@ -4384,6 +4384,147 @@ private func swiftMutagenAssignmentValueSourceLocation(
     match.sourceMutated)
 }
 
+private func swiftMutagenFindOrdinalAssignmentValueSourceLocation(
+  for store: StoreInst,
+  path: String,
+  preferredLine: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard let ordinal = swiftMutagenAssignmentValueOrdinalAndCount(
+    for: store,
+    mutation: mutation,
+    config: config
+  ), ordinal.count <= 200 else {
+    return nil
+  }
+  return swiftMutagenFindOrdinalAssignmentValueSourceLocation(
+    path: path,
+    preferredLine: preferredLine,
+    ordinal: ordinal.ordinal,
+    expectedCount: ordinal.count,
+    mutation: mutation,
+    config: config
+  )
+}
+
+private func swiftMutagenAssignmentValueOrdinalAndCount(
+  for store: StoreInst,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (ordinal: Int, count: Int)? {
+  var ordinal = 0
+  var count = 0
+  var foundStore = false
+
+  for block in store.parentFunction.blocks {
+    for instruction in block.instructions {
+      guard let candidate = instruction as? StoreInst,
+            swiftMutagenAssignmentStoreIsEligible(candidate) else {
+        continue
+      }
+      let mutations = swiftMutagenAssignmentValueMutations(for: candidate, config: config)
+      guard mutations.contains(where: { $0.mutatedBuiltinName == mutation.mutatedBuiltinName }) else {
+        continue
+      }
+      count += 1
+      if candidate === store {
+        ordinal = count
+        foundStore = true
+      }
+    }
+  }
+
+  guard foundStore else {
+    return nil
+  }
+  return (ordinal, count)
+}
+
+private func swiftMutagenFindOrdinalAssignmentValueSourceLocation(
+  path: String,
+  preferredLine: Int,
+  ordinal: Int,
+  expectedCount: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard preferredLine > 0,
+        ordinal > 0,
+        ordinal <= expectedCount,
+        expectedCount > 1,
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+
+  var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  var braceDepth = 0
+  var sawOpeningBrace = false
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard line >= preferredLine,
+          matches.count <= expectedCount,
+          let expression = swiftMutagenAssignmentValueExpression(
+            lineText,
+            mutation: mutation,
+            requiresDirectValueExpression: true
+          ) else {
+      return
+    }
+    matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
+  }
+
+  func updateBraceDepth(_ lineText: String) {
+    for byte in lineText.utf8 {
+      if byte == 123 {
+        braceDepth += 1
+        sawOpeningBrace = true
+      } else if byte == 125 {
+        braceDepth -= 1
+      }
+    }
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      let lineText = String(text[lineStart..<index])
+      if currentLine >= preferredLine {
+        if sawOpeningBrace && braceDepth > 0 {
+          inspectLine(lineText, line: currentLine)
+          if matches.count > expectedCount {
+            break
+          }
+        }
+        updateBraceDepth(lineText)
+        if sawOpeningBrace && braceDepth <= 0 {
+          break
+        }
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine >= preferredLine && sawOpeningBrace && braceDepth > 0 {
+    inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
+  }
+
+  guard matches.count == expectedCount else {
+    return nil
+  }
+  let match = matches[ordinal - 1]
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    match.sourceOriginal,
+    match.sourceMutated)
+}
+
 private func swiftMutagenValueApplySourceLocation(
   for apply: ApplyInst,
   mutation: SwiftMutagenMutation,
@@ -4429,29 +4570,41 @@ private func swiftMutagenAssignmentValueSourceLocation(
   config: SwiftMutagenConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   let targetNames = swiftMutagenAssignmentDestinationNames(for: store)
+  let functionSourceLocation = swiftMutagenFunctionSourceLocation(
+    for: store.parentFunction,
+    config: config
+  )
   if let fileNameAndPosition = store.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
-      return swiftMutagenFindAssignmentValueSourceLocation(
+      if let anchored = swiftMutagenFindAssignmentValueSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config,
         targetNames: targetNames,
         requiresDirectValueExpression: true
-      )
+      ) {
+        return anchored
+      }
+      if let functionSourceLocation,
+         functionSourceLocation.path == matchedPath,
+         let anchored = swiftMutagenFindOrdinalAssignmentValueSourceLocation(
+           for: store,
+           path: matchedPath,
+           preferredLine: functionSourceLocation.line,
+           mutation: mutation,
+           config: config
+         ) {
+        return anchored
+      }
     }
   }
 
-  let location = store.parentFunction.location.description
-  for path in swiftMutagenSwiftSourcePaths(config: config) {
-    guard location.contains(path),
-          let line = swiftMutagenPreferredLine(in: location, path: path) else {
-      continue
-    }
+  if let functionSourceLocation {
     if let anchored = swiftMutagenFindAssignmentValueSourceLocation(
-      path: path,
-      preferredLine: line,
+      path: functionSourceLocation.path,
+      preferredLine: functionSourceLocation.line,
       mutation: mutation,
       config: config,
       targetNames: targetNames,
@@ -4459,6 +4612,30 @@ private func swiftMutagenAssignmentValueSourceLocation(
     ) {
       return anchored
     }
+    if let anchored = swiftMutagenFindOrdinalAssignmentValueSourceLocation(
+      for: store,
+      path: functionSourceLocation.path,
+      preferredLine: functionSourceLocation.line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
+  }
+  return nil
+}
+
+private func swiftMutagenFunctionSourceLocation(
+  for function: Function,
+  config: SwiftMutagenConfig
+) -> (path: String, line: Int)? {
+  let location = function.location.description
+  for path in swiftMutagenSwiftSourcePaths(config: config) {
+    guard location.contains(path),
+          let line = swiftMutagenPreferredLine(in: location, path: path) else {
+      continue
+    }
+    return (path, line)
   }
   return nil
 }

@@ -4388,6 +4388,14 @@ private func swiftMutagenFindValueExpressionSourceLocation(
   ) {
     return anchored
   }
+  if let anchored = swiftMutagenFindLabeledValueExpressionSourceLocation(
+    path: path,
+    preferredLine: preferredLine,
+    mutation: mutation,
+    config: config
+  ) {
+    return anchored
+  }
   if let anchored = swiftMutagenFindUniqueExplicitReturnSourceLocation(
     path: path,
     preferredLine: preferredLine,
@@ -4405,6 +4413,119 @@ private func swiftMutagenFindValueExpressionSourceLocation(
     return anchored
   }
   return nil
+}
+
+private func swiftMutagenFindLabeledValueExpressionSourceLocation(
+  path: String,
+  preferredLine: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard preferredLine > 0,
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+
+  if let exact = swiftMutagenLabeledValueExpressionSourceLocation(
+    in: text,
+    path: path,
+    lineRange: preferredLine...preferredLine,
+    mutation: mutation,
+    config: config
+  ) {
+    return exact
+  }
+
+  let firstLine = preferredLine > 2 ? preferredLine - 2 : 1
+  return swiftMutagenLabeledValueExpressionSourceLocation(
+    in: text,
+    path: path,
+    lineRange: firstLine...(preferredLine + 24),
+    mutation: mutation,
+    config: config
+  )
+}
+
+private func swiftMutagenLabeledValueExpressionSourceLocation(
+  in text: String,
+  path: String,
+  lineRange: ClosedRange<Int>,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard lineRange.contains(line),
+          matches.count < 2,
+          let expression = swiftMutagenStandaloneLabeledValueExpression(lineText, mutation: mutation) else {
+      return
+    }
+    matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      inspectLine(String(text[lineStart..<index]), line: currentLine)
+      if currentLine >= lineRange.upperBound || matches.count >= 2 {
+        break
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine <= lineRange.upperBound {
+    inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
+  }
+
+  guard matches.count == 1,
+        let match = matches.first else {
+    return nil
+  }
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    match.sourceOriginal,
+    match.sourceMutated)
+}
+
+private func swiftMutagenStandaloneLabeledValueExpression(
+  _ line: String,
+  mutation: SwiftMutagenMutation
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let bytes = Array(line.utf8)
+  let lineStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard lineStart < lineEnd,
+        !swiftMutagenLineStartsWithAssignmentReturnBlockedPrefix(bytes: bytes, start: lineStart),
+        swiftMutagenSourceLineLooksLikeArgumentLabel(bytes: bytes, start: lineStart, end: lineEnd),
+        let colon = swiftMutagenFirstLabeledArgumentSeparator(bytes: bytes, start: lineStart, end: lineEnd) else {
+    return nil
+  }
+
+  let valueStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: colon + 1)
+  var valueEnd = lineEnd
+  if valueEnd > valueStart && bytes[valueEnd - 1] == 44 {
+    valueEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: valueEnd - 1)
+  }
+  guard valueStart < valueEnd,
+        swiftMutagenLabeledArgumentRHSLooksLikeValueExpression(bytes: bytes, start: valueStart, end: valueEnd),
+        swiftMutagenLabeledArgumentRHSLooksLikeCallExpression(bytes: bytes, start: valueStart, end: valueEnd),
+        swiftMutagenReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
+    return nil
+  }
+
+  let sourceOriginal = String(decoding: bytes[valueStart..<valueEnd], as: UTF8.self)
+  return (
+    valueStart + 1,
+    sourceOriginal,
+    swiftMutagenImplicitReturnSourceMutation(for: mutation))
 }
 
 private func swiftMutagenAssignmentValueExpression(
@@ -4536,6 +4657,26 @@ private func swiftMutagenLabeledArgumentRHSLooksLikeValueExpression(
   if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "some ")
       || swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "any ") {
     return false
+  }
+  return true
+}
+
+private func swiftMutagenLabeledArgumentRHSLooksLikeCallExpression(
+  bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> Bool {
+  guard start < end,
+        swiftMutagenASCIIContains(bytes, start: start, end: end, pattern: "(") else {
+    return false
+  }
+  for index in start..<end {
+    switch bytes[index] {
+    case 123, 125, 59:
+      return false
+    default:
+      continue
+    }
   }
   return true
 }

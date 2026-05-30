@@ -435,6 +435,12 @@ private struct SwiftMutagenVoidCallDiscoveryResult {
   let stats: SwiftMutagenVoidCallDiscoveryStats
 }
 
+private enum SwiftMutagenVoidCallSourceLocationResult {
+  case found(file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)
+  case nonStatement
+  case missing
+}
+
 private var swiftMutagenNextOrdinal = 1
 private var swiftMutagenHasTruncatedDiscoveryOutput = false
 
@@ -829,16 +835,19 @@ private func swiftMutagenDiscoverVoidCallSites(
         continue
       }
       stats.mutationEligibleApplyInstructions += 1
-      guard let location = swiftMutagenInstructionSourceLocation(
+      let location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)
+      switch swiftMutagenVoidCallSourceLocation(
         for: apply,
         mutation: mutation,
         config: config
-      ) else {
-        stats.sourceLocationMisses += 1
-        continue
-      }
-      guard swiftMutagenVoidCallSourceLooksLikeStatement(file: location.file, line: location.line, config: config) else {
+      ) {
+      case .found(let file, let line, let column, let sourceOriginal, let sourceMutated):
+        location = (file, line, column, sourceOriginal, sourceMutated)
+      case .nonStatement:
         stats.nonStatementSourceLocations += 1
+        continue
+      case .missing:
+        stats.sourceLocationMisses += 1
         continue
       }
 
@@ -3218,6 +3227,143 @@ private func swiftMutagenInstructionSourceLocation(
       mutation.sourceMutated)
   }
   return nil
+}
+
+private func swiftMutagenVoidCallSourceLocation(
+  for apply: ApplyInst,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> SwiftMutagenVoidCallSourceLocationResult {
+  if let fileNameAndPosition = apply.location.fileNameAndPosition {
+    let path = fileNameAndPosition.path.string
+    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
+      let candidate = (
+        swiftMutagenTrimPackageRoot(matchedPath, config: config),
+        fileNameAndPosition.line,
+        fileNameAndPosition.column,
+        mutation.sourceOriginal,
+        mutation.sourceMutated)
+      if swiftMutagenVoidCallSourceLooksLikeStatement(file: candidate.0, line: candidate.1, config: config) {
+        return .found(
+          file: candidate.0,
+          line: candidate.1,
+          column: candidate.2,
+          sourceOriginal: candidate.3,
+          sourceMutated: candidate.4
+        )
+      }
+      if let anchored = swiftMutagenFindUniqueVoidCallSourceLocation(
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
+      ) {
+        return .found(
+          file: anchored.file,
+          line: anchored.line,
+          column: anchored.column,
+          sourceOriginal: anchored.sourceOriginal,
+          sourceMutated: anchored.sourceMutated
+        )
+      }
+    }
+  }
+
+  if let fallback = swiftMutagenInstructionSourceLocation(
+    for: apply,
+    mutation: mutation,
+    config: config
+  ) {
+    if swiftMutagenVoidCallSourceLooksLikeStatement(file: fallback.file, line: fallback.line, config: config) {
+      return .found(
+        file: fallback.file,
+        line: fallback.line,
+        column: fallback.column,
+        sourceOriginal: fallback.sourceOriginal,
+        sourceMutated: fallback.sourceMutated
+      )
+    }
+    let fallbackPath = fallback.file.hasPrefix("/") || config.packageRoot.isEmpty
+      ? fallback.file
+      : config.packageRoot + "/" + fallback.file
+    if let anchored = swiftMutagenFindUniqueVoidCallSourceLocation(
+      path: fallbackPath,
+      preferredLine: fallback.line,
+      mutation: mutation,
+      config: config
+    ) {
+      return .found(
+        file: anchored.file,
+        line: anchored.line,
+        column: anchored.column,
+        sourceOriginal: anchored.sourceOriginal,
+        sourceMutated: anchored.sourceMutated
+      )
+    }
+    return .nonStatement
+  }
+
+  return .missing
+}
+
+private func swiftMutagenFindUniqueVoidCallSourceLocation(
+  path: String,
+  preferredLine: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard preferredLine > 0,
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+
+  let firstLine = preferredLine > 8 ? preferredLine - 8 : 1
+  let lastLine = preferredLine + 40
+  var matches: [(line: Int, column: Int)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard line >= firstLine,
+          line <= lastLine,
+          matches.count < 2,
+          swiftMutagenSourceLineLooksLikeVoidCallStatement(lineText) else {
+      return
+    }
+    let bytes = Array(lineText.utf8)
+    let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+    matches.append((line, start + 1))
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      let lineText = String(text[lineStart..<index])
+      inspectLine(lineText, line: currentLine)
+      if currentLine >= lastLine || matches.count >= 2 {
+        break
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine <= lastLine {
+    let lineText = String(text[lineStart..<text.endIndex])
+    inspectLine(lineText, line: currentLine)
+  }
+
+  guard matches.count == 1,
+        let match = matches.first else {
+    return nil
+  }
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    mutation.sourceOriginal,
+    mutation.sourceMutated)
 }
 
 private func swiftMutagenBranchSourceLocation(

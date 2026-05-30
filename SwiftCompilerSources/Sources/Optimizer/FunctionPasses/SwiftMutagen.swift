@@ -6168,11 +6168,28 @@ private func swiftMutagenSourceLocation(
       "")
   }
 
-  return swiftMutagenFindSourceOperator(
+  if let located = swiftMutagenFindSourceOperator(
     moduleName: moduleName,
     functionLocation: function.location.description,
     mutation: mutation,
-    config: config)
+    config: config) {
+    return located
+  }
+
+  if let comparison = instruction as? BuiltinInst,
+     swiftMutagenIsComparisonBuiltin(comparison),
+     let ordinal = swiftMutagenComparisonOrdinalAndCount(for: comparison, in: function),
+     ordinal.count <= 12 {
+    return swiftMutagenFindOrdinalSourceOperator(
+      moduleName: moduleName,
+      functionLocation: function.location.description,
+      ordinal: ordinal.ordinal,
+      expectedCount: ordinal.count,
+      mutation: mutation,
+      config: config)
+  }
+
+  return nil
 }
 
 private func swiftMutagenGenericConditionSourceIsExplicit(
@@ -6681,6 +6698,186 @@ private func swiftMutagenFindUniqueSourceOperatorInFunctionBody(
     match.sourceMutated)
 }
 
+private func swiftMutagenComparisonOrdinalAndCount(
+  for comparison: BuiltinInst,
+  in function: Function
+) -> (ordinal: Int, count: Int)? {
+  guard let targetID = swiftMutagenComparisonBuiltinIDName(comparison) else {
+    return nil
+  }
+
+  var ordinal = 0
+  var count = 0
+  for block in function.blocks {
+    for instruction in block.instructions {
+      guard let candidate = instruction as? BuiltinInst,
+            swiftMutagenComparisonBuiltinIDName(candidate) == targetID else {
+        continue
+      }
+      count += 1
+      if candidate === comparison {
+        ordinal = count
+      }
+    }
+  }
+  guard ordinal > 0 else {
+    return nil
+  }
+  return (ordinal, count)
+}
+
+private func swiftMutagenFindOrdinalSourceOperator(
+  moduleName: String,
+  functionLocation: String,
+  ordinal: Int,
+  expectedCount: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard ordinal > 0, expectedCount > 0 else {
+    return nil
+  }
+
+  let displayRules = swiftMutagenSourceMutationDisplayRules(for: mutation, config: config)
+  let preferredPrefix = config.packageRoot + "/Sources/" + moduleName + "/"
+  let locatedSourcePaths = swiftMutagenSwiftSourcePaths(config: config).compactMap { path
+    -> (path: String, preferredLine: Int)? in
+    guard functionLocation.contains(path),
+          let preferredLine = swiftMutagenPreferredLine(in: functionLocation, path: path) else {
+      return nil
+    }
+    return (path, preferredLine)
+  }.sorted { lhs, rhs in
+    lhs.path < rhs.path
+  }
+  guard !locatedSourcePaths.isEmpty else {
+    return nil
+  }
+
+  var fallback: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
+  for (path, preferredLine) in locatedSourcePaths {
+    guard let result = swiftMutagenFindOrdinalSourceOperatorInFunctionBody(
+      path: path,
+      preferredLine: preferredLine,
+      displayRules: displayRules,
+      ordinal: ordinal,
+      expectedCount: expectedCount,
+      config: config
+    ) else {
+      continue
+    }
+    if path.hasPrefix(preferredPrefix) {
+      return result
+    }
+    if fallback == nil {
+      fallback = result
+    }
+  }
+  return fallback
+}
+
+private func swiftMutagenFindOrdinalSourceOperatorInFunctionBody(
+  path: String,
+  preferredLine: Int,
+  displayRules: [SwiftMutagenSourceMutationDisplayRule],
+  ordinal: Int,
+  expectedCount: Int,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard preferredLine > 0,
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+
+  var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  var braceDepth = 0
+  var sawOpeningBrace = false
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard line >= preferredLine,
+          matches.count <= expectedCount else {
+      return
+    }
+    for rule in displayRules {
+      let sourceMutatedOverride = rule.sourceMutatedOverride
+      for position in swiftMutagenFindOperatorMatches(
+        rule.sourceOriginal,
+        mutatedOperator: rule.sourceMutated,
+        in: lineText
+      ) {
+        let sourceMutated = sourceMutatedOverride.isEmpty
+          ? position.sourceMutated
+          : sourceMutatedOverride
+        let duplicate = matches.contains {
+          $0.line == line
+            && $0.column == position.column
+            && $0.sourceOriginal == position.sourceOriginal
+            && $0.sourceMutated == sourceMutated
+        }
+        if !duplicate {
+          matches.append((line, position.column, position.sourceOriginal, sourceMutated))
+        }
+      }
+    }
+    matches.sort {
+      if $0.line != $1.line {
+        return $0.line < $1.line
+      }
+      return $0.column < $1.column
+    }
+  }
+
+  func updateBraceDepth(_ lineText: String) {
+    for byte in lineText.utf8 {
+      if byte == 123 {
+        braceDepth += 1
+        sawOpeningBrace = true
+      } else if byte == 125 {
+        braceDepth -= 1
+      }
+    }
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      let lineText = String(text[lineStart..<index])
+      if currentLine >= preferredLine {
+        inspectLine(lineText, line: currentLine)
+        updateBraceDepth(lineText)
+        if sawOpeningBrace && braceDepth <= 0 {
+          break
+        }
+        if currentLine >= preferredLine + 300 {
+          break
+        }
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine >= preferredLine {
+    let lineText = String(text[lineStart..<text.endIndex])
+    inspectLine(lineText, line: currentLine)
+  }
+
+  guard matches.count == expectedCount,
+        ordinal <= matches.count else {
+    return nil
+  }
+  let match = matches[ordinal - 1]
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    match.sourceOriginal,
+    match.sourceMutated)
+}
+
 private func swiftMutagenSourceMutationDisplayRules(
   for mutation: SwiftMutagenMutation,
   config: SwiftMutagenConfig
@@ -6783,6 +6980,46 @@ private func swiftMutagenFindOperator(
     index += 1
   }
   return best
+}
+
+private func swiftMutagenFindOperatorMatches(
+  _ op: String,
+  mutatedOperator: String,
+  in text: String
+) -> [(column: Int, sourceOriginal: String, sourceMutated: String)] {
+  let bytes = Array(text.utf8)
+  let opBytes = Array(op.utf8)
+  guard !opBytes.isEmpty,
+        opBytes.count <= bytes.count else {
+    return []
+  }
+
+  var matches: [(column: Int, sourceOriginal: String, sourceMutated: String)] = []
+  var column = 1
+  var index = 0
+  while index <= bytes.count - opBytes.count {
+    var matched = true
+    for opIndex in 0..<opBytes.count where bytes[index + opIndex] != opBytes[opIndex] {
+      matched = false
+      break
+    }
+    if matched,
+       swiftMutagenIsSourceComparisonOperator(
+        bytes: bytes,
+        operatorStart: index,
+        operatorEnd: index + opBytes.count
+       ) {
+      let expression = swiftMutagenSourceExpression(
+        in: bytes,
+        operatorStart: index,
+        operatorEnd: index + opBytes.count,
+        mutatedOperator: mutatedOperator)
+      matches.append((column, expression.original, expression.mutated))
+    }
+    column += 1
+    index += 1
+  }
+  return matches
 }
 
 private func swiftMutagenPreferredLine(in location: String, path: String) -> Int? {

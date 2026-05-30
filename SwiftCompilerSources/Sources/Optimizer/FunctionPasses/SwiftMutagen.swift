@@ -4442,7 +4442,7 @@ private func swiftMutagenFindCalleeOrdinalValueExpressionSourceLocation(
   mutation: SwiftMutagenMutation,
   config: SwiftMutagenConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  let identifiers = swiftMutagenSourceCalleeIdentifiers(for: apply)
+  let identifiers = swiftMutagenSourceExpressionIdentifiers(for: apply)
   guard !identifiers.isEmpty,
         let ordinal = swiftMutagenValueApplyOrdinal(for: apply, matchingAnyOf: identifiers, config: config),
         let text = swiftMutagenRead(path) else {
@@ -4530,8 +4530,12 @@ private func swiftMutagenCalleeExpressionSourceCandidates(
   func inspectLine(_ lineText: String, line: Int) {
     guard line >= preferredLine,
           line <= lastLine,
-          swiftMutagenSourceLineContainsCallLikeIdentifier(lineText, identifiers: identifiers),
-          let expression = swiftMutagenValueExpressionOnLine(lineText, mutation: mutation) else {
+          swiftMutagenSourceLineContainsExpressionIdentifier(lineText, identifiers: identifiers),
+          let expression = swiftMutagenValueExpressionOnLine(
+            lineText,
+            identifiers: identifiers,
+            mutation: mutation
+          ) else {
       return
     }
     candidates.append((
@@ -4563,6 +4567,7 @@ private func swiftMutagenCalleeExpressionSourceCandidates(
 
 private func swiftMutagenValueExpressionOnLine(
   _ line: String,
+  identifiers: [String],
   mutation: SwiftMutagenMutation
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
   if let expression = swiftMutagenAssignmentValueExpression(line, mutation: mutation) {
@@ -4574,7 +4579,14 @@ private func swiftMutagenValueExpressionOnLine(
   if let expression = swiftMutagenStandaloneValueExpression(line, mutation: mutation) {
     return expression
   }
+  if let expression = swiftMutagenIdentifierValueExpression(line, identifiers: identifiers, mutation: mutation) {
+    return expression
+  }
   return nil
+}
+
+private func swiftMutagenSourceExpressionIdentifiers(for apply: ApplyInst) -> [String] {
+  swiftMutagenSourceCalleeIdentifiers(for: apply).filter(swiftMutagenIdentifierLooksLikeSourceExpression)
 }
 
 private func swiftMutagenSourceCalleeIdentifiers(for apply: ApplyInst) -> [String] {
@@ -4616,6 +4628,13 @@ private func swiftMutagenMangledIdentifiers(in name: String) -> [String] {
   return identifiers
 }
 
+private func swiftMutagenIdentifierLooksLikeSourceExpression(_ identifier: String) -> Bool {
+  guard let first = identifier.utf8.first else {
+    return false
+  }
+  return (first >= 97 && first <= 122) || first == 95
+}
+
 private func swiftMutagenBytesAreIdentifier(_ bytes: [UInt8], start: Int, end: Int) -> Bool {
   guard start < end else {
     return false
@@ -4628,14 +4647,14 @@ private func swiftMutagenBytesAreIdentifier(_ bytes: [UInt8], start: Int, end: I
   return true
 }
 
-private func swiftMutagenSourceLineContainsCallLikeIdentifier(_ line: String, identifiers: [String]) -> Bool {
+private func swiftMutagenSourceLineContainsExpressionIdentifier(_ line: String, identifiers: [String]) -> Bool {
   let bytes = Array(line.utf8)
   let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
   let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard start < end else {
     return false
   }
-  for identifier in identifiers where swiftMutagenSourceLineContainsCallLikeIdentifier(
+  for identifier in identifiers where swiftMutagenSourceLineContainsExpressionIdentifier(
     bytes,
     start: start,
     end: end,
@@ -4646,7 +4665,7 @@ private func swiftMutagenSourceLineContainsCallLikeIdentifier(_ line: String, id
   return false
 }
 
-private func swiftMutagenSourceLineContainsCallLikeIdentifier(
+private func swiftMutagenSourceLineContainsExpressionIdentifier(
   _ bytes: [UInt8],
   start: Int,
   end: Int,
@@ -4678,11 +4697,166 @@ private func swiftMutagenSourceLineContainsCallLikeIdentifier(
         if callStart < end && bytes[callStart] == 40 {
           return true
         }
+        if index > start && bytes[index - 1] == 46 {
+          return true
+        }
       }
     }
     index += 1
   }
   return false
+}
+
+private func swiftMutagenIdentifierValueExpression(
+  _ line: String,
+  identifiers: [String],
+  mutation: SwiftMutagenMutation
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let bytes = Array(line.utf8)
+  let lineStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard lineStart < lineEnd else {
+    return nil
+  }
+
+  for identifier in identifiers {
+    guard let tokenRange = swiftMutagenFindSourceIdentifier(
+      identifier,
+      in: bytes,
+      start: lineStart,
+      end: lineEnd
+    ),
+    let expressionRange = swiftMutagenSourceExpressionRange(
+      around: tokenRange,
+      in: bytes,
+      lineEnd: lineEnd
+    ),
+    swiftMutagenReturnValueIsEligible(bytes: bytes, start: expressionRange.start, mutation: mutation) else {
+      continue
+    }
+    let sourceOriginal = String(decoding: bytes[expressionRange.start..<expressionRange.end], as: UTF8.self)
+    return (
+      expressionRange.start + 1,
+      sourceOriginal,
+      swiftMutagenImplicitReturnSourceMutation(for: mutation))
+  }
+  return nil
+}
+
+private func swiftMutagenFindSourceIdentifier(
+  _ identifier: String,
+  in bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> (start: Int, end: Int)? {
+  let token = Array(identifier.utf8)
+  guard !token.isEmpty,
+        token.count <= end - start else {
+    return nil
+  }
+
+  var index = start
+  while index <= end - token.count {
+    var matched = true
+    for offset in 0..<token.count where bytes[index + offset] != token[offset] {
+      matched = false
+      break
+    }
+    if matched {
+      let before = index > start ? bytes[index - 1] : 0
+      let tokenEnd = index + token.count
+      let after = tokenEnd < end ? bytes[tokenEnd] : 0
+      if !swiftMutagenIsASCIILetterNumberOrUnderscore(before)
+          && !swiftMutagenIsASCIILetterNumberOrUnderscore(after) {
+        return (index, tokenEnd)
+      }
+    }
+    index += 1
+  }
+  return nil
+}
+
+private func swiftMutagenSourceExpressionRange(
+  around tokenRange: (start: Int, end: Int),
+  in bytes: [UInt8],
+  lineEnd: Int
+) -> (start: Int, end: Int)? {
+  var expressionStart = tokenRange.start
+  while expressionStart > 0 && swiftMutagenIsSourceExpressionPrefixByte(bytes[expressionStart - 1]) {
+    expressionStart -= 1
+  }
+
+  let suffixStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: tokenRange.end)
+  if suffixStart < lineEnd && bytes[suffixStart] == 40 {
+    guard let callEnd = swiftMutagenBalancedExpressionEnd(
+      in: bytes,
+      openIndex: suffixStart,
+      close: 41,
+      lineEnd: lineEnd
+    ) else {
+      return nil
+    }
+    return (expressionStart, callEnd)
+  }
+  if suffixStart < lineEnd && bytes[suffixStart] == 123 {
+    guard let closureEnd = swiftMutagenBalancedExpressionEnd(
+      in: bytes,
+      openIndex: suffixStart,
+      close: 125,
+      lineEnd: lineEnd
+    ) else {
+      return nil
+    }
+    return (expressionStart, closureEnd)
+  }
+
+  return (expressionStart, tokenRange.end)
+}
+
+private func swiftMutagenIsSourceExpressionPrefixByte(_ byte: UInt8) -> Bool {
+  swiftMutagenIsASCIILetterNumberOrUnderscore(byte) || byte == 46 || byte == 63 || byte == 33
+}
+
+private func swiftMutagenBalancedExpressionEnd(
+  in bytes: [UInt8],
+  openIndex: Int,
+  close: UInt8,
+  lineEnd: Int
+) -> Int? {
+  let open = bytes[openIndex]
+  var depth = 0
+  var index = openIndex
+  var quote: UInt8?
+  var escaped = false
+  while index < lineEnd {
+    let byte = bytes[index]
+    if let activeQuote = quote {
+      if escaped {
+        escaped = false
+      } else if byte == 92 {
+        escaped = true
+      } else if byte == activeQuote {
+        quote = nil
+      }
+      index += 1
+      continue
+    }
+    if byte == 34 || byte == 39 {
+      quote = byte
+      index += 1
+      continue
+    }
+    if byte == open {
+      depth += 1
+    } else if byte == close {
+      depth -= 1
+      if depth == 0 {
+        return index + 1
+      }
+    }
+    index += 1
+  }
+  return nil
 }
 
 private func swiftMutagenFindLabeledValueExpressionSourceLocation(

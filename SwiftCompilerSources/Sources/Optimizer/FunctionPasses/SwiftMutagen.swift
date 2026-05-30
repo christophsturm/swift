@@ -4175,12 +4175,21 @@ private func swiftMutagenScalarValueSourceLocation(
   if let fileNameAndPosition = value.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
-      return swiftMutagenFindAssignmentValueSourceLocation(
+      if let assignment = swiftMutagenFindAssignmentValueSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config,
         requiresDirectValueExpression: true
+      ) {
+        return assignment
+      }
+      return swiftMutagenFindReturnedScalarValueSourceLocation(
+        for: value,
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
       )
     }
   }
@@ -4200,8 +4209,86 @@ private func swiftMutagenScalarValueSourceLocation(
     ) {
       return anchored
     }
+    if let anchored = swiftMutagenFindReturnedScalarValueSourceLocation(
+      for: value,
+      path: path,
+      preferredLine: line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
   }
   return nil
+}
+
+private func swiftMutagenFindReturnedScalarValueSourceLocation(
+  for value: StructInst,
+  path: String,
+  preferredLine: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard swiftMutagenScalarValueIsDirectReturnBranchValue(value),
+        let ordinal = swiftMutagenReturnedScalarValueOrdinalAndCount(
+          for: value,
+          mutation: mutation,
+          config: config
+        ), ordinal.count <= 20 else {
+    return nil
+  }
+  return swiftMutagenFindOrdinalExplicitReturnSourceLocation(
+    path: path,
+    preferredLine: preferredLine,
+    ordinal: ordinal.ordinal,
+    expectedCount: ordinal.count,
+    mutation: mutation,
+    config: config
+  )
+}
+
+private func swiftMutagenScalarValueIsDirectReturnBranchValue(_ value: StructInst) -> Bool {
+  for use in value.uses.ignoreDebugUses {
+    guard let branch = use.instruction as? BranchInst,
+          branch.targetBlock.terminator is ReturnInst else {
+      continue
+    }
+    return true
+  }
+  return false
+}
+
+private func swiftMutagenReturnedScalarValueOrdinalAndCount(
+  for value: StructInst,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (ordinal: Int, count: Int)? {
+  var ordinal = 0
+  var count = 0
+  var foundValue = false
+
+  for block in value.parentFunction.blocks {
+    for instruction in block.instructions {
+      guard let candidate = instruction as? StructInst,
+            swiftMutagenScalarValueIsDirectReturnBranchValue(candidate) else {
+        continue
+      }
+      let mutations = swiftMutagenScalarValueMutations(for: candidate, config: config)
+      guard mutations.contains(where: { $0.mutatedBuiltinName == mutation.mutatedBuiltinName }) else {
+        continue
+      }
+      count += 1
+      if candidate === value {
+        ordinal = count
+        foundValue = true
+      }
+    }
+  }
+
+  guard foundValue else {
+    return nil
+  }
+  return (ordinal, count)
 }
 
 private func swiftMutagenFindAssignmentValueSourceLocation(
@@ -5548,6 +5635,92 @@ private func swiftMutagenFindUniqueExplicitReturnSourceLocation(
         let match = matches.first else {
     return nil
   }
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    mutation.sourceOriginal,
+    mutation.sourceMutated)
+}
+
+private func swiftMutagenFindOrdinalExplicitReturnSourceLocation(
+  path: String,
+  preferredLine: Int,
+  ordinal: Int,
+  expectedCount: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard preferredLine > 0,
+        ordinal > 0,
+        ordinal <= expectedCount,
+        expectedCount > 1,
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+
+  var matches: [(line: Int, column: Int)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  var braceDepth = 0
+  var sawOpeningBrace = false
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard line >= preferredLine,
+          line <= preferredLine + 120,
+          matches.count <= expectedCount else {
+      return
+    }
+    let bytes = Array(lineText.utf8)
+    let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+    if swiftMutagenReturnLineIsEligible(bytes: bytes, start: start, mutation: mutation) {
+      matches.append((line, start + 1))
+    }
+  }
+
+  func updateBraceDepth(_ lineText: String) {
+    for byte in lineText.utf8 {
+      if byte == 123 {
+        braceDepth += 1
+        sawOpeningBrace = true
+      } else if byte == 125 {
+        braceDepth -= 1
+      }
+    }
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      let lineText = String(text[lineStart..<index])
+      if currentLine >= preferredLine {
+        inspectLine(lineText, line: currentLine)
+        updateBraceDepth(lineText)
+        if matches.count > expectedCount {
+          break
+        }
+        if sawOpeningBrace && braceDepth <= 0 {
+          break
+        }
+        if currentLine >= preferredLine + 120 {
+          break
+        }
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine >= preferredLine {
+    let lineText = String(text[lineStart..<text.endIndex])
+    inspectLine(lineText, line: currentLine)
+  }
+
+  guard matches.count == expectedCount else {
+    return nil
+  }
+  let match = matches[ordinal - 1]
   return (
     swiftMutagenTrimPackageRoot(path, config: config),
     match.line,

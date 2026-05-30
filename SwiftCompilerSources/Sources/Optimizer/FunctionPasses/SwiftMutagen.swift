@@ -476,20 +476,6 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
     return
   }
 
-  if swiftMutagenIsGeneratedFunctionClone(function.name.string) {
-    if shouldLogFunction {
-      swiftMutagenLogEvent(
-        "functionSkip",
-        config: config,
-        fields: [
-          ("reason", "generatedClone"),
-          ("module", moduleName),
-          ("function", function.name.string)
-        ])
-    }
-    return
-  }
-
   if swiftMutagenShouldExclude(function: function, config: config) {
     if shouldLogFunction {
       swiftMutagenLogEvent(
@@ -3603,10 +3589,6 @@ private func swiftMutagenShouldExclude(
     }
   }
   return false
-}
-
-private func swiftMutagenIsGeneratedFunctionClone(_ function: String) -> Bool {
-  function.hasPrefix("$s") && function.contains("Tf4")
 }
 
 private func swiftMutagenFindSourceOperator(

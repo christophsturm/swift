@@ -3688,10 +3688,114 @@ private func swiftMutagenFindSourceOperator(
       if fallback == nil {
         fallback = result
       }
+      continue
+    }
+
+    if let result = swiftMutagenFindUniqueSourceOperatorInFunctionBody(
+      path: path,
+      preferredLine: preferredLine,
+      displayRules: displayRules,
+      config: config
+    ) {
+      if path.hasPrefix(preferredPrefix) {
+        return result
+      }
+      if fallback == nil {
+        fallback = result
+      }
     }
   }
 
   return fallback
+}
+
+private func swiftMutagenFindUniqueSourceOperatorInFunctionBody(
+  path: String,
+  preferredLine: Int,
+  displayRules: [SwiftMutagenSourceMutationDisplayRule],
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard preferredLine > 0,
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+
+  var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  var braceDepth = 0
+  var sawOpeningBrace = false
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard line >= preferredLine,
+          matches.count < 2 else {
+      return
+    }
+    for rule in displayRules {
+      guard let position = swiftMutagenFindOperator(
+        rule.sourceOriginal,
+        mutatedOperator: rule.sourceMutated,
+        in: lineText,
+        preferredLine: nil
+      ) else {
+        continue
+      }
+      let sourceMutated = rule.sourceMutatedOverride.isEmpty
+        ? position.sourceMutated
+        : rule.sourceMutatedOverride
+      matches.append((line, position.column, position.sourceOriginal, sourceMutated))
+      if matches.count >= 2 {
+        return
+      }
+    }
+  }
+
+  func updateBraceDepth(_ lineText: String) {
+    for byte in lineText.utf8 {
+      if byte == 123 {
+        braceDepth += 1
+        sawOpeningBrace = true
+      } else if byte == 125 {
+        braceDepth -= 1
+      }
+    }
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      let lineText = String(text[lineStart..<index])
+      if currentLine >= preferredLine {
+        inspectLine(lineText, line: currentLine)
+        updateBraceDepth(lineText)
+        if sawOpeningBrace && braceDepth <= 0 {
+          break
+        }
+        if currentLine >= preferredLine + 300 {
+          break
+        }
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine >= preferredLine {
+    let lineText = String(text[lineStart..<text.endIndex])
+    inspectLine(lineText, line: currentLine)
+  }
+
+  guard matches.count == 1,
+        let match = matches.first else {
+    return nil
+  }
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    match.sourceOriginal,
+    match.sourceMutated)
 }
 
 private func swiftMutagenSourceMutationDisplayRules(

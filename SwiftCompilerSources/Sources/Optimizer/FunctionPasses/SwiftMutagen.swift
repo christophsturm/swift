@@ -1594,7 +1594,8 @@ private func swiftMutagenMetamutantReturnMutations(
 ) -> [SwiftMutagenMutation] {
   swiftMutagenReturnMutations(for: returnInst, config: config).filter { mutation in
     switch mutation.mutatedBuiltinName {
-    case "return_false", "return_true", "return_nil", "return_zero", "return_empty_string":
+    case "return_false", "return_true", "return_nil", "return_zero", "return_empty_string",
+         "return_empty_array", "return_empty_dictionary", "return_empty_set":
       return true
     default:
       return false
@@ -1968,7 +1969,13 @@ private func swiftMutagenInjectReturnSite(
   let returnType = site.returnInst.returnedValue.type
   let function = site.returnInst.parentFunction
   guard site.alternatives.allSatisfy({
-    swiftMutagenCanMakeReturnAlternative($0.mutation, returnType: returnType, in: function, context)
+    swiftMutagenCanMakeReturnAlternative(
+      $0.mutation,
+      returnType: returnType,
+      in: function,
+      runtimeFunctionName: site.runtimeFunctionName,
+      context
+    )
   }) else {
     return false
   }
@@ -2005,6 +2012,7 @@ private func swiftMutagenInjectReturnSite(
       alternative.mutation,
       returnType: returnType,
       function: function,
+      runtimeFunctionName: site.runtimeFunctionName,
       context: context,
       builder: builder
     ) else {
@@ -2340,7 +2348,13 @@ private func swiftMutagenInjectAssignmentValueSite(
   let function = site.store.parentFunction
   guard valueType.isTrivial(in: function),
         site.alternatives.allSatisfy({
-          swiftMutagenCanMakeReturnAlternative($0.mutation, returnType: valueType, in: function, context)
+          swiftMutagenCanMakeReturnAlternative(
+            $0.mutation,
+            returnType: valueType,
+            in: function,
+            runtimeFunctionName: site.runtimeFunctionName,
+            context
+          )
         }) else {
     return false
   }
@@ -2377,6 +2391,7 @@ private func swiftMutagenInjectAssignmentValueSite(
       alternative.mutation,
       returnType: valueType,
       function: function,
+      runtimeFunctionName: site.runtimeFunctionName,
       context: context,
       builder: builder
     ) else {
@@ -2551,6 +2566,7 @@ private func swiftMutagenCanMakeReturnAlternative(
   _ mutation: SwiftMutagenMutation,
   returnType: Type,
   in function: Function,
+  runtimeFunctionName: String? = nil,
   _ context: FunctionPassContext
 ) -> Bool {
   switch mutation.mutatedBuiltinName {
@@ -2561,7 +2577,32 @@ private func swiftMutagenCanMakeReturnAlternative(
   case "return_zero":
     return swiftMutagenIsIntegerStructType(returnType, in: function)
   case "return_empty_string":
-    return swiftMutagenIsStringType(returnType) && swiftMutagenEmptyStringFunction(context) != nil
+    return swiftMutagenIsStringType(returnType)
+      && swiftMutagenEmptyStringFunction(named: swiftMutagenRuntimeHelperThunkName(
+        runtimeFunctionName: runtimeFunctionName,
+        suffix: "empty_string"
+      ), context) != nil
+  case "return_empty_array":
+    return swiftMutagenIsCollectionType(returnType, named: "Array")
+      && swiftMutagenEmptyCollectionFunction(named: swiftMutagenRuntimeHelperThunkName(
+        runtimeFunctionName: runtimeFunctionName,
+        suffix: "empty_array",
+        fallbackName: "__swift_mutagen_empty_array"
+      ), context) != nil
+  case "return_empty_dictionary":
+    return swiftMutagenIsCollectionType(returnType, named: "Dictionary")
+      && swiftMutagenEmptyCollectionFunction(named: swiftMutagenRuntimeHelperThunkName(
+        runtimeFunctionName: runtimeFunctionName,
+        suffix: "empty_dictionary",
+        fallbackName: "__swift_mutagen_empty_dictionary"
+      ), context) != nil
+  case "return_empty_set":
+    return swiftMutagenIsCollectionType(returnType, named: "Set")
+      && swiftMutagenEmptyCollectionFunction(named: swiftMutagenRuntimeHelperThunkName(
+        runtimeFunctionName: runtimeFunctionName,
+        suffix: "empty_set",
+        fallbackName: "__swift_mutagen_empty_set"
+      ), context) != nil
   default:
     return false
   }
@@ -2571,6 +2612,7 @@ private func swiftMutagenMakeReturnAlternative(
   _ mutation: SwiftMutagenMutation,
   returnType: Type,
   function: Function,
+  runtimeFunctionName: String? = nil,
   context: FunctionPassContext,
   builder: Builder
 ) -> Value? {
@@ -2584,7 +2626,51 @@ private func swiftMutagenMakeReturnAlternative(
   case "return_zero":
     return swiftMutagenMakeIntegerZero(type: returnType, in: function, builder: builder)
   case "return_empty_string":
-    return swiftMutagenMakeEmptyString(type: returnType, context: context, builder: builder)
+    return swiftMutagenMakeEmptyString(
+      type: returnType,
+      helperName: swiftMutagenRuntimeHelperThunkName(
+        runtimeFunctionName: runtimeFunctionName,
+        suffix: "empty_string"
+      ),
+      context: context,
+      builder: builder
+    )
+  case "return_empty_array":
+    return swiftMutagenMakeEmptyCollection(
+      type: returnType,
+      helperName: swiftMutagenRuntimeHelperThunkName(
+        runtimeFunctionName: runtimeFunctionName,
+        suffix: "empty_array",
+        fallbackName: "__swift_mutagen_empty_array"
+      ),
+      expectedReplacementCount: 1,
+      context: context,
+      builder: builder
+    )
+  case "return_empty_dictionary":
+    return swiftMutagenMakeEmptyCollection(
+      type: returnType,
+      helperName: swiftMutagenRuntimeHelperThunkName(
+        runtimeFunctionName: runtimeFunctionName,
+        suffix: "empty_dictionary",
+        fallbackName: "__swift_mutagen_empty_dictionary"
+      ),
+      expectedReplacementCount: 2,
+      context: context,
+      builder: builder
+    )
+  case "return_empty_set":
+    return swiftMutagenMakeEmptyCollection(
+      type: returnType,
+      helperName: swiftMutagenRuntimeHelperThunkName(
+        runtimeFunctionName: runtimeFunctionName,
+        suffix: "empty_set",
+        fallbackName: "__swift_mutagen_empty_set"
+      ),
+      expectedReplacementCount: 1,
+      context: context,
+      builder: builder
+    )
   default:
     return nil
   }
@@ -3060,6 +3146,21 @@ private func swiftMutagenReturnMutations(
     mutations.append(swiftMutagenReturnMutation(rule, silOriginal: returnType.description))
   }
 
+  if swiftMutagenIsCollectionType(returnType, named: "Array"),
+     let rule = swiftMutagenFirstReturnRule(context: "arrayToEmpty", config: config) {
+    mutations.append(swiftMutagenReturnMutation(rule, silOriginal: returnType.description))
+  }
+
+  if swiftMutagenIsCollectionType(returnType, named: "Dictionary"),
+     let rule = swiftMutagenFirstReturnRule(context: "dictionaryToEmpty", config: config) {
+    mutations.append(swiftMutagenReturnMutation(rule, silOriginal: returnType.description))
+  }
+
+  if swiftMutagenIsCollectionType(returnType, named: "Set"),
+     let rule = swiftMutagenFirstReturnRule(context: "setToEmpty", config: config) {
+    mutations.append(swiftMutagenReturnMutation(rule, silOriginal: returnType.description))
+  }
+
   return mutations
 }
 
@@ -3421,7 +3522,36 @@ private func swiftMutagenApplyReturn(
   case "return_zero":
     replacement = swiftMutagenMakeIntegerZero(type: returnType, in: returnInst.parentFunction, builder: builder)
   case "return_empty_string":
-    replacement = swiftMutagenMakeEmptyString(type: returnType, context: context, builder: builder)
+    replacement = swiftMutagenMakeEmptyString(
+      type: returnType,
+      helperName: "__swift_mutagen_empty_string",
+      context: context,
+      builder: builder
+    )
+  case "return_empty_array":
+    replacement = swiftMutagenMakeEmptyCollection(
+      type: returnType,
+      helperName: "__swift_mutagen_empty_array",
+      expectedReplacementCount: 1,
+      context: context,
+      builder: builder
+    )
+  case "return_empty_dictionary":
+    replacement = swiftMutagenMakeEmptyCollection(
+      type: returnType,
+      helperName: "__swift_mutagen_empty_dictionary",
+      expectedReplacementCount: 2,
+      context: context,
+      builder: builder
+    )
+  case "return_empty_set":
+    replacement = swiftMutagenMakeEmptyCollection(
+      type: returnType,
+      helperName: "__swift_mutagen_empty_set",
+      expectedReplacementCount: 1,
+      context: context,
+      builder: builder
+    )
   default:
     replacement = nil
   }
@@ -3465,25 +3595,99 @@ private func swiftMutagenMakeOptionalNone(
 
 private func swiftMutagenMakeEmptyString(
   type: Type,
+  helperName: String,
   context: FunctionPassContext,
   builder: Builder
 ) -> Value? {
   guard swiftMutagenIsStringType(type),
-        let emptyStringFunction = swiftMutagenEmptyStringFunction(context) else {
+        let emptyStringFunction = swiftMutagenEmptyStringFunction(named: helperName, context) else {
     return nil
   }
   let functionRef = builder.createFunctionRef(emptyStringFunction)
   return builder.createApply(
     function: functionRef,
     SubstitutionMap(),
-    arguments: [],
-    isNonThrowing: true
+    arguments: []
   )
 }
 
-private func swiftMutagenEmptyStringFunction(_ context: FunctionPassContext) -> Function? {
-  context.lookupFunction(name: "__swift_mutagen_empty_string")
+private func swiftMutagenEmptyStringFunction(
+  named helperName: String,
+  _ context: FunctionPassContext
+) -> Function? {
+  if let helper = context.lookupFunction(name: helperName)
+    ?? context.lookupFunction(name: "@\(helperName)") {
+    return helper
+  }
+  return context.lookupFunction(name: "__swift_mutagen_empty_string")
     ?? context.lookupFunction(name: "@__swift_mutagen_empty_string")
+    ?? context.loadFunction(name: "__swift_mutagen_empty_string", loadCalleesRecursively: false)
+    ?? context.loadFunction(name: "@__swift_mutagen_empty_string", loadCalleesRecursively: false)
+}
+
+private func swiftMutagenRuntimeHelperThunkName(
+  runtimeFunctionName: String?,
+  suffix: String,
+  fallbackName: String = "__swift_mutagen_empty_string"
+) -> String {
+  guard let runtimeFunctionName else {
+    return fallbackName
+  }
+  return "\(runtimeFunctionName)_\(suffix)"
+}
+
+private func swiftMutagenMakeEmptyCollection(
+  type: Type,
+  helperName: String,
+  expectedReplacementCount: Int,
+  context: FunctionPassContext,
+  builder: Builder
+) -> Value? {
+  guard let emptyCollectionFunction = swiftMutagenEmptyCollectionFunction(named: helperName, context) else {
+    return nil
+  }
+  let replacements = Array(type.contextSubstitutionMap.replacementTypes)
+  guard replacements.count == expectedReplacementCount else {
+    return nil
+  }
+  let functionRef = builder.createFunctionRef(emptyCollectionFunction)
+  return builder.createApply(
+    function: functionRef,
+    SubstitutionMap(
+      genericSignature: emptyCollectionFunction.genericSignature,
+      replacementTypes: replacements
+    ),
+    arguments: []
+  )
+}
+
+private func swiftMutagenEmptyCollectionFunction(
+  named helperName: String,
+  _ context: FunctionPassContext
+) -> Function? {
+  if let helper = context.lookupFunction(name: helperName)
+    ?? context.lookupFunction(name: "@\(helperName)") {
+    return helper
+  }
+  switch helperName {
+  case "__swift_mutagen_empty_array":
+    return context.lookupFunction(name: "__swift_mutagen_empty_array")
+      ?? context.lookupFunction(name: "@__swift_mutagen_empty_array")
+      ?? context.loadFunction(name: "__swift_mutagen_empty_array", loadCalleesRecursively: false)
+      ?? context.loadFunction(name: "@__swift_mutagen_empty_array", loadCalleesRecursively: false)
+  case "__swift_mutagen_empty_dictionary":
+    return context.lookupFunction(name: "__swift_mutagen_empty_dictionary")
+      ?? context.lookupFunction(name: "@__swift_mutagen_empty_dictionary")
+      ?? context.loadFunction(name: "__swift_mutagen_empty_dictionary", loadCalleesRecursively: false)
+      ?? context.loadFunction(name: "@__swift_mutagen_empty_dictionary", loadCalleesRecursively: false)
+  case "__swift_mutagen_empty_set":
+    return context.lookupFunction(name: "__swift_mutagen_empty_set")
+      ?? context.lookupFunction(name: "@__swift_mutagen_empty_set")
+      ?? context.loadFunction(name: "__swift_mutagen_empty_set", loadCalleesRecursively: false)
+      ?? context.loadFunction(name: "@__swift_mutagen_empty_set", loadCalleesRecursively: false)
+  default:
+    return nil
+  }
 }
 
 private func swiftMutagenIsBoolType(_ type: Type, in function: Function) -> Bool {
@@ -3511,6 +3715,13 @@ private func swiftMutagenIsStringType(_ type: Type) -> Bool {
     return false
   }
   return nominal.name.string == "String"
+}
+
+private func swiftMutagenIsCollectionType(_ type: Type, named name: String) -> Bool {
+  guard let nominal = type.nominal else {
+    return false
+  }
+  return nominal.name.string == name
 }
 
 private func swiftMutagenRecordReturnType(
@@ -4853,6 +5064,10 @@ private func swiftMutagenImplicitReturnSourceMutation(for mutation: SwiftMutagen
     return "0"
   case "return_empty_string":
     return #""""#
+  case "return_empty_array", "return_empty_set":
+    return "[]"
+  case "return_empty_dictionary":
+    return "[:]"
   default:
     return mutation.sourceMutated
   }
@@ -4886,9 +5101,34 @@ private func swiftMutagenReturnValueIsEligible(
     return !swiftMutagenASCIIHasNumericZeroToken(bytes, start: start)
   case "return_empty_string":
     return !swiftMutagenASCIIHasEmptyStringLiteral(bytes, start: start)
+  case "return_empty_array", "return_empty_set":
+    return !swiftMutagenASCIIHasEmptyArrayLiteral(bytes, start: start)
+  case "return_empty_dictionary":
+    return !swiftMutagenASCIIHasEmptyDictionaryLiteral(bytes, start: start)
   default:
     return true
   }
+}
+
+private func swiftMutagenASCIIHasEmptyArrayLiteral(_ bytes: [UInt8], start: Int) -> Bool {
+  guard start >= 0 && start + 2 <= bytes.count,
+        bytes[start] == 91,
+        bytes[start + 1] == 93 else {
+    return false
+  }
+  let end = start + 2
+  return end == bytes.count || !swiftMutagenIsASCIILetterNumberOrUnderscore(bytes[end])
+}
+
+private func swiftMutagenASCIIHasEmptyDictionaryLiteral(_ bytes: [UInt8], start: Int) -> Bool {
+  guard start >= 0 && start + 3 <= bytes.count,
+        bytes[start] == 91,
+        bytes[start + 1] == 58,
+        bytes[start + 2] == 93 else {
+    return false
+  }
+  let end = start + 3
+  return end == bytes.count || !swiftMutagenIsASCIILetterNumberOrUnderscore(bytes[end])
 }
 
 private func swiftMutagenASCIIHasEmptyStringLiteral(_ bytes: [UInt8], start: Int) -> Bool {

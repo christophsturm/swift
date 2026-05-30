@@ -355,6 +355,12 @@ private struct SwiftMutagenArithmeticAlternative {
   let mutation: SwiftMutagenMutation
 }
 
+private struct SwiftMutagenScalarValueAlternative {
+  let mutantID: String
+  let alternativeIndex: UInt32
+  let mutation: SwiftMutagenMutation
+}
+
 private struct SwiftMutagenVoidCallAlternative {
   let mutantID: String
   let alternativeIndex: UInt32
@@ -408,6 +414,30 @@ private struct SwiftMutagenArithmeticSite {
   let column: Int
   let builtin: BuiltinInst
   let alternatives: [SwiftMutagenArithmeticAlternative]
+}
+
+private struct SwiftMutagenScalarValueSite {
+  let siteID: UInt64
+  let runtimeFunctionName: String
+  let module: String
+  let function: String
+  let file: String
+  let line: Int
+  let column: Int
+  let value: StructInst
+  let alternatives: [SwiftMutagenScalarValueAlternative]
+}
+
+private struct SwiftMutagenScalarValueDiscoveryStats {
+  var structInstructions = 0
+  var mutationEligibleStructInstructions = 0
+  var mutationAlternatives = 0
+  var sourceLocationMisses = 0
+}
+
+private struct SwiftMutagenScalarValueDiscoveryResult {
+  let sites: [SwiftMutagenScalarValueSite]
+  let stats: SwiftMutagenScalarValueDiscoveryStats
 }
 
 private struct SwiftMutagenVoidCallSite {
@@ -685,6 +715,12 @@ private func swiftMutagenInstrumentMetamutantSites(
     moduleName: moduleName,
     config: config
   )
+  let scalarValueDiscovery = swiftMutagenDiscoverScalarValueSites(
+    in: function,
+    moduleName: moduleName,
+    config: config
+  )
+  let scalarValueSites = scalarValueDiscovery.sites
   let returnDiscovery = swiftMutagenDiscoverReturnSites(
     in: function,
     moduleName: moduleName,
@@ -713,6 +749,11 @@ private func swiftMutagenInstrumentMetamutantSites(
       ("conditionSourceLocationMisses", "\(conditionDiscovery.stats.sourceLocationMisses)"),
       ("conditionGenericNonExplicitSourceLocations", "\(conditionDiscovery.stats.genericNonExplicitSourceLocations)"),
       ("arithmeticSites", "\(arithmeticSites.count)"),
+      ("scalarValueSites", "\(scalarValueSites.count)"),
+      ("scalarValueStructInstructions", "\(scalarValueDiscovery.stats.structInstructions)"),
+      ("scalarValueMutationEligibleStructInstructions", "\(scalarValueDiscovery.stats.mutationEligibleStructInstructions)"),
+      ("scalarValueMutationAlternatives", "\(scalarValueDiscovery.stats.mutationAlternatives)"),
+      ("scalarValueSourceLocationMisses", "\(scalarValueDiscovery.stats.sourceLocationMisses)"),
       ("voidCallSites", "\(voidCallSites.count)"),
       ("voidCallApplyInstructions", "\(voidCallDiscovery.stats.applyInstructions)"),
       ("voidCallVoidApplyInstructions", "\(voidCallDiscovery.stats.voidApplyInstructions)"),
@@ -738,13 +779,18 @@ private func swiftMutagenInstrumentMetamutantSites(
       ("returnOtherSourceLocationMisses", "\(returnDiscovery.stats.missingOtherSourceLocations)"),
       ("returnNonStatementSourceLocations", "\(returnDiscovery.stats.nonStatementSourceLocations)")
     ])
-  guard !conditionSites.isEmpty || !arithmeticSites.isEmpty || !returnSites.isEmpty || !voidCallSites.isEmpty else {
+  guard !conditionSites.isEmpty
+        || !arithmeticSites.isEmpty
+        || !scalarValueSites.isEmpty
+        || !returnSites.isEmpty
+        || !voidCallSites.isEmpty else {
     return false
   }
 
   var changed = false
   var injectedSiteJSON: [String] = []
   var injectedArithmeticSites = 0
+  var injectedScalarValueSites = 0
   var injectedConditionSites = 0
   var injectedReturnSites = 0
   var injectedVoidCallSites = 0
@@ -752,6 +798,13 @@ private func swiftMutagenInstrumentMetamutantSites(
     if swiftMutagenInjectArithmeticSite(site, context) {
       injectedSiteJSON.append(swiftMutagenArithmeticSiteJSON(site))
       injectedArithmeticSites += 1
+      changed = true
+    }
+  }
+  for site in scalarValueSites {
+    if swiftMutagenInjectScalarValueSite(site, context) {
+      injectedSiteJSON.append(swiftMutagenScalarValueSiteJSON(site))
+      injectedScalarValueSites += 1
       changed = true
     }
   }
@@ -779,6 +832,7 @@ private func swiftMutagenInstrumentMetamutantSites(
   let runtimeVisitAvailable = swiftMutagenAnyRuntimeVisitFunctionAvailable(
     conditionSites: conditionSites,
     arithmeticSites: arithmeticSites,
+    scalarValueSites: scalarValueSites,
     returnSites: returnSites,
     voidCallSites: voidCallSites,
     context
@@ -793,6 +847,8 @@ private func swiftMutagenInstrumentMetamutantSites(
       ("injectedConditionSites", "\(injectedConditionSites)"),
       ("attemptedArithmeticSites", "\(arithmeticSites.count)"),
       ("injectedArithmeticSites", "\(injectedArithmeticSites)"),
+      ("attemptedScalarValueSites", "\(scalarValueSites.count)"),
+      ("injectedScalarValueSites", "\(injectedScalarValueSites)"),
       ("attemptedReturnSites", "\(returnSites.count)"),
       ("injectedReturnSites", "\(injectedReturnSites)"),
       ("attemptedVoidCallSites", "\(voidCallSites.count)"),
@@ -1167,6 +1223,88 @@ private func swiftMutagenDiscoverArithmeticSites(
   return sites
 }
 
+private func swiftMutagenDiscoverScalarValueSites(
+  in function: Function,
+  moduleName: String,
+  config: SwiftMutagenConfig
+) -> SwiftMutagenScalarValueDiscoveryResult {
+  var sites: [SwiftMutagenScalarValueSite] = []
+  var stats = SwiftMutagenScalarValueDiscoveryStats()
+  var localOrdinal = 1
+  let functionName = function.name.string
+
+  for block in function.blocks {
+    for instruction in block.instructions {
+      guard let structInst = instruction as? StructInst else {
+        continue
+      }
+      stats.structInstructions += 1
+
+      let mutations = swiftMutagenScalarValueMutations(for: structInst, config: config)
+      guard !mutations.isEmpty else {
+        continue
+      }
+      stats.mutationEligibleStructInstructions += 1
+      stats.mutationAlternatives += mutations.count
+
+      var alternatives: [SwiftMutagenScalarValueAlternative] = []
+      var sourceLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
+      for mutation in mutations {
+        guard let location = swiftMutagenScalarValueSourceLocation(
+          for: structInst,
+          mutation: mutation,
+          config: config
+        ) else {
+          stats.sourceLocationMisses += 1
+          continue
+        }
+        if sourceLocation == nil {
+          sourceLocation = location
+        }
+        let displayMutation = mutation.withSource(
+          original: location.sourceOriginal,
+          mutated: location.sourceMutated
+        )
+        alternatives.append(SwiftMutagenScalarValueAlternative(
+          mutantID: "local-scalar-value-\(localOrdinal)-\(alternatives.count + 1)",
+          alternativeIndex: UInt32(alternatives.count + 1),
+          mutation: displayMutation
+        ))
+      }
+
+      guard let location = sourceLocation, !alternatives.isEmpty else {
+        continue
+      }
+
+      let siteID = swiftMutagenStableSiteID(
+        packageRoot: config.packageRoot,
+        module: moduleName,
+        file: location.file,
+        line: location.line,
+        column: location.column,
+        function: functionName,
+        siteKind: "scalarValue",
+        localOrdinal: localOrdinal
+      )
+      localOrdinal += 1
+
+      sites.append(SwiftMutagenScalarValueSite(
+        siteID: siteID,
+        runtimeFunctionName: swiftMutagenRuntimeVisitThunkName(file: location.file, config: config),
+        module: moduleName,
+        function: functionName,
+        file: location.file,
+        line: location.line,
+        column: location.column,
+        value: structInst,
+        alternatives: alternatives
+      ))
+    }
+  }
+
+  return SwiftMutagenScalarValueDiscoveryResult(sites: sites, stats: stats)
+}
+
 private func swiftMutagenMetamutantReturnMutations(
   for returnInst: ReturnInst,
   config: SwiftMutagenConfig
@@ -1179,6 +1317,35 @@ private func swiftMutagenMetamutantReturnMutations(
       return false
     }
   }
+}
+
+private func swiftMutagenScalarValueMutations(
+  for structInst: StructInst,
+  config: SwiftMutagenConfig
+) -> [SwiftMutagenMutation] {
+  let valueType = structInst.type
+  var mutations: [SwiftMutagenMutation] = []
+
+  if swiftMutagenIsBoolType(valueType, in: structInst.parentFunction) {
+    let literal = swiftMutagenBoolLiteralValue(structInst)
+    if literal != false,
+       let rule = swiftMutagenFirstReturnRule(context: "boolToFalse", config: config) {
+      mutations.append(swiftMutagenReturnMutation(rule, silOriginal: valueType.description))
+    }
+    if literal != true,
+       let rule = swiftMutagenFirstReturnRule(context: "boolToTrue", config: config) {
+      mutations.append(swiftMutagenReturnMutation(rule, silOriginal: valueType.description))
+    }
+    return mutations
+  }
+
+  if swiftMutagenIsIntegerStructType(valueType, in: structInst.parentFunction),
+     swiftMutagenIntegerStructLiteralValue(structInst) != 0,
+     let rule = swiftMutagenFirstReturnRule(context: "integerToZero", config: config) {
+    mutations.append(swiftMutagenReturnMutation(rule, silOriginal: valueType.description))
+  }
+
+  return mutations
 }
 
 private func swiftMutagenConditionBranchCount(in function: Function) -> Int {
@@ -1604,6 +1771,97 @@ private func swiftMutagenInjectArithmeticSite(
   return true
 }
 
+private func swiftMutagenInjectScalarValueSite(
+  _ site: SwiftMutagenScalarValueSite,
+  _ context: FunctionPassContext
+) -> Bool {
+  guard let visitFunction = swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+        let siteID = swiftMutagenMakeRuntimeSiteID(
+          site.siteID,
+          visitFunction: visitFunction,
+          insertionPoint: site.value,
+          context
+        ) else {
+    return false
+  }
+
+  let valueType = site.value.type
+  let function = site.value.parentFunction
+  guard site.alternatives.allSatisfy({
+    swiftMutagenCanMakeReturnAlternative($0.mutation, returnType: valueType, in: function, context)
+  }) else {
+    return false
+  }
+
+  let originalPredecessorBlock = site.value.parentBlock
+  let continuationBlock = context.splitBlock(before: site.value)
+  let selectedValue = continuationBlock.addArgument(
+    type: valueType,
+    ownership: site.value.ownership,
+    context
+  )
+  let originalBlock = function.appendNewBlock(context)
+  let alternativeBlocks = site.alternatives.map { _ in function.appendNewBlock(context) }
+  let checkBlocks = site.alternatives.dropFirst().map { _ in function.appendNewBlock(context) }
+
+  let dispatchBuilder = Builder(atEndOf: originalPredecessorBlock, location: site.value.location, context)
+  let visitRef = dispatchBuilder.createFunctionRef(visitFunction)
+  let choice = dispatchBuilder.createApply(
+    function: visitRef,
+    SubstitutionMap(),
+    arguments: [siteID]
+  )
+  guard let rawChoice = swiftMutagenRuntimeChoiceRawValue(
+    choice,
+    builder: dispatchBuilder,
+    function: function
+  ) else {
+    return false
+  }
+
+  for (index, alternative) in site.alternatives.enumerated() {
+    let builder = Builder(atEndOf: alternativeBlocks[index], location: site.value.location, context)
+    guard let replacement = swiftMutagenMakeReturnAlternative(
+      alternative.mutation,
+      returnType: valueType,
+      function: function,
+      context: context,
+      builder: builder
+    ) else {
+      return false
+    }
+    builder.createBranch(to: continuationBlock, arguments: [replacement])
+  }
+
+  let originalBuilder = Builder(atEndOf: originalBlock, location: site.value.location, context)
+  let originalValue = originalBuilder.createStruct(type: valueType, elements: Array(site.value.operands.values))
+  originalBuilder.createBranch(to: continuationBlock, arguments: [originalValue])
+
+  for (index, alternative) in site.alternatives.enumerated() {
+    let builder = index == 0
+      ? dispatchBuilder
+      : Builder(atEndOf: checkBlocks[index - 1], location: site.value.location, context)
+    let nextBlock = index + 1 < site.alternatives.count
+      ? checkBlocks[index]
+      : originalBlock
+    let alternativeLiteral = builder.createIntegerLiteral(alternative.alternativeIndex, type: rawChoice.type)
+    let isSelected = builder.createBuiltinBinaryFunction(
+      name: "cmp_eq",
+      operandType: rawChoice.type,
+      resultType: context.getBuiltinIntegerType(bitWidth: 1),
+      arguments: [rawChoice, alternativeLiteral]
+    )
+    builder.createCondBranch(
+      condition: isSelected,
+      trueBlock: alternativeBlocks[index],
+      falseBlock: nextBlock
+    )
+  }
+
+  site.value.replace(with: selectedValue, context)
+  return true
+}
+
 private func swiftMutagenInjectVoidCallSite(
   _ site: SwiftMutagenVoidCallSite,
   _ context: FunctionPassContext
@@ -1690,6 +1948,7 @@ private func swiftMutagenRuntimeVisitFunction(
 private func swiftMutagenAnyRuntimeVisitFunctionAvailable(
   conditionSites: [SwiftMutagenConditionSite],
   arithmeticSites: [SwiftMutagenArithmeticSite],
+  scalarValueSites: [SwiftMutagenScalarValueSite],
   returnSites: [SwiftMutagenReturnSite],
   voidCallSites: [SwiftMutagenVoidCallSite],
   _ context: FunctionPassContext
@@ -1698,6 +1957,9 @@ private func swiftMutagenAnyRuntimeVisitFunctionAvailable(
     return true
   }
   for site in arithmeticSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+    return true
+  }
+  for site in scalarValueSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
     return true
   }
   for site in returnSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
@@ -1931,6 +2193,29 @@ private func swiftMutagenArithmeticSiteJSON(_ site: SwiftMutagenArithmeticSite) 
 }
 
 private func swiftMutagenArithmeticAlternativeJSON(_ alternative: SwiftMutagenArithmeticAlternative) -> String {
+  var fields: [String] = []
+  fields.append(#""mutantID":"\#(swiftMutagenEscapeJSON(alternative.mutantID))""#)
+  fields.append(#""alternativeIndex":\#(alternative.alternativeIndex)"#)
+  fields.append(#""mutator":"\#(swiftMutagenEscapeJSON(alternative.mutation.mutator))""#)
+  fields.append(#""sourceOriginal":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceOriginal))""#)
+  fields.append(#""sourceMutated":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceMutated))""#)
+  fields.append(#""behaviorKey":"\#(swiftMutagenEscapeJSON(alternative.mutation.silMutated))""#)
+  return "{\(fields.joined(separator: ","))}"
+}
+
+private func swiftMutagenScalarValueSiteJSON(_ site: SwiftMutagenScalarValueSite) -> String {
+  var fields: [String] = []
+  fields.append(#""siteID":\#(site.siteID)"#)
+  fields.append(#""module":"\#(swiftMutagenEscapeJSON(site.module))""#)
+  fields.append(#""function":"\#(swiftMutagenEscapeJSON(site.function))""#)
+  fields.append(#""sourceLocation":{"file":"\#(swiftMutagenEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#)
+  fields.append(#""siteKind":"scalarValue""#)
+  fields.append(#""resultKind":"value""#)
+  fields.append(#""alternatives":[\#(site.alternatives.map(swiftMutagenScalarValueAlternativeJSON).joined(separator: ","))]"#)
+  return "{\(fields.joined(separator: ","))}"
+}
+
+private func swiftMutagenScalarValueAlternativeJSON(_ alternative: SwiftMutagenScalarValueAlternative) -> String {
   var fields: [String] = []
   fields.append(#""mutantID":"\#(swiftMutagenEscapeJSON(alternative.mutantID))""#)
   fields.append(#""alternativeIndex":\#(alternative.alternativeIndex)"#)
@@ -2854,6 +3139,139 @@ private func swiftMutagenReturnSourceLocation(
     }
   }
   return nil
+}
+
+private func swiftMutagenScalarValueSourceLocation(
+  for value: StructInst,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  if let fileNameAndPosition = value.location.fileNameAndPosition {
+    let path = fileNameAndPosition.path.string
+    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
+      return swiftMutagenFindAssignmentValueSourceLocation(
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
+      )
+    }
+  }
+
+  let location = value.parentFunction.location.description
+  for path in swiftMutagenSwiftSourcePaths(config: config) {
+    guard location.contains(path),
+          let line = swiftMutagenPreferredLine(in: location, path: path) else {
+      continue
+    }
+    if let anchored = swiftMutagenFindAssignmentValueSourceLocation(
+      path: path,
+      preferredLine: line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
+  }
+  return nil
+}
+
+private func swiftMutagenFindAssignmentValueSourceLocation(
+  path: String,
+  preferredLine: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard preferredLine > 0,
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+  return swiftMutagenAssignmentValueSourceLocation(
+    in: text,
+    path: path,
+    lineRange: preferredLine...preferredLine,
+    mutation: mutation,
+    config: config
+  )
+}
+
+private func swiftMutagenAssignmentValueSourceLocation(
+  in text: String,
+  path: String,
+  lineRange: ClosedRange<Int>,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard lineRange.contains(line),
+          matches.count < 2,
+          let expression = swiftMutagenAssignmentValueExpression(lineText, mutation: mutation) else {
+      return
+    }
+    matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      inspectLine(String(text[lineStart..<index]), line: currentLine)
+      if currentLine >= lineRange.upperBound || matches.count >= 2 {
+        break
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine <= lineRange.upperBound {
+    inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
+  }
+
+  guard matches.count == 1,
+        let match = matches.first else {
+    return nil
+  }
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    match.sourceOriginal,
+    match.sourceMutated)
+}
+
+private func swiftMutagenAssignmentValueExpression(
+  _ line: String,
+  mutation: SwiftMutagenMutation
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let bytes = Array(line.utf8)
+  let lineStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard lineStart < lineEnd,
+        !swiftMutagenLineStartsWithAssignmentReturnBlockedPrefix(bytes: bytes, start: lineStart),
+        let equals = swiftMutagenFirstAssignmentOperator(bytes: bytes, start: lineStart, end: lineEnd) else {
+    return nil
+  }
+
+  let valueStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: equals + 1)
+  var valueEnd = lineEnd
+  if valueEnd > valueStart && bytes[valueEnd - 1] == 44 {
+    valueEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: valueEnd - 1)
+  }
+  guard valueStart < valueEnd,
+        swiftMutagenReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
+    return nil
+  }
+
+  let sourceOriginal = String(decoding: bytes[valueStart..<valueEnd], as: UTF8.self)
+  return (
+    valueStart + 1,
+    sourceOriginal,
+    swiftMutagenImplicitReturnSourceMutation(for: mutation))
 }
 
 private func swiftMutagenFindAssignmentReturnSourceLocation(

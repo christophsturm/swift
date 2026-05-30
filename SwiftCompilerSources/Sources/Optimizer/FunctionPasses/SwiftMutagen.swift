@@ -422,6 +422,19 @@ private struct SwiftMutagenVoidCallSite {
   let alternatives: [SwiftMutagenVoidCallAlternative]
 }
 
+private struct SwiftMutagenVoidCallDiscoveryStats {
+  var applyInstructions = 0
+  var voidApplyInstructions = 0
+  var mutationEligibleApplyInstructions = 0
+  var sourceLocationMisses = 0
+  var nonStatementSourceLocations = 0
+}
+
+private struct SwiftMutagenVoidCallDiscoveryResult {
+  let sites: [SwiftMutagenVoidCallSite]
+  let stats: SwiftMutagenVoidCallDiscoveryStats
+}
+
 private var swiftMutagenNextOrdinal = 1
 private var swiftMutagenHasTruncatedDiscoveryOutput = false
 
@@ -672,11 +685,12 @@ private func swiftMutagenInstrumentMetamutantSites(
     config: config
   )
   let returnSites = returnDiscovery.sites
-  let voidCallSites = swiftMutagenDiscoverVoidCallSites(
+  let voidCallDiscovery = swiftMutagenDiscoverVoidCallSites(
     in: function,
     moduleName: moduleName,
     config: config
   )
+  let voidCallSites = voidCallDiscovery.sites
   swiftMutagenLogEvent(
     "metamutantDiscovery",
     config: config,
@@ -694,6 +708,11 @@ private func swiftMutagenInstrumentMetamutantSites(
       ("conditionGenericNonExplicitSourceLocations", "\(conditionDiscovery.stats.genericNonExplicitSourceLocations)"),
       ("arithmeticSites", "\(arithmeticSites.count)"),
       ("voidCallSites", "\(voidCallSites.count)"),
+      ("voidCallApplyInstructions", "\(voidCallDiscovery.stats.applyInstructions)"),
+      ("voidCallVoidApplyInstructions", "\(voidCallDiscovery.stats.voidApplyInstructions)"),
+      ("voidCallMutationEligibleApplyInstructions", "\(voidCallDiscovery.stats.mutationEligibleApplyInstructions)"),
+      ("voidCallSourceLocationMisses", "\(voidCallDiscovery.stats.sourceLocationMisses)"),
+      ("voidCallNonStatementSourceLocations", "\(voidCallDiscovery.stats.nonStatementSourceLocations)"),
       ("returnSites", "\(returnSites.count)"),
       ("returnTerminators", "\(returnDiscovery.stats.terminators)"),
       ("returnBoolTerminators", "\(returnDiscovery.stats.boolTerminators)"),
@@ -789,24 +808,37 @@ private func swiftMutagenDiscoverVoidCallSites(
   in function: Function,
   moduleName: String,
   config: SwiftMutagenConfig
-) -> [SwiftMutagenVoidCallSite] {
+) -> SwiftMutagenVoidCallDiscoveryResult {
   var sites: [SwiftMutagenVoidCallSite] = []
+  var stats = SwiftMutagenVoidCallDiscoveryStats()
   var localOrdinal = 1
   let functionName = function.name.string
 
   for block in function.blocks {
     for instruction in block.instructions {
-      guard let apply = instruction as? ApplyInst,
-            let mutation = swiftMutagenVoidCallMutation(for: apply, config: config),
-            swiftMutagenMutatorIsEnabled(mutation.mutator, config: config),
-            let location = swiftMutagenInstructionSourceLocation(
-              for: apply,
-              mutation: mutation,
-              config: config
-            ) else {
+      guard let apply = instruction as? ApplyInst else {
+        continue
+      }
+      stats.applyInstructions += 1
+      guard apply.type.isVoid else {
+        continue
+      }
+      stats.voidApplyInstructions += 1
+      guard let mutation = swiftMutagenVoidCallMutation(for: apply, config: config),
+            swiftMutagenMutatorIsEnabled(mutation.mutator, config: config) else {
+        continue
+      }
+      stats.mutationEligibleApplyInstructions += 1
+      guard let location = swiftMutagenInstructionSourceLocation(
+        for: apply,
+        mutation: mutation,
+        config: config
+      ) else {
+        stats.sourceLocationMisses += 1
         continue
       }
       guard swiftMutagenVoidCallSourceLooksLikeStatement(file: location.file, line: location.line, config: config) else {
+        stats.nonStatementSourceLocations += 1
         continue
       }
 
@@ -845,7 +877,7 @@ private func swiftMutagenDiscoverVoidCallSites(
     }
   }
 
-  return sites
+  return SwiftMutagenVoidCallDiscoveryResult(sites: sites, stats: stats)
 }
 
 private func swiftMutagenDiscoverConditionSites(

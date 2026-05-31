@@ -66,6 +66,7 @@ swift_compiler_sources(Optimizer
   SwiftmutSites.swift
   SwiftmutStatementSourceLocations.swift
   SwiftmutStringComparisonSourceLocations.swift
+  SwiftmutStringDescriptionSourceLocations.swift
   SwiftmutStringInterpolationSourceLocations.swift
   SwiftmutText.swift
   SwiftmutValueApplyAssignmentSourceLocations.swift

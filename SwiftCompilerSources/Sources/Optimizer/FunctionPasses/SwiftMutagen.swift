@@ -4985,7 +4985,11 @@ private func swiftMutagenFindScopedLabeledAssignmentValueSourceLocation(
     guard line >= functionLine,
           matches.count < 2,
           swiftMutagenLineContainsAnyIdentifier(lineText, identifiers: targetNames),
-          let expression = swiftMutagenStandaloneLabeledValueExpression(lineText, mutation: mutation) else {
+          let expression = swiftMutagenStandaloneLabeledValueExpression(
+            lineText,
+            mutation: mutation,
+            requiresCallExpression: false
+          ) else {
       return
     }
     matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
@@ -6158,7 +6162,8 @@ private func swiftMutagenLabeledValueExpressionSourceLocation(
 
 private func swiftMutagenStandaloneLabeledValueExpression(
   _ line: String,
-  mutation: SwiftMutagenMutation
+  mutation: SwiftMutagenMutation,
+  requiresCallExpression: Bool = true
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
   let bytes = Array(line.utf8)
   let lineStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
@@ -6177,7 +6182,7 @@ private func swiftMutagenStandaloneLabeledValueExpression(
   }
   guard valueStart < valueEnd,
         swiftMutagenLabeledArgumentRHSLooksLikeValueExpression(bytes: bytes, start: valueStart, end: valueEnd),
-        swiftMutagenLabeledArgumentRHSLooksLikeCallExpression(bytes: bytes, start: valueStart, end: valueEnd),
+        (!requiresCallExpression || swiftMutagenLabeledArgumentRHSLooksLikeCallExpression(bytes: bytes, start: valueStart, end: valueEnd)),
         swiftMutagenReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
     return nil
   }

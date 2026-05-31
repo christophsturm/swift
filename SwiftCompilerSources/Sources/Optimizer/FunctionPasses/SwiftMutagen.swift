@@ -4785,7 +4785,7 @@ private func swiftMutagenFindAssignmentValueSourceLocation(
   }
 
   let firstLine = preferredLine > 2 ? preferredLine - 2 : 1
-  let lastLine = preferredLine + (targetNames.isEmpty ? 8 : 80)
+  let lastLine = preferredLine + (targetNames.isEmpty ? 8 : 240)
   return swiftMutagenAssignmentValueSourceLocation(
     in: text,
     path: path,

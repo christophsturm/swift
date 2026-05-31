@@ -4158,6 +4158,14 @@ private func swiftMutagenReturnSourceLocation(
       ) {
         return anchored
       }
+      if let anchored = swiftMutagenFindNearestPriorImplicitReturnSourceLocation(
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
+      ) {
+        return anchored
+      }
       if let anchored = swiftMutagenFindUniqueImplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
@@ -4207,6 +4215,14 @@ private func swiftMutagenReturnSourceLocation(
         return anchored
       }
       if let anchored = swiftMutagenFindNearestPriorExplicitReturnSourceLocation(
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
+      ) {
+        return anchored
+      }
+      if let anchored = swiftMutagenFindNearestPriorImplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -4265,6 +4281,14 @@ private func swiftMutagenReturnSourceLocation(
       return anchored
     }
     if let anchored = swiftMutagenFindNearestPriorExplicitReturnSourceLocation(
+      path: path,
+      preferredLine: line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
+    if let anchored = swiftMutagenFindNearestPriorImplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
@@ -7046,6 +7070,67 @@ private func swiftMutagenFindNearestPriorExplicitReturnSourceLocation(
     nearest.column,
     mutation.sourceOriginal,
     mutation.sourceMutated)
+}
+
+private func swiftMutagenFindNearestPriorImplicitReturnSourceLocation(
+  path: String,
+  preferredLine: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard mutation.sourceOriginal == "return",
+        preferredLine > 1,
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+
+  let firstLine = preferredLine > 8 ? preferredLine - 8 : 1
+  var nearest: (line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard line >= firstLine,
+          line < preferredLine else {
+      return
+    }
+    let bytes = Array(lineText.utf8)
+    let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+    let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+    guard start < end,
+          !swiftMutagenLineLooksLikeImplicitReturnContinuation(bytes: bytes, start: start),
+          swiftMutagenImplicitReturnExpressionIsEligible(bytes: bytes, start: start, mutation: mutation) else {
+      return
+    }
+    nearest = (
+      line,
+      start + 1,
+      String(decoding: bytes[start..<end], as: UTF8.self),
+      swiftMutagenImplicitReturnSourceMutation(for: mutation))
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      inspectLine(String(text[lineStart..<index]), line: currentLine)
+      if currentLine >= preferredLine {
+        break
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  guard let nearest else {
+    return nil
+  }
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    nearest.line,
+    nearest.column,
+    nearest.sourceOriginal,
+    nearest.sourceMutated)
 }
 
 private func swiftMutagenFindOrdinalExplicitReturnSourceLocation(

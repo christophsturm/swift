@@ -4961,6 +4961,84 @@ private func swiftMutagenFindScopedLocalBindingValueSourceLocation(
     match.sourceMutated)
 }
 
+private func swiftMutagenFindScopedLabeledAssignmentValueSourceLocation(
+  path: String,
+  functionLine: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig,
+  targetNames: [String]
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard functionLine > 0,
+        !targetNames.isEmpty,
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+
+  var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  var braceDepth = 0
+  var sawOpeningBrace = false
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard line >= functionLine,
+          matches.count < 2,
+          swiftMutagenLineContainsAnyIdentifier(lineText, identifiers: targetNames),
+          let expression = swiftMutagenStandaloneLabeledValueExpression(lineText, mutation: mutation) else {
+      return
+    }
+    matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
+  }
+
+  func updateBraceDepth(_ lineText: String) {
+    for byte in lineText.utf8 {
+      if byte == 123 {
+        braceDepth += 1
+        sawOpeningBrace = true
+      } else if byte == 125 {
+        braceDepth -= 1
+      }
+    }
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      let lineText = String(text[lineStart..<index])
+      if currentLine >= functionLine {
+        if sawOpeningBrace && braceDepth > 0 {
+          inspectLine(lineText, line: currentLine)
+          if matches.count >= 2 {
+            break
+          }
+        }
+        updateBraceDepth(lineText)
+        if sawOpeningBrace && braceDepth <= 0 {
+          break
+        }
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine >= functionLine && sawOpeningBrace && braceDepth > 0 {
+    inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
+  }
+
+  guard matches.count == 1,
+        let match = matches.first else {
+    return nil
+  }
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    match.sourceOriginal,
+    match.sourceMutated)
+}
+
 private func swiftMutagenAssignmentValueSourceLocation(
   in text: String,
   path: String,
@@ -5287,6 +5365,15 @@ private func swiftMutagenAssignmentValueSourceLocation(
       return anchored
     }
     if let anchored = swiftMutagenFindScopedLocalBindingValueSourceLocation(
+      path: functionSourceLocation.path,
+      functionLine: functionSourceLocation.line,
+      mutation: mutation,
+      config: config,
+      targetNames: targetNames
+    ) {
+      return anchored
+    }
+    if let anchored = swiftMutagenFindScopedLabeledAssignmentValueSourceLocation(
       path: functionSourceLocation.path,
       functionLine: functionSourceLocation.line,
       mutation: mutation,
@@ -5858,6 +5945,19 @@ private func swiftMutagenIdentifierValueExpression(
       swiftMutagenImplicitReturnSourceMutation(for: mutation))
   }
   return nil
+}
+
+private func swiftMutagenLineContainsAnyIdentifier(_ line: String, identifiers: [String]) -> Bool {
+  let bytes = Array(line.utf8)
+  let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard start < end else {
+    return false
+  }
+  for identifier in identifiers where swiftMutagenFindSourceIdentifier(identifier, in: bytes, start: start, end: end) != nil {
+    return true
+  }
+  return false
 }
 
 private func swiftMutagenFindSourceIdentifier(

@@ -4142,6 +4142,15 @@ private func swiftMutagenReturnSourceLocation(
       ) {
         return anchored
       }
+      if let anchored = swiftMutagenFindDescribedExplicitReturnSourceLocation(
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        locationDescription: returnInst.location.description,
+        mutation: mutation,
+        config: config
+      ) {
+        return anchored
+      }
       if let anchored = swiftMutagenFindUniqueExplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
@@ -4201,6 +4210,15 @@ private func swiftMutagenReturnSourceLocation(
       if let anchored = swiftMutagenFindAssignmentReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
+      ) {
+        return anchored
+      }
+      if let anchored = swiftMutagenFindDescribedExplicitReturnSourceLocation(
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        locationDescription: returnInst.location.description,
         mutation: mutation,
         config: config
       ) {
@@ -4272,6 +4290,15 @@ private func swiftMutagenReturnSourceLocation(
     ) {
       return anchored
     }
+    if let anchored = swiftMutagenFindDescribedExplicitReturnSourceLocation(
+      path: path,
+      preferredLine: line,
+      locationDescription: returnLocation,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
     if let anchored = swiftMutagenFindUniqueExplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
@@ -4332,6 +4359,15 @@ private func swiftMutagenReturnSourceLocation(
     if let anchored = swiftMutagenFindAssignmentReturnSourceLocation(
       path: path,
       preferredLine: line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
+    if let anchored = swiftMutagenFindDescribedExplicitReturnSourceLocation(
+      path: path,
+      preferredLine: line,
+      locationDescription: returnInst.location.description,
       mutation: mutation,
       config: config
     ) {
@@ -5642,6 +5678,35 @@ private func swiftMutagenStoreLocationAssignedExpression(_ description: String) 
     return nil
   }
   return String(decoding: bytes[expressionStart..<trimmedEnd], as: UTF8.self)
+}
+
+private func swiftMutagenQuotedSourceSnippetPrefix(_ description: String) -> String? {
+  let bytes = Array(description.utf8)
+  guard bytes.count > 1,
+        bytes[0] == 34 else {
+    return nil
+  }
+
+  var end = 1
+  while end < bytes.count {
+    if bytes[end] == 34 || bytes[end] == 10 || bytes[end] == 13 {
+      break
+    }
+    if end + 4 <= bytes.count,
+       bytes[end] == 91,
+       bytes[end + 1] == 46,
+       bytes[end + 2] == 46,
+       bytes[end + 3] == 46 {
+      break
+    }
+    end += 1
+  }
+
+  let trimmedEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: end)
+  guard trimmedEnd > 1 else {
+    return nil
+  }
+  return String(decoding: bytes[1..<trimmedEnd], as: UTF8.self)
 }
 
 private func swiftMutagenFunctionSourceLocation(
@@ -7229,6 +7294,93 @@ private func swiftMutagenFindNearestPriorExplicitReturnSourceLocation(
     mutation.sourceMutated)
 }
 
+private func swiftMutagenFindDescribedExplicitReturnSourceLocation(
+  path: String,
+  preferredLine: Int,
+  locationDescription: String,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard preferredLine > 0,
+        let snippet = swiftMutagenQuotedSourceSnippetPrefix(locationDescription),
+        snippet.hasPrefix("return "),
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+
+  var matches: [(line: Int, column: Int)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  var braceDepth = 0
+  var sawOpeningBrace = false
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard line >= preferredLine,
+          line <= preferredLine + 120,
+          matches.count < 2 else {
+      return
+    }
+    let bytes = Array(lineText.utf8)
+    let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+    guard swiftMutagenReturnLineIsEligible(bytes: bytes, start: start, mutation: mutation) else {
+      return
+    }
+    let trimmed = String(decoding: bytes[start..<swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)], as: UTF8.self)
+    if trimmed.hasPrefix(snippet) {
+      matches.append((line, start + 1))
+    }
+  }
+
+  func updateBraceDepth(_ lineText: String) {
+    for byte in lineText.utf8 {
+      if byte == 123 {
+        braceDepth += 1
+        sawOpeningBrace = true
+      } else if byte == 125 {
+        braceDepth -= 1
+      }
+    }
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      let lineText = String(text[lineStart..<index])
+      if currentLine >= preferredLine {
+        inspectLine(lineText, line: currentLine)
+        updateBraceDepth(lineText)
+        if matches.count >= 2 {
+          break
+        }
+        if sawOpeningBrace && braceDepth <= 0 {
+          break
+        }
+        if currentLine >= preferredLine + 120 {
+          break
+        }
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine >= preferredLine {
+    inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
+  }
+
+  guard matches.count == 1,
+        let match = matches.first else {
+    return nil
+  }
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    mutation.sourceOriginal,
+    mutation.sourceMutated)
+}
+
 private func swiftMutagenFindNearestPriorImplicitReturnSourceLocation(
   path: String,
   preferredLine: Int,
@@ -7257,7 +7409,12 @@ private func swiftMutagenFindNearestPriorImplicitReturnSourceLocation(
     let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
     guard start < end,
           !swiftMutagenLineLooksLikeImplicitReturnContinuation(bytes: bytes, start: start),
-          swiftMutagenImplicitReturnExpressionIsEligible(bytes: bytes, start: start, mutation: mutation) else {
+          swiftMutagenImplicitReturnExpressionIsEligible(
+            bytes: bytes,
+            start: start,
+            mutation: mutation,
+            allowsInlineBraces: true
+          ) else {
       return
     }
     nearest = (
@@ -7402,7 +7559,12 @@ private func swiftMutagenFindUniqueImplicitReturnSourceLocation(
     }
     let bytes = Array(expression.utf8)
     let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-    guard swiftMutagenImplicitReturnExpressionIsEligible(bytes: bytes, start: start, mutation: mutation) else {
+    guard swiftMutagenImplicitReturnExpressionIsEligible(
+      bytes: bytes,
+      start: start,
+      mutation: mutation,
+      allowsInlineBraces: true
+    ) else {
       return
     }
     let trimmedStart = expression.index(expression.startIndex, offsetBy: start)
@@ -7445,7 +7607,12 @@ private func swiftMutagenFindUniqueImplicitReturnSourceLocation(
     if bytes[start] == 125 {
       return
     }
-    guard swiftMutagenLineLooksLikeImplicitReturnExpression(bytes: bytes, start: start, end: end) else {
+    guard swiftMutagenLineLooksLikeImplicitReturnExpression(
+      bytes: bytes,
+      start: start,
+      end: end,
+      allowsInlineBraces: true
+    ) else {
       sawInvalidTopLevelBodyLine = true
       return
     }
@@ -7517,7 +7684,12 @@ private func swiftMutagenInlineImplicitReturnExpression(_ line: String) -> (text
   return (String(text), line.distance(from: line.startIndex, to: expressionStart) + 1)
 }
 
-private func swiftMutagenLineLooksLikeImplicitReturnExpression(bytes: [UInt8], start: Int, end: Int) -> Bool {
+private func swiftMutagenLineLooksLikeImplicitReturnExpression(
+  bytes: [UInt8],
+  start: Int,
+  end: Int,
+  allowsInlineBraces: Bool = false
+) -> Bool {
   if bytes[start] == 125 || bytes[start] == 123 || bytes[start] == 47 {
     return false
   }
@@ -7533,14 +7705,41 @@ private func swiftMutagenLineLooksLikeImplicitReturnExpression(bytes: [UInt8], s
     }
   }
   for index in start..<end {
-    if bytes[index] == 123 || bytes[index] == 125 || bytes[index] == 59 {
+    if bytes[index] == 59 {
+      return false
+    }
+    if !allowsInlineBraces && (bytes[index] == 123 || bytes[index] == 125) {
       return false
     }
   }
-  if swiftMutagenASCIIContains(bytes, start: start, end: end, pattern: " in ") {
+  if allowsInlineBraces && !swiftMutagenLineHasBalancedInlineBraces(bytes: bytes, start: start, end: end) {
+    return false
+  }
+  if !allowsInlineBraces && swiftMutagenASCIIContains(bytes, start: start, end: end, pattern: " in ") {
     return false
   }
   return true
+}
+
+private func swiftMutagenLineHasBalancedInlineBraces(bytes: [UInt8], start: Int, end: Int) -> Bool {
+  var depth = 0
+  var sawBrace = false
+  for index in start..<end {
+    if bytes[index] == 123 {
+      if index == start {
+        return false
+      }
+      depth += 1
+      sawBrace = true
+    } else if bytes[index] == 125 {
+      depth -= 1
+      if depth < 0 {
+        return false
+      }
+      sawBrace = true
+    }
+  }
+  return !sawBrace || depth == 0
 }
 
 private func swiftMutagenLineLooksLikeImplicitReturnContinuation(bytes: [UInt8], start: Int) -> Bool {
@@ -7558,13 +7757,15 @@ private func swiftMutagenLineLooksLikeImplicitReturnContinuation(bytes: [UInt8],
 private func swiftMutagenImplicitReturnExpressionIsEligible(
   bytes: [UInt8],
   start: Int,
-  mutation: SwiftMutagenMutation
+  mutation: SwiftMutagenMutation,
+  allowsInlineBraces: Bool = false
 ) -> Bool {
   start < bytes.count
     && swiftMutagenLineLooksLikeImplicitReturnExpression(
       bytes: bytes,
       start: start,
-      end: swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+      end: swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count),
+      allowsInlineBraces: allowsInlineBraces
     )
     && swiftMutagenReturnValueIsEligible(bytes: bytes, start: start, mutation: mutation)
 }

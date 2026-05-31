@@ -40,6 +40,7 @@ swift_compiler_sources(Optimizer
   StripObjectHeaders.swift
   Swiftmut.swift
   SwiftmutJSON.swift
+  SwiftmutText.swift
   TempLValueElimination.swift
   TempRValueElimination.swift
   PackSpecialization.swift

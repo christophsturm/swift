@@ -266,6 +266,14 @@ func swiftmutDescribedValueExpression(
   ) {
     return expression
   }
+  if let expression = swiftmutDescribedCatchPatternValueExpression(
+    bytes: bytes,
+    matchStart: matchStart,
+    lineEnd: lineEnd,
+    mutation: mutation
+  ) {
+    return expression
+  }
 
   for identifier in identifiers {
     guard let tokenRange = swiftmutFindSourceIdentifier(
@@ -307,6 +315,62 @@ func swiftmutDescribedValueExpression(
     expressionRange: expressionRange,
     mutation: mutation
   )
+}
+
+func swiftmutDescribedCatchPatternValueExpression(
+  bytes: [UInt8],
+  matchStart: Int,
+  lineEnd: Int,
+  mutation: SwiftmutMutation
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let lineStart = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  guard swiftmutDescribedLineHasCatchBeforeExpression(
+    bytes: bytes,
+    lineStart: lineStart,
+    expressionStart: matchStart
+  ) else {
+    return nil
+  }
+
+  var expressionStart = matchStart
+  while expressionStart > lineStart && swiftmutIsSourceExpressionPrefixByte(bytes[expressionStart - 1]) {
+    expressionStart -= 1
+  }
+  var expressionEnd = matchStart
+  while expressionEnd < lineEnd {
+    let byte = bytes[expressionEnd]
+    if swiftmutIsHorizontalWhitespace(byte) || byte == 123 || byte == 44 {
+      break
+    }
+    expressionEnd += 1
+  }
+  guard expressionStart < expressionEnd,
+        swiftmutReturnValueIsEligible(bytes: bytes, start: expressionStart, mutation: mutation) else {
+    return nil
+  }
+
+  let sourceOriginal = String(decoding: bytes[expressionStart..<expressionEnd], as: UTF8.self)
+  return (
+    expressionStart + 1,
+    sourceOriginal,
+    swiftmutImplicitReturnSourceMutation(for: mutation))
+}
+
+func swiftmutDescribedLineHasCatchBeforeExpression(
+  bytes: [UInt8],
+  lineStart: Int,
+  expressionStart: Int
+) -> Bool {
+  guard lineStart < expressionStart else {
+    return false
+  }
+  if swiftmutASCIIHasExactPrefix(bytes, start: lineStart, prefix: "catch ") {
+    return true
+  }
+  if swiftmutASCIIHasExactPrefix(bytes, start: lineStart, prefix: "} catch ") {
+    return true
+  }
+  return false
 }
 
 func swiftmutDescribedOperatorValueExpression(

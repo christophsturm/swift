@@ -5862,7 +5862,122 @@ private func swiftmutAssignmentValueSourceLocation(
       return anchored
     }
   }
+  if !targetNames.isEmpty {
+    if let definingInstruction = store.source.definingInstruction,
+       let anchored = swiftmutFindDescribedAssignmentValueSourceLocation(
+         locationDescription: definingInstruction.location.description,
+         mutation: mutation,
+         config: config,
+         targetNames: targetNames
+       ) {
+      return anchored
+    }
+    if let anchored = swiftmutFindDescribedAssignmentValueSourceLocation(
+      locationDescription: store.location.description,
+      mutation: mutation,
+      config: config,
+      targetNames: targetNames
+    ) {
+      return anchored
+    }
+  }
   return nil
+}
+
+private func swiftmutFindDescribedAssignmentValueSourceLocation(
+  locationDescription: String,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig,
+  targetNames: [String]
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard !targetNames.isEmpty,
+        let rawSnippet = swiftmutQuotedSourceSearchSnippet(locationDescription),
+        rawSnippet.count >= 2 else {
+    return nil
+  }
+
+  let snippet = swiftmutDecodedSourceSnippet(rawSnippet)
+  let expressionStart = swiftmutSnippetExpressionStartOffset(snippet)
+  guard expressionStart >= 0,
+        let expression = swiftmutDefaultArgumentSnippetExpression(snippet, mutation: mutation) else {
+    return nil
+  }
+
+  var matches: [(path: String, line: Int, column: Int)] = []
+  for path in swiftmutSwiftSourcePaths(config: config) {
+    guard let text = swiftmutRead(path) else {
+      continue
+    }
+    for match in swiftmutSourceSnippetMatches(snippet, in: text) {
+      let expressionColumn = match.column + expressionStart
+      guard let lineText = swiftmutSourceLine(text, line: match.line),
+            swiftmutDescribedAssignmentLineIsMappable(
+              lineText,
+              expression: expression,
+              expressionColumn: expressionColumn,
+              targetNames: targetNames
+            ) else {
+        continue
+      }
+      matches.append((path, match.line, expressionColumn))
+      if matches.count >= 2 {
+        break
+      }
+    }
+    if matches.count >= 2 {
+      break
+    }
+  }
+
+  guard matches.count == 1,
+        let match = matches.first else {
+    return nil
+  }
+  return (
+    swiftmutTrimPackageRoot(match.path, config: config),
+    match.line,
+    match.column,
+    expression,
+    swiftmutImplicitReturnSourceMutation(for: mutation))
+}
+
+private func swiftmutDescribedAssignmentLineIsMappable(
+  _ line: String,
+  expression: String,
+  expressionColumn: Int,
+  targetNames: [String]
+) -> Bool {
+  guard swiftmutLineContainsAnyIdentifier(line, identifiers: targetNames) else {
+    return false
+  }
+
+  let bytes = Array(line.utf8)
+  let expressionStart = max(0, min(bytes.count, expressionColumn - 1))
+  if expressionStart > 0 {
+    for index in 0..<expressionStart where bytes[index] == 61 {
+      return true
+    }
+  }
+
+  if targetNames.contains(expression) {
+    return false
+  }
+
+  for targetName in targetNames {
+    guard let targetRange = swiftmutFindSourceIdentifier(
+      targetName,
+      in: bytes,
+      start: 0,
+      end: expressionStart
+    ) else {
+      continue
+    }
+    let colonIndex = swiftmutSkipHorizontalWhitespace(bytes, from: targetRange.end)
+    if colonIndex < expressionStart && bytes[colonIndex] == 58 {
+      return true
+    }
+  }
+  return false
 }
 
 private func swiftmutFindFunctionSignatureAssignmentValueSourceLocation(
@@ -7655,7 +7770,7 @@ private func swiftmutLocalBindingValueExpression(
     return nil
   }
 
-  var matches: [(column: Int, name: String)] = []
+  var matches: [(column: Int, sourceOriginal: String)] = []
   var index = lineStart
   while index < lineEnd {
     if swiftmutLocalBindingTokenMatches(bytes: bytes, index: index, end: lineEnd, token: "let")
@@ -7668,8 +7783,20 @@ private func swiftmutLocalBindingValueExpression(
         }
         let name = String(decoding: bytes[nameStart..<nameEnd], as: UTF8.self)
         if targetNames.contains(name),
-           swiftmutReturnValueIsEligible(bytes: bytes, start: nameStart, mutation: mutation) {
-          matches.append((nameStart + 1, name))
+           let equals = swiftmutFirstAssignmentOperator(bytes: bytes, start: nameEnd, end: lineEnd) {
+          let valueStart = swiftmutSkipHorizontalWhitespace(bytes, from: equals + 1)
+          var valueEnd = lineEnd
+          if valueEnd > valueStart && bytes[valueEnd - 1] == 44 {
+            valueEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: valueEnd - 1)
+          }
+          guard valueStart < valueEnd,
+                swiftmutReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
+            index = nameEnd
+            continue
+          }
+          matches.append((
+            valueStart + 1,
+            String(decoding: bytes[valueStart..<valueEnd], as: UTF8.self)))
           if matches.count >= 2 {
             return nil
           }
@@ -7687,7 +7814,7 @@ private func swiftmutLocalBindingValueExpression(
   }
   return (
     match.column,
-    match.name,
+    match.sourceOriginal,
     swiftmutImplicitReturnSourceMutation(for: mutation))
 }
 
@@ -8636,6 +8763,35 @@ private func swiftmutSourceSnippetMatches(
     }
   }
   return matches
+}
+
+private func swiftmutSnippetExpressionStartOffset(_ snippet: String) -> Int {
+  swiftmutSkipHorizontalWhitespace(Array(snippet.utf8), from: 0)
+}
+
+private func swiftmutSourceLine(_ text: String, line targetLine: Int) -> String? {
+  guard targetLine > 0 else {
+    return nil
+  }
+
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      if currentLine == targetLine {
+        return String(text[lineStart..<index])
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if currentLine == targetLine {
+    return String(text[lineStart..<text.endIndex])
+  }
+  return nil
 }
 
 private func swiftmutSourceLineAndColumn(

@@ -5396,6 +5396,18 @@ private func swiftMutagenValueApplySourceLocation(
       }
       if let functionSourceLocation,
          functionSourceLocation.path == matchedPath,
+        let anchored = swiftMutagenFindDescribedValueExpressionSourceLocation(
+           for: apply,
+           path: matchedPath,
+           functionLine: functionSourceLocation.line,
+           locationDescription: apply.location.description,
+           mutation: mutation,
+           config: config
+         ) {
+        return anchored
+      }
+      if let functionSourceLocation,
+         functionSourceLocation.path == matchedPath,
          let anchored = swiftMutagenFindOrdinalValueExpressionSourceLocation(
            for: apply,
            path: matchedPath,
@@ -5413,6 +5425,16 @@ private func swiftMutagenValueApplySourceLocation(
       for: apply,
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
+    if let anchored = swiftMutagenFindDescribedValueExpressionSourceLocation(
+      for: apply,
+      path: functionSourceLocation.path,
+      functionLine: functionSourceLocation.line,
+      locationDescription: apply.location.description,
       mutation: mutation,
       config: config
     ) {
@@ -5888,7 +5910,7 @@ private func swiftMutagenQuotedSourceSnippetPrefix(_ description: String) -> Str
 
   var end = 1
   while end < bytes.count {
-    if bytes[end] == 34 || bytes[end] == 10 || bytes[end] == 13 {
+    if bytes[end] == 10 || bytes[end] == 13 {
       break
     }
     if end + 4 <= bytes.count,
@@ -5896,6 +5918,18 @@ private func swiftMutagenQuotedSourceSnippetPrefix(_ description: String) -> Str
        bytes[end + 1] == 46,
        bytes[end + 2] == 46,
        bytes[end + 3] == 46 {
+      break
+    }
+    if end + 9 <= bytes.count,
+       bytes[end] == 34,
+       bytes[end + 1] == 44,
+       bytes[end + 2] == 32,
+       bytes[end + 3] == 115,
+       bytes[end + 4] == 99,
+       bytes[end + 5] == 111,
+       bytes[end + 6] == 112,
+       bytes[end + 7] == 101,
+       bytes[end + 8] == 61 {
       break
     }
     end += 1
@@ -6251,6 +6285,273 @@ private func swiftMutagenCalleeExpressionSourceCandidates(
     inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
   }
   return candidates
+}
+
+private func swiftMutagenFindDescribedValueExpressionSourceLocation(
+  for apply: ApplyInst,
+  path: String,
+  functionLine: Int,
+  locationDescription: String,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard functionLine > 0,
+        let snippet = swiftMutagenQuotedSourceSnippetPrefix(locationDescription),
+        swiftMutagenDescribedValueSnippetLooksMappable(snippet),
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+
+  let prefixes = swiftMutagenDescribedValueSnippetPrefixes(snippet)
+  guard !prefixes.isEmpty else {
+    return nil
+  }
+
+  let identifiers = swiftMutagenSourceExpressionIdentifiers(for: apply)
+  var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  var braceDepth = 0
+  var sawOpeningBrace = false
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard line >= functionLine,
+          matches.count < 2 else {
+      return
+    }
+    let bytes = Array(lineText.utf8)
+    let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+    let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+    guard start < end else {
+      return
+    }
+
+    for prefix in prefixes {
+      guard let matchStart = swiftMutagenASCIIIndex(bytes, start: start, end: end, pattern: prefix),
+            let expression = swiftMutagenDescribedValueExpression(
+              bytes: bytes,
+              matchStart: matchStart,
+              lineEnd: end,
+              identifiers: identifiers,
+              mutation: mutation
+            ) else {
+        continue
+      }
+      matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
+      return
+    }
+  }
+
+  func updateBraceDepth(_ lineText: String) {
+    for byte in lineText.utf8 {
+      if byte == 123 {
+        braceDepth += 1
+        sawOpeningBrace = true
+      } else if byte == 125 {
+        braceDepth -= 1
+      }
+    }
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      let lineText = String(text[lineStart..<index])
+      if currentLine >= functionLine {
+        if sawOpeningBrace && braceDepth > 0 {
+          inspectLine(lineText, line: currentLine)
+          if matches.count >= 2 {
+            break
+          }
+        }
+        updateBraceDepth(lineText)
+        if sawOpeningBrace && braceDepth <= 0 {
+          break
+        }
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine >= functionLine && sawOpeningBrace && braceDepth > 0 {
+    inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
+  }
+
+  guard matches.count == 1,
+        let match = matches.first else {
+    return nil
+  }
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    match.sourceOriginal,
+    match.sourceMutated)
+}
+
+private func swiftMutagenDescribedValueSnippetLooksMappable(_ snippet: String) -> Bool {
+  let bytes = Array(snippet.utf8)
+  var start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  guard start < bytes.count else {
+    return false
+  }
+  if start + 1 < bytes.count
+      && (bytes[start] == 38 || bytes[start] == 124)
+      && bytes[start + 1] == bytes[start] {
+    start = swiftMutagenSkipHorizontalWhitespace(bytes, from: start + 2)
+  }
+  if start < bytes.count && bytes[start] == 33 {
+    start = swiftMutagenSkipHorizontalWhitespace(bytes, from: start + 1)
+  }
+  guard start < bytes.count,
+        !swiftMutagenASCIIHasExactPrefix(bytes, start: start, prefix: "()") else {
+    return false
+  }
+  let first = bytes[start]
+  return (first >= 65 && first <= 90) || (first >= 97 && first <= 122) || first == 95
+}
+
+private func swiftMutagenDescribedValueSnippetPrefixes(_ snippet: String) -> [String] {
+  let bytes = Array(snippet.utf8)
+  let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard start < end else {
+    return []
+  }
+
+  var prefixes: [String] = []
+  func appendPrefix(start: Int) {
+    let trimmedStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: start)
+    guard trimmedStart < end,
+          end - trimmedStart >= 5 else {
+      return
+    }
+    let prefix = String(decoding: bytes[trimmedStart..<end], as: UTF8.self)
+    if !prefixes.contains(prefix) {
+      prefixes.append(prefix)
+    }
+  }
+
+  appendPrefix(start: start)
+  if start + 1 < end
+      && (bytes[start] == 38 || bytes[start] == 124)
+      && bytes[start + 1] == bytes[start] {
+    appendPrefix(start: start + 2)
+  }
+  if start < end && bytes[start] == 33 {
+    appendPrefix(start: start + 1)
+  }
+  return prefixes
+}
+
+private func swiftMutagenDescribedValueExpression(
+  bytes: [UInt8],
+  matchStart: Int,
+  lineEnd: Int,
+  identifiers: [String],
+  mutation: SwiftMutagenMutation
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let expressionSearchStart = swiftMutagenDescribedValueExpressionSearchStart(
+    bytes: bytes,
+    matchStart: matchStart,
+    lineEnd: lineEnd
+  )
+
+  for identifier in identifiers {
+    guard let tokenRange = swiftMutagenFindSourceIdentifier(
+      identifier,
+      in: bytes,
+      start: expressionSearchStart,
+      end: lineEnd
+    ),
+    let expressionRange = swiftMutagenSourceExpressionRange(
+      around: tokenRange,
+      in: bytes,
+      lineEnd: lineEnd
+    ),
+    swiftMutagenReturnValueIsEligible(bytes: bytes, start: expressionRange.start, mutation: mutation) else {
+      continue
+    }
+    return swiftMutagenDescribedValueExpressionResult(
+      bytes: bytes,
+      expressionRange: expressionRange,
+      mutation: mutation
+    )
+  }
+
+  guard let tokenRange = swiftMutagenFirstCallLikeSourceIdentifier(
+    bytes: bytes,
+    start: expressionSearchStart,
+    end: lineEnd
+  ),
+  let expressionRange = swiftMutagenSourceExpressionRange(
+    around: tokenRange,
+    in: bytes,
+    lineEnd: lineEnd
+  ),
+  swiftMutagenReturnValueIsEligible(bytes: bytes, start: expressionRange.start, mutation: mutation) else {
+    return nil
+  }
+  return swiftMutagenDescribedValueExpressionResult(
+    bytes: bytes,
+    expressionRange: expressionRange,
+    mutation: mutation
+  )
+}
+
+private func swiftMutagenDescribedValueExpressionSearchStart(
+  bytes: [UInt8],
+  matchStart: Int,
+  lineEnd: Int
+) -> Int {
+  var start = swiftMutagenSkipHorizontalWhitespace(bytes, from: matchStart)
+  if start + 1 < lineEnd
+      && (bytes[start] == 38 || bytes[start] == 124)
+      && bytes[start + 1] == bytes[start] {
+    start = swiftMutagenSkipHorizontalWhitespace(bytes, from: start + 2)
+  }
+  if start < lineEnd && bytes[start] == 33 {
+    start = swiftMutagenSkipHorizontalWhitespace(bytes, from: start + 1)
+  }
+  return start
+}
+
+private func swiftMutagenDescribedValueExpressionResult(
+  bytes: [UInt8],
+  expressionRange: (start: Int, end: Int),
+  mutation: SwiftMutagenMutation
+) -> (column: Int, sourceOriginal: String, sourceMutated: String) {
+  let sourceOriginal = String(decoding: bytes[expressionRange.start..<expressionRange.end], as: UTF8.self)
+  return (
+    expressionRange.start + 1,
+    sourceOriginal,
+    swiftMutagenImplicitReturnSourceMutation(for: mutation))
+}
+
+private func swiftMutagenFirstCallLikeSourceIdentifier(
+  bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> (start: Int, end: Int)? {
+  var index = start
+  while index < end {
+    guard swiftMutagenIsASCIIIdentifierStart(bytes[index]) else {
+      index += 1
+      continue
+    }
+    let tokenStart = index
+    index += 1
+    while index < end && swiftMutagenIsASCIILetterNumberOrUnderscore(bytes[index]) {
+      index += 1
+    }
+    let suffixStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: index)
+    if suffixStart < end && (bytes[suffixStart] == 40 || bytes[suffixStart] == 123) {
+      return (tokenStart, index)
+    }
+  }
+  return nil
 }
 
 private func swiftMutagenValueExpressionOnLine(
@@ -8856,13 +9157,17 @@ private func swiftMutagenSkipHorizontalWhitespace(_ bytes: [UInt8], from start: 
 }
 
 private func swiftMutagenASCIIContains(_ bytes: [UInt8], start: Int, end: Int, pattern: String) -> Bool {
+  swiftMutagenASCIIIndex(bytes, start: start, end: end, pattern: pattern) != nil
+}
+
+private func swiftMutagenASCIIIndex(_ bytes: [UInt8], start: Int, end: Int, pattern: String) -> Int? {
   let patternBytes = Array(pattern.utf8)
   guard !patternBytes.isEmpty,
         start >= 0,
         start <= end,
         end <= bytes.count,
         patternBytes.count <= end - start else {
-    return false
+    return nil
   }
 
   var index = start
@@ -8875,11 +9180,11 @@ private func swiftMutagenASCIIContains(_ bytes: [UInt8], start: Int, end: Int, p
       }
     }
     if matched {
-      return true
+      return index
     }
     index += 1
   }
-  return false
+  return nil
 }
 
 private func swiftMutagenASCIIHasExactPrefix(_ bytes: [UInt8], start: Int, prefix: String) -> Bool {

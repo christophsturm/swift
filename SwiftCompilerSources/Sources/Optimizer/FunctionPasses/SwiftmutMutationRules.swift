@@ -140,6 +140,22 @@ func swiftmutAssignmentStoreIsEligible(_ store: StoreInst, config: SwiftmutConfi
   guard !store.source.type.isAddress else {
     return false
   }
+  let destinationNames = swiftmutAssignmentDestinationNames(for: store)
+  let sourceNames = swiftmutAssignmentSourceNames(for: store)
+  if swiftmutIsSynthesizedCollectionStorageAssignment(
+    destinationNames: destinationNames,
+    sourceNames: sourceNames
+  ) {
+    return false
+  }
+  if destinationNames.isEmpty, sourceNames.isEmpty {
+    guard let storeLocation = store.location.fileNameAndPosition else {
+      return false
+    }
+    if storeLocation.line <= 0 || storeLocation.path.string.contains("<compiler-generated>") {
+      return false
+    }
+  }
   guard let definingInstruction = store.source.definingInstruction else {
     return true
   }
@@ -153,6 +169,14 @@ func swiftmutAssignmentStoreIsEligible(_ store: StoreInst, config: SwiftmutConfi
   default:
     return true
   }
+}
+
+private func swiftmutIsSynthesizedCollectionStorageAssignment(
+  destinationNames: [String],
+  sourceNames: [String]
+) -> Bool {
+  let names = Set(destinationNames + sourceNames)
+  return names.contains("_storage") && names.contains("countAndCapacity")
 }
 
 func swiftmutScalarValueHasMappedSource(_ value: StructInst, config: SwiftmutConfig) -> Bool {

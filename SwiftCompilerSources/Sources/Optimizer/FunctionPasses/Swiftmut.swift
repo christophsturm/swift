@@ -4278,6 +4278,7 @@ private func swiftmutReturnSourceLocation(
         return anchored
       }
       if let anchored = swiftmutFindPropertyGetterReturnSourceLocation(
+        functionName: returnInst.parentFunction.name.string,
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -4351,6 +4352,7 @@ private func swiftmutReturnSourceLocation(
         return anchored
       }
       if let anchored = swiftmutFindPropertyGetterReturnSourceLocation(
+        functionName: returnInst.parentFunction.name.string,
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -4444,6 +4446,7 @@ private func swiftmutReturnSourceLocation(
       return anchored
     }
     if let anchored = swiftmutFindPropertyGetterReturnSourceLocation(
+      functionName: returnInst.parentFunction.name.string,
       path: path,
       preferredLine: line,
       mutation: mutation,
@@ -4502,6 +4505,7 @@ private func swiftmutReturnSourceLocation(
       return anchored
     }
     if let anchored = swiftmutFindPropertyGetterReturnSourceLocation(
+      functionName: returnInst.parentFunction.name.string,
       path: path,
       preferredLine: line,
       mutation: mutation,
@@ -4514,6 +4518,7 @@ private func swiftmutReturnSourceLocation(
 }
 
 private func swiftmutFindPropertyGetterReturnSourceLocation(
+  functionName: String,
   path: String,
   preferredLine: Int,
   mutation: SwiftmutMutation,
@@ -4527,6 +4532,7 @@ private func swiftmutFindPropertyGetterReturnSourceLocation(
 
   if let exact = swiftmutPropertyGetterReturnSourceLocation(
     in: text,
+    functionName: functionName,
     path: path,
     lineRange: preferredLine...preferredLine,
     mutation: mutation,
@@ -4538,6 +4544,7 @@ private func swiftmutFindPropertyGetterReturnSourceLocation(
   let firstLine = preferredLine > 1 ? preferredLine - 1 : 1
   return swiftmutPropertyGetterReturnSourceLocation(
     in: text,
+    functionName: functionName,
     path: path,
     lineRange: firstLine...(preferredLine + 2),
     mutation: mutation,
@@ -4547,6 +4554,7 @@ private func swiftmutFindPropertyGetterReturnSourceLocation(
 
 private func swiftmutPropertyGetterReturnSourceLocation(
   in text: String,
+  functionName: String,
   path: String,
   lineRange: ClosedRange<Int>,
   mutation: SwiftmutMutation,
@@ -4561,6 +4569,9 @@ private func swiftmutPropertyGetterReturnSourceLocation(
     guard lineRange.contains(line),
           matches.count < 2,
           let property = swiftmutStoredPropertyDeclaration(lineText, mutation: mutation) else {
+      return
+    }
+    guard swiftmutFunctionName(functionName, containsPropertyName: property.name) else {
       return
     }
     matches.append((line, property.column, property.sourceOriginal, property.sourceMutated))
@@ -4597,7 +4608,7 @@ private func swiftmutPropertyGetterReturnSourceLocation(
 private func swiftmutStoredPropertyDeclaration(
   _ line: String,
   mutation: SwiftmutMutation
-) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+) -> (name: String, column: Int, sourceOriginal: String, sourceMutated: String)? {
   let bytes = Array(line.utf8)
   let lineStart = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
   let lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
@@ -4640,10 +4651,19 @@ private func swiftmutStoredPropertyDeclaration(
     }
   }
 
+  let name = String(decoding: bytes[nameStart..<nameEnd], as: UTF8.self)
   return (
+    name,
     nameStart + 1,
-    String(decoding: bytes[nameStart..<nameEnd], as: UTF8.self),
+    name,
     swiftmutImplicitReturnSourceMutation(for: mutation))
+}
+
+private func swiftmutFunctionName(_ functionName: String, containsPropertyName propertyName: String) -> Bool {
+  guard !propertyName.isEmpty else {
+    return false
+  }
+  return functionName.contains(propertyName)
 }
 
 private func swiftmutPropertyDeclarationKeyword(bytes: [UInt8], start: Int, end: Int) -> (start: Int, end: Int)? {
@@ -8990,6 +9010,9 @@ private func swiftmutLineLooksLikeImplicitReturnExpression(
     if swiftmutASCIIHasPrefix(bytes, start: start, prefix: prefix) {
       return false
     }
+  }
+  if swiftmutPropertyDeclarationKeyword(bytes: bytes, start: start, end: end) != nil {
+    return false
   }
   for index in start..<end {
     if bytes[index] == 59 {

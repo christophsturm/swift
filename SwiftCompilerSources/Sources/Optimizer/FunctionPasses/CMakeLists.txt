@@ -42,6 +42,7 @@ swift_compiler_sources(Optimizer
   SwiftmutAssignmentText.swift
   SwiftmutConfig.swift
   SwiftmutJSON.swift
+  SwiftmutManifest.swift
   SwiftmutReturnText.swift
   SwiftmutSites.swift
   SwiftmutText.swift

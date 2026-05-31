@@ -1,8 +1,8 @@
-//===--- SwiftMutagen.swift ----------------------------------------------===//
+//===--- Swiftmut.swift ----------------------------------------------===//
 //
 // This source file is part of the Swift.org open source project
 //
-// Copyright (c) 2026 Swift Mutagen contributors
+// Copyright (c) 2026 swiftmut contributors
 // Licensed under Apache License v2.0 with Runtime Library Exception
 //
 // See https://swift.org/LICENSE.txt for license information
@@ -18,13 +18,13 @@ import Glibc
 import AST
 import SIL
 
-private enum SwiftMutagenMode {
+private enum SwiftmutMode {
   case discover
   case apply
   case metamutant
 }
 
-private struct SwiftMutagenConditionMutationRule {
+private struct SwiftmutConditionMutationRule {
   let builtinID: String
   let mutator: String
   let mutatedBuiltinName: String
@@ -44,7 +44,7 @@ private struct SwiftMutagenConditionMutationRule {
   }
 }
 
-private struct SwiftMutagenArithmeticMutationRule {
+private struct SwiftmutArithmeticMutationRule {
   let builtinID: String
   let mutatedBuiltinName: String
   let sourceOriginal: String
@@ -62,7 +62,7 @@ private struct SwiftMutagenArithmeticMutationRule {
   }
 }
 
-private struct SwiftMutagenContextualArithmeticMutationRule {
+private struct SwiftmutContextualArithmeticMutationRule {
   let builtinID: String
   let context: String
   let mutator: String
@@ -84,7 +84,7 @@ private struct SwiftMutagenContextualArithmeticMutationRule {
   }
 }
 
-private struct SwiftMutagenReturnMutationRule {
+private struct SwiftmutReturnMutationRule {
   let context: String
   let mutator: String
   let mutatedBuiltinName: String
@@ -106,7 +106,7 @@ private struct SwiftMutagenReturnMutationRule {
   }
 }
 
-private struct SwiftMutagenVoidCallMutationRule {
+private struct SwiftmutVoidCallMutationRule {
   let mutator: String
   let mutatedBuiltinName: String
   let sourceOriginal: String
@@ -126,7 +126,7 @@ private struct SwiftMutagenVoidCallMutationRule {
   }
 }
 
-private struct SwiftMutagenSourceMutationDisplayRule {
+private struct SwiftmutSourceMutationDisplayRule {
   let mutator: String
   let builtinID: String
   let sourceOriginal: String
@@ -160,10 +160,10 @@ private struct SwiftMutagenSourceMutationDisplayRule {
   }
 }
 
-private struct SwiftMutagenConfig {
-  static let defaultPath = ".mutagen/session/compiler-config.json"
+private struct SwiftmutConfig {
+  static let defaultPath = ".swiftmut/session/compiler-config.json"
 
-  let mode: SwiftMutagenMode
+  let mode: SwiftmutMode
   let activeMutantID: String
   let mutantsPath: String
   let manifestFragmentsDirectory: String
@@ -172,21 +172,21 @@ private struct SwiftMutagenConfig {
   let excludePathFragments: [String]
   let sourceFiles: [String]
   let enabledMutators: [String]
-  let conditionMutationRules: [SwiftMutagenConditionMutationRule]
-  let arithmeticMutationRules: [SwiftMutagenArithmeticMutationRule]
-  let contextualArithmeticMutationRules: [SwiftMutagenContextualArithmeticMutationRule]
-  let returnMutationRules: [SwiftMutagenReturnMutationRule]
-  let voidCallMutationRules: [SwiftMutagenVoidCallMutationRule]
-  let sourceMutationDisplayRules: [SwiftMutagenSourceMutationDisplayRule]
+  let conditionMutationRules: [SwiftmutConditionMutationRule]
+  let arithmeticMutationRules: [SwiftmutArithmeticMutationRule]
+  let contextualArithmeticMutationRules: [SwiftmutContextualArithmeticMutationRule]
+  let returnMutationRules: [SwiftmutReturnMutationRule]
+  let voidCallMutationRules: [SwiftmutVoidCallMutationRule]
+  let sourceMutationDisplayRules: [SwiftmutSourceMutationDisplayRule]
 
-  static func load() -> SwiftMutagenConfig? {
-    let configPath = swiftMutagenEnvironmentValue("SWIFT_MUTAGEN_CONFIG") ?? Self.defaultPath
-    guard let json = swiftMutagenRead(configPath),
-          let rawMode = swiftMutagenJSONStringValue("mode", in: json) else {
+  static func load() -> SwiftmutConfig? {
+    let configPath = swiftmutEnvironmentValue("SWIFTMUT_CONFIG") ?? Self.defaultPath
+    guard let json = swiftmutRead(configPath),
+          let rawMode = swiftmutJSONStringValue("mode", in: json) else {
       return nil
     }
 
-    let mode: SwiftMutagenMode
+    let mode: SwiftmutMode
     switch rawMode {
     case "discover":
       mode = .discover
@@ -198,38 +198,38 @@ private struct SwiftMutagenConfig {
       return nil
     }
 
-    guard let mutantsPath = swiftMutagenJSONStringValue("manifestPath", in: json),
+    guard let mutantsPath = swiftmutJSONStringValue("manifestPath", in: json),
           !mutantsPath.isEmpty else {
       return nil
     }
 
-    let activeMutantID = swiftMutagenJSONStringValue("activeMutantID", in: json) ?? ""
-    let manifestFragmentsDirectory = swiftMutagenJSONStringValue("manifestFragmentsDirectory", in: json) ?? ""
-    let compilerEventsPath = swiftMutagenJSONStringValue("compilerEventsPath", in: json) ?? ""
-    let packageRoot = swiftMutagenJSONStringValue("packageRoot", in: json) ?? ""
-    let excludePaths = swiftMutagenJSONStringArray("excludePaths", in: json)
-    let sourceFiles = swiftMutagenJSONStringArray("sourceFiles", in: json)
-    let enabledMutators = swiftMutagenJSONStringArray("enabledMutators", in: json)
-    let conditionMutationRules = swiftMutagenJSONStringArray("conditionMutationRules", in: json).compactMap {
-      SwiftMutagenConditionMutationRule(wireFormat: $0)
+    let activeMutantID = swiftmutJSONStringValue("activeMutantID", in: json) ?? ""
+    let manifestFragmentsDirectory = swiftmutJSONStringValue("manifestFragmentsDirectory", in: json) ?? ""
+    let compilerEventsPath = swiftmutJSONStringValue("compilerEventsPath", in: json) ?? ""
+    let packageRoot = swiftmutJSONStringValue("packageRoot", in: json) ?? ""
+    let excludePaths = swiftmutJSONStringArray("excludePaths", in: json)
+    let sourceFiles = swiftmutJSONStringArray("sourceFiles", in: json)
+    let enabledMutators = swiftmutJSONStringArray("enabledMutators", in: json)
+    let conditionMutationRules = swiftmutJSONStringArray("conditionMutationRules", in: json).compactMap {
+      SwiftmutConditionMutationRule(wireFormat: $0)
     }
-    let arithmeticMutationRules = swiftMutagenJSONStringArray("arithmeticMutationRules", in: json).compactMap {
-      SwiftMutagenArithmeticMutationRule(wireFormat: $0)
+    let arithmeticMutationRules = swiftmutJSONStringArray("arithmeticMutationRules", in: json).compactMap {
+      SwiftmutArithmeticMutationRule(wireFormat: $0)
     }
-    let contextualArithmeticMutationRules = swiftMutagenJSONStringArray("contextualArithmeticMutationRules", in: json).compactMap {
-      SwiftMutagenContextualArithmeticMutationRule(wireFormat: $0)
+    let contextualArithmeticMutationRules = swiftmutJSONStringArray("contextualArithmeticMutationRules", in: json).compactMap {
+      SwiftmutContextualArithmeticMutationRule(wireFormat: $0)
     }
-    let returnMutationRules = swiftMutagenJSONStringArray("returnMutationRules", in: json).compactMap {
-      SwiftMutagenReturnMutationRule(wireFormat: $0)
+    let returnMutationRules = swiftmutJSONStringArray("returnMutationRules", in: json).compactMap {
+      SwiftmutReturnMutationRule(wireFormat: $0)
     }
-    let voidCallMutationRules = swiftMutagenJSONStringArray("voidCallMutationRules", in: json).compactMap {
-      SwiftMutagenVoidCallMutationRule(wireFormat: $0)
+    let voidCallMutationRules = swiftmutJSONStringArray("voidCallMutationRules", in: json).compactMap {
+      SwiftmutVoidCallMutationRule(wireFormat: $0)
     }
-    let sourceMutationDisplayRules = swiftMutagenJSONStringArray("sourceMutationDisplayRules", in: json).compactMap {
-      SwiftMutagenSourceMutationDisplayRule(wireFormat: $0)
+    let sourceMutationDisplayRules = swiftmutJSONStringArray("sourceMutationDisplayRules", in: json).compactMap {
+      SwiftmutSourceMutationDisplayRule(wireFormat: $0)
     }
 
-    return SwiftMutagenConfig(
+    return SwiftmutConfig(
       mode: mode,
       activeMutantID: activeMutantID,
       mutantsPath: mutantsPath,
@@ -248,7 +248,7 @@ private struct SwiftMutagenConfig {
   }
 }
 
-private func swiftMutagenEnvironmentValue(_ name: String) -> String? {
+private func swiftmutEnvironmentValue(_ name: String) -> String? {
   #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS) || os(Linux) || os(Android)
   return name.withCString { namePointer in
     guard let valuePointer = getenv(namePointer) else {
@@ -261,7 +261,7 @@ private func swiftMutagenEnvironmentValue(_ name: String) -> String? {
   #endif
 }
 
-private struct SwiftMutagenMutation {
+private struct SwiftmutMutation {
   let originalID: BuiltinInst.ID?
   let mutator: String
   let mutatedBuiltinName: String
@@ -270,8 +270,8 @@ private struct SwiftMutagenMutation {
   let silOriginal: String
   let silMutated: String
 
-  func withSource(original: String, mutated: String) -> SwiftMutagenMutation {
-    SwiftMutagenMutation(
+  func withSource(original: String, mutated: String) -> SwiftmutMutation {
+    SwiftmutMutation(
       originalID: originalID,
       mutator: mutator,
       mutatedBuiltinName: mutatedBuiltinName,
@@ -282,39 +282,39 @@ private struct SwiftMutagenMutation {
   }
 }
 
-private struct SwiftMutagenCandidate {
+private struct SwiftmutCandidate {
   let id: String
   let module: String
   let function: String
   let file: String
   let line: Int
   let column: Int
-  let mutation: SwiftMutagenMutation
+  let mutation: SwiftmutMutation
 
   var jsonLine: String {
     var fields: [String] = []
-    fields.append(#""id":"\#(swiftMutagenEscapeJSON(id))""#)
-    fields.append(#""mutator":"\#(swiftMutagenEscapeJSON(mutation.mutator))""#)
-    fields.append(#""module":"\#(swiftMutagenEscapeJSON(module))""#)
-    fields.append(#""function":"\#(swiftMutagenEscapeJSON(function))""#)
-    fields.append(#""file":"\#(swiftMutagenEscapeJSON(file))""#)
+    fields.append(#""id":"\#(swiftmutEscapeJSON(id))""#)
+    fields.append(#""mutator":"\#(swiftmutEscapeJSON(mutation.mutator))""#)
+    fields.append(#""module":"\#(swiftmutEscapeJSON(module))""#)
+    fields.append(#""function":"\#(swiftmutEscapeJSON(function))""#)
+    fields.append(#""file":"\#(swiftmutEscapeJSON(file))""#)
     fields.append(#""line":\#(line)"#)
     fields.append(#""column":\#(column)"#)
-    fields.append(#""sourceOriginal":"\#(swiftMutagenEscapeJSON(mutation.sourceOriginal))""#)
-    fields.append(#""sourceMutated":"\#(swiftMutagenEscapeJSON(mutation.sourceMutated))""#)
-    fields.append(#""silOriginal":"\#(swiftMutagenEscapeJSON(mutation.silOriginal))""#)
-    fields.append(#""silMutated":"\#(swiftMutagenEscapeJSON(mutation.silMutated))""#)
+    fields.append(#""sourceOriginal":"\#(swiftmutEscapeJSON(mutation.sourceOriginal))""#)
+    fields.append(#""sourceMutated":"\#(swiftmutEscapeJSON(mutation.sourceMutated))""#)
+    fields.append(#""silOriginal":"\#(swiftmutEscapeJSON(mutation.silOriginal))""#)
+    fields.append(#""silMutated":"\#(swiftmutEscapeJSON(mutation.silMutated))""#)
     return "{\(fields.joined(separator: ","))}\n"
   }
 }
 
-private struct SwiftMutagenConditionAlternative {
+private struct SwiftmutConditionAlternative {
   let mutantID: String
   let alternativeIndex: UInt32
-  let mutation: SwiftMutagenMutation
+  let mutation: SwiftmutMutation
 }
 
-private struct SwiftMutagenConditionSite {
+private struct SwiftmutConditionSite {
   let siteID: UInt64
   let runtimeFunctionName: String
   let module: String
@@ -324,10 +324,10 @@ private struct SwiftMutagenConditionSite {
   let column: Int
   let comparison: BuiltinInst?
   let branch: CondBranchInst
-  let alternatives: [SwiftMutagenConditionAlternative]
+  let alternatives: [SwiftmutConditionAlternative]
 }
 
-private struct SwiftMutagenConditionDiscoveryStats {
+private struct SwiftmutConditionDiscoveryStats {
   var branches = 0
   var branchesWithArguments = 0
   var comparisonBranches = 0
@@ -338,48 +338,48 @@ private struct SwiftMutagenConditionDiscoveryStats {
   var genericNonExplicitSourceLocations = 0
 }
 
-private struct SwiftMutagenConditionDiscoveryResult {
-  let sites: [SwiftMutagenConditionSite]
-  let stats: SwiftMutagenConditionDiscoveryStats
+private struct SwiftmutConditionDiscoveryResult {
+  let sites: [SwiftmutConditionSite]
+  let stats: SwiftmutConditionDiscoveryStats
 }
 
-private struct SwiftMutagenReturnAlternative {
+private struct SwiftmutReturnAlternative {
   let mutantID: String
   let alternativeIndex: UInt32
-  let mutation: SwiftMutagenMutation
+  let mutation: SwiftmutMutation
 }
 
-private struct SwiftMutagenArithmeticAlternative {
+private struct SwiftmutArithmeticAlternative {
   let mutantID: String
   let alternativeIndex: UInt32
-  let mutation: SwiftMutagenMutation
+  let mutation: SwiftmutMutation
 }
 
-private struct SwiftMutagenScalarValueAlternative {
+private struct SwiftmutScalarValueAlternative {
   let mutantID: String
   let alternativeIndex: UInt32
-  let mutation: SwiftMutagenMutation
+  let mutation: SwiftmutMutation
 }
 
-private struct SwiftMutagenValueApplyAlternative {
+private struct SwiftmutValueApplyAlternative {
   let mutantID: String
   let alternativeIndex: UInt32
-  let mutation: SwiftMutagenMutation
+  let mutation: SwiftmutMutation
 }
 
-private struct SwiftMutagenAssignmentValueAlternative {
+private struct SwiftmutAssignmentValueAlternative {
   let mutantID: String
   let alternativeIndex: UInt32
-  let mutation: SwiftMutagenMutation
+  let mutation: SwiftmutMutation
 }
 
-private struct SwiftMutagenVoidCallAlternative {
+private struct SwiftmutVoidCallAlternative {
   let mutantID: String
   let alternativeIndex: UInt32
-  let mutation: SwiftMutagenMutation
+  let mutation: SwiftmutMutation
 }
 
-private struct SwiftMutagenReturnSite {
+private struct SwiftmutReturnSite {
   let siteID: UInt64
   let runtimeFunctionName: String
   let module: String
@@ -388,10 +388,10 @@ private struct SwiftMutagenReturnSite {
   let line: Int
   let column: Int
   let returnInst: ReturnInst
-  let alternatives: [SwiftMutagenReturnAlternative]
+  let alternatives: [SwiftmutReturnAlternative]
 }
 
-private struct SwiftMutagenReturnBranchSite {
+private struct SwiftmutReturnBranchSite {
   let siteID: UInt64
   let runtimeFunctionName: String
   let module: String
@@ -401,10 +401,10 @@ private struct SwiftMutagenReturnBranchSite {
   let column: Int
   let branch: BranchInst
   let value: Value
-  let alternatives: [SwiftMutagenReturnAlternative]
+  let alternatives: [SwiftmutReturnAlternative]
 }
 
-private struct SwiftMutagenReturnDiscoveryStats {
+private struct SwiftmutReturnDiscoveryStats {
   var terminators = 0
   var boolTerminators = 0
   var optionalTerminators = 0
@@ -424,24 +424,24 @@ private struct SwiftMutagenReturnDiscoveryStats {
   var nonStatementSourceLocations = 0
 }
 
-private struct SwiftMutagenReturnDiscoveryResult {
-  let sites: [SwiftMutagenReturnSite]
-  let stats: SwiftMutagenReturnDiscoveryStats
+private struct SwiftmutReturnDiscoveryResult {
+  let sites: [SwiftmutReturnSite]
+  let stats: SwiftmutReturnDiscoveryStats
 }
 
-private struct SwiftMutagenReturnBranchDiscoveryStats {
+private struct SwiftmutReturnBranchDiscoveryStats {
   var branches = 0
   var mutationEligibleBranches = 0
   var mutationAlternatives = 0
   var sourceLocationMisses = 0
 }
 
-private struct SwiftMutagenReturnBranchDiscoveryResult {
-  let sites: [SwiftMutagenReturnBranchSite]
-  let stats: SwiftMutagenReturnBranchDiscoveryStats
+private struct SwiftmutReturnBranchDiscoveryResult {
+  let sites: [SwiftmutReturnBranchSite]
+  let stats: SwiftmutReturnBranchDiscoveryStats
 }
 
-private struct SwiftMutagenArithmeticSite {
+private struct SwiftmutArithmeticSite {
   let siteID: UInt64
   let runtimeFunctionName: String
   let module: String
@@ -450,10 +450,10 @@ private struct SwiftMutagenArithmeticSite {
   let line: Int
   let column: Int
   let builtin: BuiltinInst
-  let alternatives: [SwiftMutagenArithmeticAlternative]
+  let alternatives: [SwiftmutArithmeticAlternative]
 }
 
-private struct SwiftMutagenScalarValueSite {
+private struct SwiftmutScalarValueSite {
   let siteID: UInt64
   let runtimeFunctionName: String
   let module: String
@@ -462,22 +462,22 @@ private struct SwiftMutagenScalarValueSite {
   let line: Int
   let column: Int
   let value: StructInst
-  let alternatives: [SwiftMutagenScalarValueAlternative]
+  let alternatives: [SwiftmutScalarValueAlternative]
 }
 
-private struct SwiftMutagenScalarValueDiscoveryStats {
+private struct SwiftmutScalarValueDiscoveryStats {
   var structInstructions = 0
   var mutationEligibleStructInstructions = 0
   var mutationAlternatives = 0
   var sourceLocationMisses = 0
 }
 
-private struct SwiftMutagenScalarValueDiscoveryResult {
-  let sites: [SwiftMutagenScalarValueSite]
-  let stats: SwiftMutagenScalarValueDiscoveryStats
+private struct SwiftmutScalarValueDiscoveryResult {
+  let sites: [SwiftmutScalarValueSite]
+  let stats: SwiftmutScalarValueDiscoveryStats
 }
 
-private struct SwiftMutagenValueApplySite {
+private struct SwiftmutValueApplySite {
   let siteID: UInt64
   let runtimeFunctionName: String
   let module: String
@@ -486,10 +486,10 @@ private struct SwiftMutagenValueApplySite {
   let line: Int
   let column: Int
   let apply: ApplyInst
-  let alternatives: [SwiftMutagenValueApplyAlternative]
+  let alternatives: [SwiftmutValueApplyAlternative]
 }
 
-private struct SwiftMutagenValueApplyDiscoveryStats {
+private struct SwiftmutValueApplyDiscoveryStats {
   var applyInstructions = 0
   var valueApplyInstructions = 0
   var mutationEligibleApplyInstructions = 0
@@ -497,12 +497,12 @@ private struct SwiftMutagenValueApplyDiscoveryStats {
   var sourceLocationMisses = 0
 }
 
-private struct SwiftMutagenValueApplyDiscoveryResult {
-  let sites: [SwiftMutagenValueApplySite]
-  let stats: SwiftMutagenValueApplyDiscoveryStats
+private struct SwiftmutValueApplyDiscoveryResult {
+  let sites: [SwiftmutValueApplySite]
+  let stats: SwiftmutValueApplyDiscoveryStats
 }
 
-private struct SwiftMutagenAssignmentValueSite {
+private struct SwiftmutAssignmentValueSite {
   let siteID: UInt64
   let runtimeFunctionName: String
   let module: String
@@ -511,22 +511,22 @@ private struct SwiftMutagenAssignmentValueSite {
   let line: Int
   let column: Int
   let store: StoreInst
-  let alternatives: [SwiftMutagenAssignmentValueAlternative]
+  let alternatives: [SwiftmutAssignmentValueAlternative]
 }
 
-private struct SwiftMutagenAssignmentValueDiscoveryStats {
+private struct SwiftmutAssignmentValueDiscoveryStats {
   var storeInstructions = 0
   var mutationEligibleStoreInstructions = 0
   var mutationAlternatives = 0
   var sourceLocationMisses = 0
 }
 
-private struct SwiftMutagenAssignmentValueDiscoveryResult {
-  let sites: [SwiftMutagenAssignmentValueSite]
-  let stats: SwiftMutagenAssignmentValueDiscoveryStats
+private struct SwiftmutAssignmentValueDiscoveryResult {
+  let sites: [SwiftmutAssignmentValueSite]
+  let stats: SwiftmutAssignmentValueDiscoveryStats
 }
 
-private struct SwiftMutagenVoidCallSite {
+private struct SwiftmutVoidCallSite {
   let siteID: UInt64
   let runtimeFunctionName: String
   let module: String
@@ -535,10 +535,10 @@ private struct SwiftMutagenVoidCallSite {
   let line: Int
   let column: Int
   let apply: ApplyInst
-  let alternatives: [SwiftMutagenVoidCallAlternative]
+  let alternatives: [SwiftmutVoidCallAlternative]
 }
 
-private struct SwiftMutagenVoidCallDiscoveryStats {
+private struct SwiftmutVoidCallDiscoveryStats {
   var applyInstructions = 0
   var voidApplyInstructions = 0
   var mutationEligibleApplyInstructions = 0
@@ -546,36 +546,36 @@ private struct SwiftMutagenVoidCallDiscoveryStats {
   var nonStatementSourceLocations = 0
 }
 
-private struct SwiftMutagenVoidCallDiscoveryResult {
-  let sites: [SwiftMutagenVoidCallSite]
-  let stats: SwiftMutagenVoidCallDiscoveryStats
+private struct SwiftmutVoidCallDiscoveryResult {
+  let sites: [SwiftmutVoidCallSite]
+  let stats: SwiftmutVoidCallDiscoveryStats
 }
 
-private enum SwiftMutagenVoidCallSourceLocationResult {
+private enum SwiftmutVoidCallSourceLocationResult {
   case found(file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)
   case nonStatement
   case missing
 }
 
-private var swiftMutagenNextOrdinal = 1
-private var swiftMutagenHasTruncatedDiscoveryOutput = false
+private var swiftmutNextOrdinal = 1
+private var swiftmutHasTruncatedDiscoveryOutput = false
 
-let swiftMutagen = FunctionPass(name: "swift-mutagen") {
+let swiftmut = FunctionPass(name: "swiftmut") {
   (function: Function, context: FunctionPassContext) in
 
-  guard let config = SwiftMutagenConfig.load() else {
+  guard let config = SwiftmutConfig.load() else {
     return
   }
 
   let moduleName = context.currentModuleContext.name.string
-  let shouldLogFunction = swiftMutagenShouldLog(function: function, moduleName: moduleName, config: config)
-  let functionStartedAt = swiftMutagenClockMicroseconds()
+  let shouldLogFunction = swiftmutShouldLog(function: function, moduleName: moduleName, config: config)
+  let functionStartedAt = swiftmutClockMicroseconds()
   if shouldLogFunction {
-    swiftMutagenLogEvent(
+    swiftmutLogEvent(
       "functionVisit",
       config: config,
       fields: [
-        ("mode", swiftMutagenModeName(config.mode)),
+        ("mode", swiftmutModeName(config.mode)),
         ("module", moduleName),
         ("function", function.name.string),
         ("location", function.location.description)
@@ -583,13 +583,13 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
   }
   defer {
     if shouldLogFunction {
-      let finishedAt = swiftMutagenClockMicroseconds()
+      let finishedAt = swiftmutClockMicroseconds()
       let durationUs = finishedAt >= functionStartedAt ? finishedAt - functionStartedAt : 0
-      swiftMutagenLogEvent(
+      swiftmutLogEvent(
         "functionTiming",
         config: config,
         fields: [
-          ("mode", swiftMutagenModeName(config.mode)),
+          ("mode", swiftmutModeName(config.mode)),
           ("module", moduleName),
           ("function", function.name.string),
           ("durationUs", "\(durationUs)")
@@ -597,9 +597,9 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
     }
   }
 
-  guard swiftMutagenFunctionName(function.name.string, belongsToModule: moduleName) else {
+  guard swiftmutFunctionName(function.name.string, belongsToModule: moduleName) else {
     if shouldLogFunction {
-      swiftMutagenLogEvent(
+      swiftmutLogEvent(
         "functionSkip",
         config: config,
         fields: [
@@ -611,9 +611,9 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
     return
   }
 
-  if let exclusionReason = swiftMutagenExclusionReason(function: function, config: config) {
+  if let exclusionReason = swiftmutExclusionReason(function: function, config: config) {
     if shouldLogFunction {
-      swiftMutagenLogEvent(
+      swiftmutLogEvent(
         "functionSkip",
         config: config,
         fields: [
@@ -626,7 +626,7 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
   }
 
   if config.mode == .metamutant {
-    if swiftMutagenInstrumentMetamutantSites(
+    if swiftmutInstrumentMetamutantSites(
       in: function,
       moduleName: moduleName,
       config: config,
@@ -644,11 +644,11 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
     for instruction in block.instructions {
       guard let builtin = instruction as? BuiltinInst else {
         if let returnInst = instruction as? ReturnInst {
-          for mutation in swiftMutagenReturnMutations(for: returnInst, config: config) {
-            guard swiftMutagenMutatorIsEnabled(mutation.mutator, config: config) else {
+          for mutation in swiftmutReturnMutations(for: returnInst, config: config) {
+            guard swiftmutMutatorIsEnabled(mutation.mutator, config: config) else {
               continue
             }
-            guard let sourceLocation = swiftMutagenReturnSourceLocation(
+            guard let sourceLocation = swiftmutReturnSourceLocation(
               for: returnInst,
               mutation: mutation,
               config: config
@@ -656,9 +656,9 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
               continue
             }
 
-            let id = swiftMutagenFormatMutantID(swiftMutagenNextOrdinal)
-            swiftMutagenNextOrdinal += 1
-            let candidate = SwiftMutagenCandidate(
+            let id = swiftmutFormatMutantID(swiftmutNextOrdinal)
+            swiftmutNextOrdinal += 1
+            let candidate = SwiftmutCandidate(
               id: id,
               module: moduleName,
               function: functionName,
@@ -671,15 +671,15 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
 
             switch config.mode {
             case .discover:
-              if !swiftMutagenHasTruncatedDiscoveryOutput {
-                swiftMutagenCreateParentDirectories(forFile: config.mutantsPath)
-                swiftMutagenWrite("", to: config.mutantsPath, append: false)
-                swiftMutagenHasTruncatedDiscoveryOutput = true
+              if !swiftmutHasTruncatedDiscoveryOutput {
+                swiftmutCreateParentDirectories(forFile: config.mutantsPath)
+                swiftmutWrite("", to: config.mutantsPath, append: false)
+                swiftmutHasTruncatedDiscoveryOutput = true
               }
-              swiftMutagenWrite(candidate.jsonLine, to: config.mutantsPath, append: true)
+              swiftmutWrite(candidate.jsonLine, to: config.mutantsPath, append: true)
             case .apply:
               if candidate.id == config.activeMutantID {
-                swiftMutagenApplyReturn(mutation: mutation, to: returnInst, context)
+                swiftmutApplyReturn(mutation: mutation, to: returnInst, context)
                 changed = true
               }
             case .metamutant:
@@ -688,16 +688,16 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
           }
         }
         if let apply = instruction as? ApplyInst,
-           let mutation = swiftMutagenVoidCallMutation(for: apply, config: config),
-           swiftMutagenMutatorIsEnabled(mutation.mutator, config: config),
-           let sourceLocation = swiftMutagenInstructionSourceLocation(
+           let mutation = swiftmutVoidCallMutation(for: apply, config: config),
+           swiftmutMutatorIsEnabled(mutation.mutator, config: config),
+           let sourceLocation = swiftmutInstructionSourceLocation(
             for: apply,
             mutation: mutation,
             config: config
            ) {
-          let id = swiftMutagenFormatMutantID(swiftMutagenNextOrdinal)
-          swiftMutagenNextOrdinal += 1
-          let candidate = SwiftMutagenCandidate(
+          let id = swiftmutFormatMutantID(swiftmutNextOrdinal)
+          swiftmutNextOrdinal += 1
+          let candidate = SwiftmutCandidate(
             id: id,
             module: moduleName,
             function: functionName,
@@ -710,12 +710,12 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
 
           switch config.mode {
           case .discover:
-            if !swiftMutagenHasTruncatedDiscoveryOutput {
-              swiftMutagenCreateParentDirectories(forFile: config.mutantsPath)
-              swiftMutagenWrite("", to: config.mutantsPath, append: false)
-              swiftMutagenHasTruncatedDiscoveryOutput = true
+            if !swiftmutHasTruncatedDiscoveryOutput {
+              swiftmutCreateParentDirectories(forFile: config.mutantsPath)
+              swiftmutWrite("", to: config.mutantsPath, append: false)
+              swiftmutHasTruncatedDiscoveryOutput = true
             }
-            swiftMutagenWrite(candidate.jsonLine, to: config.mutantsPath, append: true)
+            swiftmutWrite(candidate.jsonLine, to: config.mutantsPath, append: true)
           case .apply:
             if candidate.id == config.activeMutantID {
               context.erase(instruction: apply)
@@ -728,11 +728,11 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
         continue
       }
 
-      for mutation in swiftMutagenMutations(for: builtin, config: config) {
-        guard swiftMutagenMutatorIsEnabled(mutation.mutator, config: config) else {
+      for mutation in swiftmutMutations(for: builtin, config: config) {
+        guard swiftmutMutatorIsEnabled(mutation.mutator, config: config) else {
           continue
         }
-        guard let sourceLocation = swiftMutagenSourceLocation(
+        guard let sourceLocation = swiftmutSourceLocation(
           for: builtin,
           function: function,
           moduleName: moduleName,
@@ -742,15 +742,15 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
           continue
         }
 
-        let id = swiftMutagenFormatMutantID(swiftMutagenNextOrdinal)
-        swiftMutagenNextOrdinal += 1
+        let id = swiftmutFormatMutantID(swiftmutNextOrdinal)
+        swiftmutNextOrdinal += 1
 
         let displayMutation = sourceLocation.sourceOriginal.isEmpty
           ? mutation
           : mutation.withSource(
             original: sourceLocation.sourceOriginal,
             mutated: sourceLocation.sourceMutated)
-        let candidate = SwiftMutagenCandidate(
+        let candidate = SwiftmutCandidate(
           id: id,
           module: moduleName,
           function: functionName,
@@ -761,15 +761,15 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
 
         switch config.mode {
         case .discover:
-          if !swiftMutagenHasTruncatedDiscoveryOutput {
-            swiftMutagenCreateParentDirectories(forFile: config.mutantsPath)
-            swiftMutagenWrite("", to: config.mutantsPath, append: false)
-            swiftMutagenHasTruncatedDiscoveryOutput = true
+          if !swiftmutHasTruncatedDiscoveryOutput {
+            swiftmutCreateParentDirectories(forFile: config.mutantsPath)
+            swiftmutWrite("", to: config.mutantsPath, append: false)
+            swiftmutHasTruncatedDiscoveryOutput = true
           }
-          swiftMutagenWrite(candidate.jsonLine, to: config.mutantsPath, append: true)
+          swiftmutWrite(candidate.jsonLine, to: config.mutantsPath, append: true)
         case .apply:
           if candidate.id == config.activeMutantID {
-            swiftMutagenApply(mutation: mutation, to: builtin, context)
+            swiftmutApply(mutation: mutation, to: builtin, context)
             changed = true
           }
         case .metamutant:
@@ -784,66 +784,66 @@ let swiftMutagen = FunctionPass(name: "swift-mutagen") {
   }
 }
 
-private func swiftMutagenInstrumentMetamutantSites(
+private func swiftmutInstrumentMetamutantSites(
   in function: Function,
   moduleName: String,
-  config: SwiftMutagenConfig,
+  config: SwiftmutConfig,
   _ context: FunctionPassContext
 ) -> Bool {
-  let conditionDiscovery = swiftMutagenDiscoverConditionSites(
+  let conditionDiscovery = swiftmutDiscoverConditionSites(
     in: function,
     moduleName: moduleName,
     config: config
   )
   let conditionSites = conditionDiscovery.sites
-  let arithmeticSites = swiftMutagenDiscoverArithmeticSites(
+  let arithmeticSites = swiftmutDiscoverArithmeticSites(
     in: function,
     moduleName: moduleName,
     config: config
   )
-  let scalarValueDiscovery = swiftMutagenDiscoverScalarValueSites(
+  let scalarValueDiscovery = swiftmutDiscoverScalarValueSites(
     in: function,
     moduleName: moduleName,
     config: config
   )
   let scalarValueSites = scalarValueDiscovery.sites
-  let valueApplyDiscovery = swiftMutagenDiscoverValueApplySites(
+  let valueApplyDiscovery = swiftmutDiscoverValueApplySites(
     in: function,
     moduleName: moduleName,
     config: config
   )
   let valueApplySites = valueApplyDiscovery.sites
-  let assignmentValueDiscovery = swiftMutagenDiscoverAssignmentValueSites(
+  let assignmentValueDiscovery = swiftmutDiscoverAssignmentValueSites(
     in: function,
     moduleName: moduleName,
     config: config
   )
   let assignmentValueSites = assignmentValueDiscovery.sites
-  let returnDiscovery = swiftMutagenDiscoverReturnSites(
+  let returnDiscovery = swiftmutDiscoverReturnSites(
     in: function,
     moduleName: moduleName,
     config: config
   )
   let returnSites = returnDiscovery.sites
-  let returnBranchDiscovery = swiftMutagenDiscoverReturnBranchSites(
+  let returnBranchDiscovery = swiftmutDiscoverReturnBranchSites(
     in: function,
     moduleName: moduleName,
     config: config
   )
   let returnBranchSites = returnBranchDiscovery.sites
-  let voidCallDiscovery = swiftMutagenDiscoverVoidCallSites(
+  let voidCallDiscovery = swiftmutDiscoverVoidCallSites(
     in: function,
     moduleName: moduleName,
     config: config
   )
   let voidCallSites = voidCallDiscovery.sites
-  swiftMutagenLogEvent(
+  swiftmutLogEvent(
     "metamutantDiscovery",
     config: config,
     fields: [
       ("module", moduleName),
       ("function", function.name.string),
-      ("conditionBranches", "\(swiftMutagenConditionBranchCount(in: function))"),
+      ("conditionBranches", "\(swiftmutConditionBranchCount(in: function))"),
       ("conditionSites", "\(conditionSites.count)"),
       ("conditionBranchesWithArguments", "\(conditionDiscovery.stats.branchesWithArguments)"),
       ("conditionComparisonBranches", "\(conditionDiscovery.stats.comparisonBranches)"),
@@ -921,62 +921,62 @@ private func swiftMutagenInstrumentMetamutantSites(
   var injectedReturnBranchSites = 0
   var injectedVoidCallSites = 0
   for site in arithmeticSites {
-    if swiftMutagenInjectArithmeticSite(site, context) {
-      injectedSiteJSON.append(swiftMutagenArithmeticSiteJSON(site))
+    if swiftmutInjectArithmeticSite(site, context) {
+      injectedSiteJSON.append(swiftmutArithmeticSiteJSON(site))
       injectedArithmeticSites += 1
       changed = true
     }
   }
   for site in scalarValueSites {
-    if swiftMutagenInjectScalarValueSite(site, context) {
-      injectedSiteJSON.append(swiftMutagenScalarValueSiteJSON(site))
+    if swiftmutInjectScalarValueSite(site, context) {
+      injectedSiteJSON.append(swiftmutScalarValueSiteJSON(site))
       injectedScalarValueSites += 1
       changed = true
     }
   }
   for site in valueApplySites {
-    if swiftMutagenInjectValueApplySite(site, context) {
-      injectedSiteJSON.append(swiftMutagenValueApplySiteJSON(site))
+    if swiftmutInjectValueApplySite(site, context) {
+      injectedSiteJSON.append(swiftmutValueApplySiteJSON(site))
       injectedValueApplySites += 1
       changed = true
     }
   }
   for site in assignmentValueSites {
-    if swiftMutagenInjectAssignmentValueSite(site, context) {
-      injectedSiteJSON.append(swiftMutagenAssignmentValueSiteJSON(site))
+    if swiftmutInjectAssignmentValueSite(site, context) {
+      injectedSiteJSON.append(swiftmutAssignmentValueSiteJSON(site))
       injectedAssignmentValueSites += 1
       changed = true
     }
   }
   for site in conditionSites {
-    if swiftMutagenInjectConditionSite(site, context) {
-      injectedSiteJSON.append(swiftMutagenConditionSiteJSON(site))
+    if swiftmutInjectConditionSite(site, context) {
+      injectedSiteJSON.append(swiftmutConditionSiteJSON(site))
       injectedConditionSites += 1
       changed = true
     }
   }
   for site in returnSites {
-    if swiftMutagenInjectReturnSite(site, context) {
-      injectedSiteJSON.append(swiftMutagenReturnSiteJSON(site))
+    if swiftmutInjectReturnSite(site, context) {
+      injectedSiteJSON.append(swiftmutReturnSiteJSON(site))
       injectedReturnSites += 1
       changed = true
     }
   }
   for site in returnBranchSites {
-    if swiftMutagenInjectReturnBranchSite(site, context) {
-      injectedSiteJSON.append(swiftMutagenReturnBranchSiteJSON(site))
+    if swiftmutInjectReturnBranchSite(site, context) {
+      injectedSiteJSON.append(swiftmutReturnBranchSiteJSON(site))
       injectedReturnBranchSites += 1
       changed = true
     }
   }
   for site in voidCallSites {
-    if swiftMutagenInjectVoidCallSite(site, context) {
-      injectedSiteJSON.append(swiftMutagenVoidCallSiteJSON(site))
+    if swiftmutInjectVoidCallSite(site, context) {
+      injectedSiteJSON.append(swiftmutVoidCallSiteJSON(site))
       injectedVoidCallSites += 1
       changed = true
     }
   }
-  let runtimeVisitAvailable = swiftMutagenAnyRuntimeVisitFunctionAvailable(
+  let runtimeVisitAvailable = swiftmutAnyRuntimeVisitFunctionAvailable(
     conditionSites: conditionSites,
     arithmeticSites: arithmeticSites,
     scalarValueSites: scalarValueSites,
@@ -987,7 +987,7 @@ private func swiftMutagenInstrumentMetamutantSites(
     voidCallSites: voidCallSites,
     context
   )
-  swiftMutagenLogEvent(
+  swiftmutLogEvent(
     "metamutantInjection",
     config: config,
       fields: [
@@ -1012,7 +1012,7 @@ private func swiftMutagenInstrumentMetamutantSites(
       ("runtimeVisitAvailable", "\(runtimeVisitAvailable)")
     ])
   if !injectedSiteJSON.isEmpty {
-    swiftMutagenWriteMetamutantFragment(
+    swiftmutWriteMetamutantFragment(
       injectedSiteJSON,
       moduleName: moduleName,
       functionName: function.name.string,
@@ -1022,13 +1022,13 @@ private func swiftMutagenInstrumentMetamutantSites(
   return changed
 }
 
-private func swiftMutagenDiscoverVoidCallSites(
+private func swiftmutDiscoverVoidCallSites(
   in function: Function,
   moduleName: String,
-  config: SwiftMutagenConfig
-) -> SwiftMutagenVoidCallDiscoveryResult {
-  var sites: [SwiftMutagenVoidCallSite] = []
-  var stats = SwiftMutagenVoidCallDiscoveryStats()
+  config: SwiftmutConfig
+) -> SwiftmutVoidCallDiscoveryResult {
+  var sites: [SwiftmutVoidCallSite] = []
+  var stats = SwiftmutVoidCallDiscoveryStats()
   var localOrdinal = 1
   let functionName = function.name.string
 
@@ -1042,13 +1042,13 @@ private func swiftMutagenDiscoverVoidCallSites(
         continue
       }
       stats.voidApplyInstructions += 1
-      guard let mutation = swiftMutagenVoidCallMutation(for: apply, config: config),
-            swiftMutagenMutatorIsEnabled(mutation.mutator, config: config) else {
+      guard let mutation = swiftmutVoidCallMutation(for: apply, config: config),
+            swiftmutMutatorIsEnabled(mutation.mutator, config: config) else {
         continue
       }
       stats.mutationEligibleApplyInstructions += 1
       let location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)
-      switch swiftMutagenVoidCallSourceLocation(
+      switch swiftmutVoidCallSourceLocation(
         for: apply,
         mutation: mutation,
         config: config
@@ -1067,7 +1067,7 @@ private func swiftMutagenDiscoverVoidCallSites(
         original: location.sourceOriginal,
         mutated: location.sourceMutated
       )
-      let siteID = swiftMutagenStableSiteID(
+      let siteID = swiftmutStableSiteID(
         packageRoot: config.packageRoot,
         module: moduleName,
         file: location.file,
@@ -1077,9 +1077,9 @@ private func swiftMutagenDiscoverVoidCallSites(
         siteKind: "voidCall",
         localOrdinal: localOrdinal
       )
-      sites.append(SwiftMutagenVoidCallSite(
+      sites.append(SwiftmutVoidCallSite(
         siteID: siteID,
-        runtimeFunctionName: swiftMutagenRuntimeVisitThunkName(file: location.file, config: config),
+        runtimeFunctionName: swiftmutRuntimeVisitThunkName(file: location.file, config: config),
         module: moduleName,
         function: functionName,
         file: location.file,
@@ -1087,7 +1087,7 @@ private func swiftMutagenDiscoverVoidCallSites(
         column: location.column,
         apply: apply,
         alternatives: [
-          SwiftMutagenVoidCallAlternative(
+          SwiftmutVoidCallAlternative(
             mutantID: "local-void-call-\(localOrdinal)-1",
             alternativeIndex: 1,
             mutation: displayMutation
@@ -1098,16 +1098,16 @@ private func swiftMutagenDiscoverVoidCallSites(
     }
   }
 
-  return SwiftMutagenVoidCallDiscoveryResult(sites: sites, stats: stats)
+  return SwiftmutVoidCallDiscoveryResult(sites: sites, stats: stats)
 }
 
-private func swiftMutagenDiscoverConditionSites(
+private func swiftmutDiscoverConditionSites(
   in function: Function,
   moduleName: String,
-  config: SwiftMutagenConfig
-) -> SwiftMutagenConditionDiscoveryResult {
-  var sites: [SwiftMutagenConditionSite] = []
-  var stats = SwiftMutagenConditionDiscoveryStats()
+  config: SwiftmutConfig
+) -> SwiftmutConditionDiscoveryResult {
+  var sites: [SwiftmutConditionSite] = []
+  var stats = SwiftmutConditionDiscoveryStats()
   var localOrdinal = 1
   let functionName = function.name.string
 
@@ -1121,15 +1121,15 @@ private func swiftMutagenDiscoverConditionSites(
     }
 
     var comparison: BuiltinInst?
-    let mutations: [SwiftMutagenMutation]
+    let mutations: [SwiftmutMutation]
     if let branchComparison = branch.condition as? BuiltinInst,
-       swiftMutagenIsComparisonBuiltin(branchComparison) {
+       swiftmutIsComparisonBuiltin(branchComparison) {
       stats.comparisonBranches += 1
       comparison = branchComparison
-      mutations = swiftMutagenConditionSiteMutations(for: branchComparison, config: config)
+      mutations = swiftmutConditionSiteMutations(for: branchComparison, config: config)
     } else {
       stats.genericBranches += 1
-      mutations = swiftMutagenGenericConditionSiteMutations(config: config)
+      mutations = swiftmutGenericConditionSiteMutations(config: config)
     }
     guard !mutations.isEmpty else {
       stats.noMutationBranches += 1
@@ -1137,24 +1137,24 @@ private func swiftMutagenDiscoverConditionSites(
     }
     stats.mutationAlternatives += mutations.count
 
-    var alternatives: [SwiftMutagenConditionAlternative] = []
+    var alternatives: [SwiftmutConditionAlternative] = []
     var sourceLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
     for mutation in mutations {
       let location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
       if let comparison {
-        location = swiftMutagenSourceLocation(
+        location = swiftmutSourceLocation(
           for: comparison,
           function: function,
           moduleName: moduleName,
           mutation: mutation,
           config: config)
       } else {
-        location = swiftMutagenBranchSourceLocation(
+        location = swiftmutBranchSourceLocation(
           for: branch,
           mutation: mutation,
           config: config)
         if let location,
-           !swiftMutagenGenericConditionSourceIsExplicit(file: location.file, line: location.line, config: config) {
+           !swiftmutGenericConditionSourceIsExplicit(file: location.file, line: location.line, config: config) {
           stats.genericNonExplicitSourceLocations += 1
           continue
         }
@@ -1170,7 +1170,7 @@ private func swiftMutagenDiscoverConditionSites(
         original: location.sourceOriginal,
         mutated: location.sourceMutated
       )
-      alternatives.append(SwiftMutagenConditionAlternative(
+      alternatives.append(SwiftmutConditionAlternative(
         mutantID: "local-\(localOrdinal)-\(alternatives.count + 1)",
         alternativeIndex: UInt32(alternatives.count + 1),
         mutation: displayMutation
@@ -1181,7 +1181,7 @@ private func swiftMutagenDiscoverConditionSites(
       continue
     }
 
-    let siteID = swiftMutagenStableSiteID(
+    let siteID = swiftmutStableSiteID(
       packageRoot: config.packageRoot,
       module: moduleName,
       file: location.file,
@@ -1193,9 +1193,9 @@ private func swiftMutagenDiscoverConditionSites(
     )
     localOrdinal += 1
 
-    sites.append(SwiftMutagenConditionSite(
+    sites.append(SwiftmutConditionSite(
       siteID: siteID,
-      runtimeFunctionName: swiftMutagenRuntimeVisitThunkName(file: location.file, config: config),
+      runtimeFunctionName: swiftmutRuntimeVisitThunkName(file: location.file, config: config),
       module: moduleName,
       function: functionName,
       file: location.file,
@@ -1207,20 +1207,20 @@ private func swiftMutagenDiscoverConditionSites(
     ))
   }
 
-  return SwiftMutagenConditionDiscoveryResult(sites: sites, stats: stats)
+  return SwiftmutConditionDiscoveryResult(sites: sites, stats: stats)
 }
 
-private func swiftMutagenDiscoverReturnSites(
+private func swiftmutDiscoverReturnSites(
   in function: Function,
   moduleName: String,
-  config: SwiftMutagenConfig
-) -> SwiftMutagenReturnDiscoveryResult {
-  var sites: [SwiftMutagenReturnSite] = []
-  var stats = SwiftMutagenReturnDiscoveryStats()
+  config: SwiftmutConfig
+) -> SwiftmutReturnDiscoveryResult {
+  var sites: [SwiftmutReturnSite] = []
+  var stats = SwiftmutReturnDiscoveryStats()
   var localOrdinal = 1
   let functionName = function.name.string
   guard !functionName.hasSuffix("TW") else {
-    return SwiftMutagenReturnDiscoveryResult(sites: [], stats: stats)
+    return SwiftmutReturnDiscoveryResult(sites: [], stats: stats)
   }
 
   for block in function.blocks {
@@ -1229,29 +1229,29 @@ private func swiftMutagenDiscoverReturnSites(
     }
     stats.terminators += 1
     let returnType = returnInst.returnedValue.type
-    swiftMutagenRecordReturnType(returnType, in: function, stats: &stats)
+    swiftmutRecordReturnType(returnType, in: function, stats: &stats)
 
-    let mutations = swiftMutagenMetamutantReturnMutations(for: returnInst, config: config)
+    let mutations = swiftmutMetamutantReturnMutations(for: returnInst, config: config)
     guard !mutations.isEmpty else {
       continue
     }
     stats.mutationEligibleTerminators += 1
     stats.mutationAlternatives += mutations.count
 
-    var alternatives: [SwiftMutagenReturnAlternative] = []
+    var alternatives: [SwiftmutReturnAlternative] = []
     var sourceLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
     for mutation in mutations {
-      guard let location = swiftMutagenReturnSourceLocation(
+      guard let location = swiftmutReturnSourceLocation(
         for: returnInst,
         mutation: mutation,
         config: config
       ) else {
         stats.missingSourceLocations += 1
-        swiftMutagenRecordReturnSourceLocationMiss(returnType, in: function, stats: &stats)
+        swiftmutRecordReturnSourceLocationMiss(returnType, in: function, stats: &stats)
         continue
       }
       if location.sourceOriginal == "return",
-         !swiftMutagenReturnSourceLooksLikeStatement(file: location.file, line: location.line, config: config) {
+         !swiftmutReturnSourceLooksLikeStatement(file: location.file, line: location.line, config: config) {
         stats.nonStatementSourceLocations += 1
         continue
       }
@@ -1262,7 +1262,7 @@ private func swiftMutagenDiscoverReturnSites(
         original: location.sourceOriginal,
         mutated: location.sourceMutated
       )
-      alternatives.append(SwiftMutagenReturnAlternative(
+      alternatives.append(SwiftmutReturnAlternative(
         mutantID: "local-return-\(localOrdinal)-\(alternatives.count + 1)",
         alternativeIndex: UInt32(alternatives.count + 1),
         mutation: displayMutation
@@ -1273,7 +1273,7 @@ private func swiftMutagenDiscoverReturnSites(
       continue
     }
 
-    let siteID = swiftMutagenStableSiteID(
+    let siteID = swiftmutStableSiteID(
       packageRoot: config.packageRoot,
       module: moduleName,
       file: location.file,
@@ -1285,9 +1285,9 @@ private func swiftMutagenDiscoverReturnSites(
     )
     localOrdinal += 1
 
-    sites.append(SwiftMutagenReturnSite(
+    sites.append(SwiftmutReturnSite(
       siteID: siteID,
-      runtimeFunctionName: swiftMutagenRuntimeVisitThunkName(file: location.file, config: config),
+      runtimeFunctionName: swiftmutRuntimeVisitThunkName(file: location.file, config: config),
       module: moduleName,
       function: functionName,
       file: location.file,
@@ -1298,40 +1298,40 @@ private func swiftMutagenDiscoverReturnSites(
     ))
   }
 
-  return SwiftMutagenReturnDiscoveryResult(sites: sites, stats: stats)
+  return SwiftmutReturnDiscoveryResult(sites: sites, stats: stats)
 }
 
-private func swiftMutagenDiscoverReturnBranchSites(
+private func swiftmutDiscoverReturnBranchSites(
   in function: Function,
   moduleName: String,
-  config: SwiftMutagenConfig
-) -> SwiftMutagenReturnBranchDiscoveryResult {
-  var sites: [SwiftMutagenReturnBranchSite] = []
-  var stats = SwiftMutagenReturnBranchDiscoveryStats()
+  config: SwiftmutConfig
+) -> SwiftmutReturnBranchDiscoveryResult {
+  var sites: [SwiftmutReturnBranchSite] = []
+  var stats = SwiftmutReturnBranchDiscoveryStats()
   var localOrdinal = 1
   let functionName = function.name.string
   guard !functionName.hasSuffix("TW") else {
-    return SwiftMutagenReturnBranchDiscoveryResult(sites: [], stats: stats)
+    return SwiftmutReturnBranchDiscoveryResult(sites: [], stats: stats)
   }
 
   for block in function.blocks {
     guard let branch = block.terminator as? BranchInst,
-          swiftMutagenBranchFeedsReturnValue(branch),
+          swiftmutBranchFeedsReturnValue(branch),
           let value = branch.operands.first?.value else {
       continue
     }
     stats.branches += 1
-    let mutations = swiftMutagenReturnBranchMutations(for: branch, config: config)
+    let mutations = swiftmutReturnBranchMutations(for: branch, config: config)
     guard !mutations.isEmpty else {
       continue
     }
     stats.mutationEligibleBranches += 1
     stats.mutationAlternatives += mutations.count
 
-    var alternatives: [SwiftMutagenReturnAlternative] = []
+    var alternatives: [SwiftmutReturnAlternative] = []
     var sourceLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
     for mutation in mutations {
-      guard let location = swiftMutagenReturnBranchSourceLocation(
+      guard let location = swiftmutReturnBranchSourceLocation(
         for: branch,
         mutation: mutation,
         config: config
@@ -1346,7 +1346,7 @@ private func swiftMutagenDiscoverReturnBranchSites(
         original: location.sourceOriginal,
         mutated: location.sourceMutated
       )
-      alternatives.append(SwiftMutagenReturnAlternative(
+      alternatives.append(SwiftmutReturnAlternative(
         mutantID: "local-return-branch-\(localOrdinal)-\(alternatives.count + 1)",
         alternativeIndex: UInt32(alternatives.count + 1),
         mutation: displayMutation
@@ -1357,7 +1357,7 @@ private func swiftMutagenDiscoverReturnBranchSites(
       continue
     }
 
-    let siteID = swiftMutagenStableSiteID(
+    let siteID = swiftmutStableSiteID(
       packageRoot: config.packageRoot,
       module: moduleName,
       file: location.file,
@@ -1369,9 +1369,9 @@ private func swiftMutagenDiscoverReturnBranchSites(
     )
     localOrdinal += 1
 
-    sites.append(SwiftMutagenReturnBranchSite(
+    sites.append(SwiftmutReturnBranchSite(
       siteID: siteID,
-      runtimeFunctionName: swiftMutagenRuntimeVisitThunkName(file: location.file, config: config),
+      runtimeFunctionName: swiftmutRuntimeVisitThunkName(file: location.file, config: config),
       module: moduleName,
       function: functionName,
       file: location.file,
@@ -1383,10 +1383,10 @@ private func swiftMutagenDiscoverReturnBranchSites(
     ))
   }
 
-  return SwiftMutagenReturnBranchDiscoveryResult(sites: sites, stats: stats)
+  return SwiftmutReturnBranchDiscoveryResult(sites: sites, stats: stats)
 }
 
-private func swiftMutagenBranchFeedsReturnValue(_ branch: BranchInst) -> Bool {
+private func swiftmutBranchFeedsReturnValue(_ branch: BranchInst) -> Bool {
   guard branch.operands.count == 1,
         branch.targetBlock.arguments.count == 1,
         let returnInst = branch.targetBlock.terminator as? ReturnInst else {
@@ -1395,12 +1395,12 @@ private func swiftMutagenBranchFeedsReturnValue(_ branch: BranchInst) -> Bool {
   return returnInst.returnedValue == branch.targetBlock.arguments[0]
 }
 
-private func swiftMutagenDiscoverArithmeticSites(
+private func swiftmutDiscoverArithmeticSites(
   in function: Function,
   moduleName: String,
-  config: SwiftMutagenConfig
-) -> [SwiftMutagenArithmeticSite] {
-  var sites: [SwiftMutagenArithmeticSite] = []
+  config: SwiftmutConfig
+) -> [SwiftmutArithmeticSite] {
+  var sites: [SwiftmutArithmeticSite] = []
   var localOrdinal = 1
   let functionName = function.name.string
 
@@ -1409,15 +1409,15 @@ private func swiftMutagenDiscoverArithmeticSites(
       guard let builtin = instruction as? BuiltinInst else {
         continue
       }
-      let mutations = swiftMutagenArithmeticSiteMutations(for: builtin, config: config)
+      let mutations = swiftmutArithmeticSiteMutations(for: builtin, config: config)
       guard !mutations.isEmpty else {
         continue
       }
 
-      var alternatives: [SwiftMutagenArithmeticAlternative] = []
+      var alternatives: [SwiftmutArithmeticAlternative] = []
       var sourceLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
       for mutation in mutations {
-        guard let location = swiftMutagenSourceLocation(
+        guard let location = swiftmutSourceLocation(
           for: builtin,
           function: function,
           moduleName: moduleName,
@@ -1433,7 +1433,7 @@ private func swiftMutagenDiscoverArithmeticSites(
           original: location.sourceOriginal,
           mutated: location.sourceMutated
         )
-        alternatives.append(SwiftMutagenArithmeticAlternative(
+        alternatives.append(SwiftmutArithmeticAlternative(
           mutantID: "local-arithmetic-\(localOrdinal)-\(alternatives.count + 1)",
           alternativeIndex: UInt32(alternatives.count + 1),
           mutation: displayMutation
@@ -1444,7 +1444,7 @@ private func swiftMutagenDiscoverArithmeticSites(
         continue
       }
 
-      let siteID = swiftMutagenStableSiteID(
+      let siteID = swiftmutStableSiteID(
         packageRoot: config.packageRoot,
         module: moduleName,
         file: location.file,
@@ -1456,9 +1456,9 @@ private func swiftMutagenDiscoverArithmeticSites(
       )
       localOrdinal += 1
 
-      sites.append(SwiftMutagenArithmeticSite(
+      sites.append(SwiftmutArithmeticSite(
         siteID: siteID,
-        runtimeFunctionName: swiftMutagenRuntimeVisitThunkName(file: location.file, config: config),
+        runtimeFunctionName: swiftmutRuntimeVisitThunkName(file: location.file, config: config),
         module: moduleName,
         function: functionName,
         file: location.file,
@@ -1473,13 +1473,13 @@ private func swiftMutagenDiscoverArithmeticSites(
   return sites
 }
 
-private func swiftMutagenDiscoverScalarValueSites(
+private func swiftmutDiscoverScalarValueSites(
   in function: Function,
   moduleName: String,
-  config: SwiftMutagenConfig
-) -> SwiftMutagenScalarValueDiscoveryResult {
-  var sites: [SwiftMutagenScalarValueSite] = []
-  var stats = SwiftMutagenScalarValueDiscoveryStats()
+  config: SwiftmutConfig
+) -> SwiftmutScalarValueDiscoveryResult {
+  var sites: [SwiftmutScalarValueSite] = []
+  var stats = SwiftmutScalarValueDiscoveryStats()
   var localOrdinal = 1
   let functionName = function.name.string
 
@@ -1490,17 +1490,17 @@ private func swiftMutagenDiscoverScalarValueSites(
       }
       stats.structInstructions += 1
 
-      let mutations = swiftMutagenScalarValueMutations(for: structInst, config: config)
+      let mutations = swiftmutScalarValueMutations(for: structInst, config: config)
       guard !mutations.isEmpty else {
         continue
       }
       stats.mutationEligibleStructInstructions += 1
       stats.mutationAlternatives += mutations.count
 
-      var alternatives: [SwiftMutagenScalarValueAlternative] = []
+      var alternatives: [SwiftmutScalarValueAlternative] = []
       var sourceLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
       for mutation in mutations {
-        guard let location = swiftMutagenScalarValueSourceLocation(
+        guard let location = swiftmutScalarValueSourceLocation(
           for: structInst,
           mutation: mutation,
           config: config
@@ -1515,7 +1515,7 @@ private func swiftMutagenDiscoverScalarValueSites(
           original: location.sourceOriginal,
           mutated: location.sourceMutated
         )
-        alternatives.append(SwiftMutagenScalarValueAlternative(
+        alternatives.append(SwiftmutScalarValueAlternative(
           mutantID: "local-scalar-value-\(localOrdinal)-\(alternatives.count + 1)",
           alternativeIndex: UInt32(alternatives.count + 1),
           mutation: displayMutation
@@ -1526,7 +1526,7 @@ private func swiftMutagenDiscoverScalarValueSites(
         continue
       }
 
-      let siteID = swiftMutagenStableSiteID(
+      let siteID = swiftmutStableSiteID(
         packageRoot: config.packageRoot,
         module: moduleName,
         file: location.file,
@@ -1538,9 +1538,9 @@ private func swiftMutagenDiscoverScalarValueSites(
       )
       localOrdinal += 1
 
-      sites.append(SwiftMutagenScalarValueSite(
+      sites.append(SwiftmutScalarValueSite(
         siteID: siteID,
-        runtimeFunctionName: swiftMutagenRuntimeVisitThunkName(file: location.file, config: config),
+        runtimeFunctionName: swiftmutRuntimeVisitThunkName(file: location.file, config: config),
         module: moduleName,
         function: functionName,
         file: location.file,
@@ -1552,16 +1552,16 @@ private func swiftMutagenDiscoverScalarValueSites(
     }
   }
 
-  return SwiftMutagenScalarValueDiscoveryResult(sites: sites, stats: stats)
+  return SwiftmutScalarValueDiscoveryResult(sites: sites, stats: stats)
 }
 
-private func swiftMutagenDiscoverValueApplySites(
+private func swiftmutDiscoverValueApplySites(
   in function: Function,
   moduleName: String,
-  config: SwiftMutagenConfig
-) -> SwiftMutagenValueApplyDiscoveryResult {
-  var sites: [SwiftMutagenValueApplySite] = []
-  var stats = SwiftMutagenValueApplyDiscoveryStats()
+  config: SwiftmutConfig
+) -> SwiftmutValueApplyDiscoveryResult {
+  var sites: [SwiftmutValueApplySite] = []
+  var stats = SwiftmutValueApplyDiscoveryStats()
   var localOrdinal = 1
   let functionName = function.name.string
 
@@ -1576,7 +1576,7 @@ private func swiftMutagenDiscoverValueApplySites(
       }
       stats.valueApplyInstructions += 1
 
-      let mutations = swiftMutagenValueReplacementMutations(
+      let mutations = swiftmutValueReplacementMutations(
         for: apply,
         valueType: apply.type,
         config: config
@@ -1587,10 +1587,10 @@ private func swiftMutagenDiscoverValueApplySites(
       stats.mutationEligibleApplyInstructions += 1
       stats.mutationAlternatives += mutations.count
 
-      var alternatives: [SwiftMutagenValueApplyAlternative] = []
+      var alternatives: [SwiftmutValueApplyAlternative] = []
       var sourceLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
       for mutation in mutations {
-        guard let location = swiftMutagenValueApplySourceLocation(
+        guard let location = swiftmutValueApplySourceLocation(
           for: apply,
           mutation: mutation,
           config: config
@@ -1605,7 +1605,7 @@ private func swiftMutagenDiscoverValueApplySites(
           original: location.sourceOriginal,
           mutated: location.sourceMutated
         )
-        alternatives.append(SwiftMutagenValueApplyAlternative(
+        alternatives.append(SwiftmutValueApplyAlternative(
           mutantID: "local-value-apply-\(localOrdinal)-\(alternatives.count + 1)",
           alternativeIndex: UInt32(alternatives.count + 1),
           mutation: displayMutation
@@ -1616,7 +1616,7 @@ private func swiftMutagenDiscoverValueApplySites(
         continue
       }
 
-      let siteID = swiftMutagenStableSiteID(
+      let siteID = swiftmutStableSiteID(
         packageRoot: config.packageRoot,
         module: moduleName,
         file: location.file,
@@ -1628,9 +1628,9 @@ private func swiftMutagenDiscoverValueApplySites(
       )
       localOrdinal += 1
 
-      sites.append(SwiftMutagenValueApplySite(
+      sites.append(SwiftmutValueApplySite(
         siteID: siteID,
-        runtimeFunctionName: swiftMutagenRuntimeVisitThunkName(file: location.file, config: config),
+        runtimeFunctionName: swiftmutRuntimeVisitThunkName(file: location.file, config: config),
         module: moduleName,
         function: functionName,
         file: location.file,
@@ -1642,16 +1642,16 @@ private func swiftMutagenDiscoverValueApplySites(
     }
   }
 
-  return SwiftMutagenValueApplyDiscoveryResult(sites: sites, stats: stats)
+  return SwiftmutValueApplyDiscoveryResult(sites: sites, stats: stats)
 }
 
-private func swiftMutagenDiscoverAssignmentValueSites(
+private func swiftmutDiscoverAssignmentValueSites(
   in function: Function,
   moduleName: String,
-  config: SwiftMutagenConfig
-) -> SwiftMutagenAssignmentValueDiscoveryResult {
-  var sites: [SwiftMutagenAssignmentValueSite] = []
-  var stats = SwiftMutagenAssignmentValueDiscoveryStats()
+  config: SwiftmutConfig
+) -> SwiftmutAssignmentValueDiscoveryResult {
+  var sites: [SwiftmutAssignmentValueSite] = []
+  var stats = SwiftmutAssignmentValueDiscoveryStats()
   var localOrdinal = 1
   let functionName = function.name.string
 
@@ -1661,21 +1661,21 @@ private func swiftMutagenDiscoverAssignmentValueSites(
         continue
       }
       stats.storeInstructions += 1
-      guard swiftMutagenAssignmentStoreIsEligible(store) else {
+      guard swiftmutAssignmentStoreIsEligible(store) else {
         continue
       }
 
-      let mutations = swiftMutagenAssignmentValueMutations(for: store, config: config)
+      let mutations = swiftmutAssignmentValueMutations(for: store, config: config)
       guard !mutations.isEmpty else {
         continue
       }
       stats.mutationEligibleStoreInstructions += 1
       stats.mutationAlternatives += mutations.count
 
-      var alternatives: [SwiftMutagenAssignmentValueAlternative] = []
+      var alternatives: [SwiftmutAssignmentValueAlternative] = []
       var sourceLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
       for mutation in mutations {
-        guard let location = swiftMutagenAssignmentValueSourceLocation(
+        guard let location = swiftmutAssignmentValueSourceLocation(
           for: store,
           mutation: mutation,
           config: config
@@ -1690,7 +1690,7 @@ private func swiftMutagenDiscoverAssignmentValueSites(
           original: location.sourceOriginal,
           mutated: location.sourceMutated
         )
-        alternatives.append(SwiftMutagenAssignmentValueAlternative(
+        alternatives.append(SwiftmutAssignmentValueAlternative(
           mutantID: "local-assignment-value-\(localOrdinal)-\(alternatives.count + 1)",
           alternativeIndex: UInt32(alternatives.count + 1),
           mutation: displayMutation
@@ -1701,7 +1701,7 @@ private func swiftMutagenDiscoverAssignmentValueSites(
         continue
       }
 
-      let siteID = swiftMutagenStableSiteID(
+      let siteID = swiftmutStableSiteID(
         packageRoot: config.packageRoot,
         module: moduleName,
         file: location.file,
@@ -1713,9 +1713,9 @@ private func swiftMutagenDiscoverAssignmentValueSites(
       )
       localOrdinal += 1
 
-      sites.append(SwiftMutagenAssignmentValueSite(
+      sites.append(SwiftmutAssignmentValueSite(
         siteID: siteID,
-        runtimeFunctionName: swiftMutagenRuntimeVisitThunkName(file: location.file, config: config),
+        runtimeFunctionName: swiftmutRuntimeVisitThunkName(file: location.file, config: config),
         module: moduleName,
         function: functionName,
         file: location.file,
@@ -1727,14 +1727,14 @@ private func swiftMutagenDiscoverAssignmentValueSites(
     }
   }
 
-  return SwiftMutagenAssignmentValueDiscoveryResult(sites: sites, stats: stats)
+  return SwiftmutAssignmentValueDiscoveryResult(sites: sites, stats: stats)
 }
 
-private func swiftMutagenMetamutantReturnMutations(
+private func swiftmutMetamutantReturnMutations(
   for returnInst: ReturnInst,
-  config: SwiftMutagenConfig
-) -> [SwiftMutagenMutation] {
-  swiftMutagenReturnMutations(for: returnInst, config: config).filter { mutation in
+  config: SwiftmutConfig
+) -> [SwiftmutMutation] {
+  swiftmutReturnMutations(for: returnInst, config: config).filter { mutation in
     switch mutation.mutatedBuiltinName {
     case "return_false", "return_true", "return_nil", "return_zero", "return_empty_string",
          "return_empty_array", "return_empty_dictionary", "return_empty_set":
@@ -1745,86 +1745,86 @@ private func swiftMutagenMetamutantReturnMutations(
   }
 }
 
-private func swiftMutagenScalarValueMutations(
+private func swiftmutScalarValueMutations(
   for structInst: StructInst,
-  config: SwiftMutagenConfig
-) -> [SwiftMutagenMutation] {
+  config: SwiftmutConfig
+) -> [SwiftmutMutation] {
   let valueType = structInst.type
-  var mutations: [SwiftMutagenMutation] = []
+  var mutations: [SwiftmutMutation] = []
 
-  if swiftMutagenIsBoolType(valueType, in: structInst.parentFunction) {
-    let literal = swiftMutagenBoolLiteralValue(structInst)
+  if swiftmutIsBoolType(valueType, in: structInst.parentFunction) {
+    let literal = swiftmutBoolLiteralValue(structInst)
     if literal != false,
-       let rule = swiftMutagenFirstReturnRule(context: "boolToFalse", config: config) {
-      mutations.append(swiftMutagenReturnMutation(rule, silOriginal: valueType.description))
+       let rule = swiftmutFirstReturnRule(context: "boolToFalse", config: config) {
+      mutations.append(swiftmutReturnMutation(rule, silOriginal: valueType.description))
     }
     if literal != true,
-       let rule = swiftMutagenFirstReturnRule(context: "boolToTrue", config: config) {
-      mutations.append(swiftMutagenReturnMutation(rule, silOriginal: valueType.description))
+       let rule = swiftmutFirstReturnRule(context: "boolToTrue", config: config) {
+      mutations.append(swiftmutReturnMutation(rule, silOriginal: valueType.description))
     }
     return mutations
   }
 
-  if swiftMutagenIsIntegerStructType(valueType, in: structInst.parentFunction),
-     swiftMutagenIntegerStructLiteralValue(structInst) != 0,
-     let rule = swiftMutagenFirstReturnRule(context: "integerToZero", config: config) {
-    mutations.append(swiftMutagenReturnMutation(rule, silOriginal: valueType.description))
+  if swiftmutIsIntegerStructType(valueType, in: structInst.parentFunction),
+     swiftmutIntegerStructLiteralValue(structInst) != 0,
+     let rule = swiftmutFirstReturnRule(context: "integerToZero", config: config) {
+    mutations.append(swiftmutReturnMutation(rule, silOriginal: valueType.description))
   }
 
   return mutations
 }
 
-private func swiftMutagenValueReplacementMutations(
+private func swiftmutValueReplacementMutations(
   for apply: ApplyInst,
   valueType: Type,
-  config: SwiftMutagenConfig
-) -> [SwiftMutagenMutation] {
-  swiftMutagenValueReplacementMutations(
+  config: SwiftmutConfig
+) -> [SwiftmutMutation] {
+  swiftmutValueReplacementMutations(
     valueType: valueType,
     function: apply.parentFunction,
     config: config
   )
 }
 
-private func swiftMutagenReturnBranchMutations(
+private func swiftmutReturnBranchMutations(
   for branch: BranchInst,
-  config: SwiftMutagenConfig
-) -> [SwiftMutagenMutation] {
-  guard swiftMutagenBranchFeedsReturnValue(branch),
+  config: SwiftmutConfig
+) -> [SwiftmutMutation] {
+  guard swiftmutBranchFeedsReturnValue(branch),
         let value = branch.operands.first?.value,
         value.type.isTrivial(in: branch.parentFunction) else {
     return []
   }
   if let structInst = value.definingInstruction as? StructInst,
-     !swiftMutagenScalarValueMutations(for: structInst, config: config).isEmpty {
+     !swiftmutScalarValueMutations(for: structInst, config: config).isEmpty {
     return []
   }
-  return swiftMutagenValueReplacementMutations(
+  return swiftmutValueReplacementMutations(
     valueType: value.type,
     function: branch.parentFunction,
     config: config
   )
 }
 
-private func swiftMutagenAssignmentValueMutations(
+private func swiftmutAssignmentValueMutations(
   for store: StoreInst,
-  config: SwiftMutagenConfig
-) -> [SwiftMutagenMutation] {
-  guard swiftMutagenCanDispatchAssignmentValue(store) else {
+  config: SwiftmutConfig
+) -> [SwiftmutMutation] {
+  guard swiftmutCanDispatchAssignmentValue(store) else {
     return []
   }
-  return swiftMutagenValueReplacementMutations(
+  return swiftmutValueReplacementMutations(
     valueType: store.source.type,
     function: store.parentFunction,
     config: config
   )
 }
 
-private func swiftMutagenCanDispatchAssignmentValue(_ store: StoreInst) -> Bool {
+private func swiftmutCanDispatchAssignmentValue(_ store: StoreInst) -> Bool {
   store.source.type.isTrivial(in: store.parentFunction) || store.source.ownership == .owned
 }
 
-private func swiftMutagenAssignmentStoreIsEligible(_ store: StoreInst) -> Bool {
+private func swiftmutAssignmentStoreIsEligible(_ store: StoreInst) -> Bool {
   guard !store.source.type.isAddress else {
     return false
   }
@@ -1839,43 +1839,43 @@ private func swiftMutagenAssignmentStoreIsEligible(_ store: StoreInst) -> Bool {
   }
 }
 
-private func swiftMutagenValueReplacementMutations(
+private func swiftmutValueReplacementMutations(
   valueType: Type,
   function: Function,
-  config: SwiftMutagenConfig
-) -> [SwiftMutagenMutation] {
-  var mutations: [SwiftMutagenMutation] = []
+  config: SwiftmutConfig
+) -> [SwiftmutMutation] {
+  var mutations: [SwiftmutMutation] = []
 
-  if swiftMutagenIsBoolType(valueType, in: function) {
-    if let rule = swiftMutagenFirstReturnRule(context: "boolToFalse", config: config) {
-      mutations.append(swiftMutagenReturnMutation(rule, silOriginal: valueType.description))
+  if swiftmutIsBoolType(valueType, in: function) {
+    if let rule = swiftmutFirstReturnRule(context: "boolToFalse", config: config) {
+      mutations.append(swiftmutReturnMutation(rule, silOriginal: valueType.description))
     }
-    if let rule = swiftMutagenFirstReturnRule(context: "boolToTrue", config: config) {
-      mutations.append(swiftMutagenReturnMutation(rule, silOriginal: valueType.description))
+    if let rule = swiftmutFirstReturnRule(context: "boolToTrue", config: config) {
+      mutations.append(swiftmutReturnMutation(rule, silOriginal: valueType.description))
     }
     return mutations
   }
 
   if valueType.isOptional,
-     let rule = swiftMutagenFirstReturnRule(context: "optionalToNil", config: config) {
-    mutations.append(swiftMutagenReturnMutation(rule, silOriginal: valueType.description))
+     let rule = swiftmutFirstReturnRule(context: "optionalToNil", config: config) {
+    mutations.append(swiftmutReturnMutation(rule, silOriginal: valueType.description))
     return mutations
   }
 
-  if swiftMutagenIsIntegerStructType(valueType, in: function),
-     let rule = swiftMutagenFirstReturnRule(context: "integerToZero", config: config) {
-    mutations.append(swiftMutagenReturnMutation(rule, silOriginal: valueType.description))
+  if swiftmutIsIntegerStructType(valueType, in: function),
+     let rule = swiftmutFirstReturnRule(context: "integerToZero", config: config) {
+    mutations.append(swiftmutReturnMutation(rule, silOriginal: valueType.description))
   }
 
-  if swiftMutagenIsStringType(valueType),
-     let rule = swiftMutagenFirstReturnRule(context: "stringToEmpty", config: config) {
-    mutations.append(swiftMutagenReturnMutation(rule, silOriginal: valueType.description))
+  if swiftmutIsStringType(valueType),
+     let rule = swiftmutFirstReturnRule(context: "stringToEmpty", config: config) {
+    mutations.append(swiftmutReturnMutation(rule, silOriginal: valueType.description))
   }
 
   return mutations
 }
 
-private func swiftMutagenConditionBranchCount(in function: Function) -> Int {
+private func swiftmutConditionBranchCount(in function: Function) -> Int {
   var count = 0
   for block in function.blocks {
     if block.terminator is CondBranchInst {
@@ -1885,22 +1885,22 @@ private func swiftMutagenConditionBranchCount(in function: Function) -> Int {
   return count
 }
 
-private func swiftMutagenConditionSiteMutations(
+private func swiftmutConditionSiteMutations(
   for builtin: BuiltinInst,
-  config: SwiftMutagenConfig
-) -> [SwiftMutagenMutation] {
-  swiftMutagenConditionMutations(for: builtin, config: config, includeGenericComparisonRules: true)
+  config: SwiftmutConfig
+) -> [SwiftmutMutation] {
+  swiftmutConditionMutations(for: builtin, config: config, includeGenericComparisonRules: true)
 }
 
-private func swiftMutagenGenericConditionSiteMutations(
-  config: SwiftMutagenConfig
-) -> [SwiftMutagenMutation] {
-  var mutations: [SwiftMutagenMutation] = []
+private func swiftmutGenericConditionSiteMutations(
+  config: SwiftmutConfig
+) -> [SwiftmutMutation] {
+  var mutations: [SwiftmutMutation] = []
   for rule in config.conditionMutationRules where rule.builtinID == "COMPARISON" {
-    guard swiftMutagenMutatorIsEnabled(rule.mutator, config: config) else {
+    guard swiftmutMutatorIsEnabled(rule.mutator, config: config) else {
       continue
     }
-    mutations.append(SwiftMutagenMutation(
+    mutations.append(SwiftmutMutation(
       originalID: nil,
       mutator: rule.mutator,
       mutatedBuiltinName: rule.mutatedBuiltinName,
@@ -1912,23 +1912,23 @@ private func swiftMutagenGenericConditionSiteMutations(
   return mutations
 }
 
-private func swiftMutagenConditionMutations(
+private func swiftmutConditionMutations(
   for builtin: BuiltinInst,
-  config: SwiftMutagenConfig,
+  config: SwiftmutConfig,
   includeGenericComparisonRules: Bool
-) -> [SwiftMutagenMutation] {
-  guard let builtinID = swiftMutagenComparisonBuiltinIDName(builtin) else {
+) -> [SwiftmutMutation] {
+  guard let builtinID = swiftmutComparisonBuiltinIDName(builtin) else {
     return []
   }
 
-  var mutations: [SwiftMutagenMutation] = []
+  var mutations: [SwiftmutMutation] = []
   for rule in config.conditionMutationRules {
     let appliesToBuiltin = rule.builtinID == builtinID
       || (includeGenericComparisonRules && rule.builtinID == "COMPARISON")
-    guard appliesToBuiltin, swiftMutagenMutatorIsEnabled(rule.mutator, config: config) else {
+    guard appliesToBuiltin, swiftmutMutatorIsEnabled(rule.mutator, config: config) else {
       continue
     }
-    mutations.append(SwiftMutagenMutation(
+    mutations.append(SwiftmutMutation(
       originalID: builtin.id,
       mutator: rule.mutator,
       mutatedBuiltinName: rule.mutatedBuiltinName,
@@ -1940,33 +1940,33 @@ private func swiftMutagenConditionMutations(
   return mutations
 }
 
-private func swiftMutagenArithmeticSiteMutations(
+private func swiftmutArithmeticSiteMutations(
   for builtin: BuiltinInst,
-  config: SwiftMutagenConfig
-) -> [SwiftMutagenMutation] {
-  var mutations: [SwiftMutagenMutation] = []
+  config: SwiftmutConfig
+) -> [SwiftmutMutation] {
+  var mutations: [SwiftmutMutation] = []
 
   switch builtin.id {
   case .SAddOver:
-    if let rule = swiftMutagenContextualArithmeticRule(for: builtin, builtinID: "SAddOver", config: config),
-       swiftMutagenMutatorIsEnabled(rule.mutator, config: config) {
-      mutations.append(swiftMutagenContextualArithmeticMutation(rule, for: builtin))
+    if let rule = swiftmutContextualArithmeticRule(for: builtin, builtinID: "SAddOver", config: config),
+       swiftmutMutatorIsEnabled(rule.mutator, config: config) {
+      mutations.append(swiftmutContextualArithmeticMutation(rule, for: builtin))
     }
   case .SSubOver:
-    if let rule = swiftMutagenContextualArithmeticRule(for: builtin, builtinID: "SSubOver", config: config),
-       swiftMutagenMutatorIsEnabled(rule.mutator, config: config) {
-      mutations.append(swiftMutagenContextualArithmeticMutation(rule, for: builtin))
+    if let rule = swiftmutContextualArithmeticRule(for: builtin, builtinID: "SSubOver", config: config),
+       swiftmutMutatorIsEnabled(rule.mutator, config: config) {
+      mutations.append(swiftmutContextualArithmeticMutation(rule, for: builtin))
     }
   default:
     break
   }
 
-  if let builtinID = swiftMutagenArithmeticBuiltinIDName(builtin) {
+  if let builtinID = swiftmutArithmeticBuiltinIDName(builtin) {
     for rule in config.arithmeticMutationRules where rule.builtinID == builtinID {
-      guard swiftMutagenMutatorIsEnabled("MATH", config: config) else {
+      guard swiftmutMutatorIsEnabled("MATH", config: config) else {
         continue
       }
-      mutations.append(swiftMutagenBinaryMutation(
+      mutations.append(swiftmutBinaryMutation(
         builtin,
         mutator: "MATH",
         mutatedBuiltinName: rule.mutatedBuiltinName,
@@ -1978,7 +1978,7 @@ private func swiftMutagenArithmeticSiteMutations(
   return mutations
 }
 
-private func swiftMutagenComparisonBuiltinIDName(_ builtin: BuiltinInst) -> String? {
+private func swiftmutComparisonBuiltinIDName(_ builtin: BuiltinInst) -> String? {
   switch builtin.id {
   case .ICMP_EQ:
     return "ICMP_EQ"
@@ -2005,7 +2005,7 @@ private func swiftMutagenComparisonBuiltinIDName(_ builtin: BuiltinInst) -> Stri
   }
 }
 
-private func swiftMutagenIsComparisonBuiltin(_ builtin: BuiltinInst) -> Bool {
+private func swiftmutIsComparisonBuiltin(_ builtin: BuiltinInst) -> Bool {
   switch builtin.id {
   case .ICMP_EQ, .ICMP_NE,
        .ICMP_SGE, .ICMP_SGT, .ICMP_SLE, .ICMP_SLT,
@@ -2016,12 +2016,12 @@ private func swiftMutagenIsComparisonBuiltin(_ builtin: BuiltinInst) -> Bool {
   }
 }
 
-private func swiftMutagenInjectConditionSite(
-  _ site: SwiftMutagenConditionSite,
+private func swiftmutInjectConditionSite(
+  _ site: SwiftmutConditionSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context),
-        let siteID = swiftMutagenMakeRuntimeSiteID(
+  guard let visitFunction = swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+        let siteID = swiftmutMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,
           insertionPoint: site.branch,
@@ -2047,7 +2047,7 @@ private func swiftMutagenInjectConditionSite(
     SubstitutionMap(),
     arguments: [siteID]
   )
-  guard let rawChoice = swiftMutagenRuntimeChoiceRawValue(
+  guard let rawChoice = swiftmutRuntimeChoiceRawValue(
     choice,
     builder: dispatchBuilder,
     function: function
@@ -2057,7 +2057,7 @@ private func swiftMutagenInjectConditionSite(
 
   for (index, alternative) in site.alternatives.enumerated() {
     let builder = Builder(atEndOf: alternativeBlocks[index], location: site.branch.location, context)
-    guard let mutatedCondition = swiftMutagenMakeConditionAlternative(
+    guard let mutatedCondition = swiftmutMakeConditionAlternative(
       alternative.mutation,
       comparison: site.comparison,
       originalCondition: originalCondition,
@@ -2065,7 +2065,7 @@ private func swiftMutagenInjectConditionSite(
     ) else {
       return false
     }
-    swiftMutagenCreateConditionBranch(
+    swiftmutCreateConditionBranch(
       condition: mutatedCondition,
       trueBlock: trueBlock,
       falseBlock: falseBlock,
@@ -2079,7 +2079,7 @@ private func swiftMutagenInjectConditionSite(
   }
 
   let originalBuilder = Builder(atEndOf: originalBlock, location: site.branch.location, context)
-  swiftMutagenCreateConditionBranch(
+  swiftmutCreateConditionBranch(
     condition: originalCondition,
     trueBlock: trueBlock,
     falseBlock: falseBlock,
@@ -2116,12 +2116,12 @@ private func swiftMutagenInjectConditionSite(
   return true
 }
 
-private func swiftMutagenInjectReturnSite(
-  _ site: SwiftMutagenReturnSite,
+private func swiftmutInjectReturnSite(
+  _ site: SwiftmutReturnSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context),
-        let siteID = swiftMutagenMakeRuntimeSiteID(
+  guard let visitFunction = swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+        let siteID = swiftmutMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,
           insertionPoint: site.returnInst,
@@ -2133,7 +2133,7 @@ private func swiftMutagenInjectReturnSite(
   let returnType = site.returnInst.returnedValue.type
   let function = site.returnInst.parentFunction
   guard site.alternatives.allSatisfy({
-    swiftMutagenCanMakeReturnAlternative(
+    swiftmutCanMakeReturnAlternative(
       $0.mutation,
       returnType: returnType,
       in: function,
@@ -2162,7 +2162,7 @@ private func swiftMutagenInjectReturnSite(
     SubstitutionMap(),
     arguments: [siteID]
   )
-  guard let rawChoice = swiftMutagenRuntimeChoiceRawValue(
+  guard let rawChoice = swiftmutRuntimeChoiceRawValue(
     choice,
     builder: dispatchBuilder,
     function: function
@@ -2172,7 +2172,7 @@ private func swiftMutagenInjectReturnSite(
 
   for (index, alternative) in site.alternatives.enumerated() {
     let builder = Builder(atEndOf: alternativeBlocks[index], location: site.returnInst.location, context)
-    guard let replacement = swiftMutagenMakeReturnAlternative(
+    guard let replacement = swiftmutMakeReturnAlternative(
       alternative.mutation,
       returnType: returnType,
       function: function,
@@ -2215,12 +2215,12 @@ private func swiftMutagenInjectReturnSite(
   return true
 }
 
-private func swiftMutagenInjectReturnBranchSite(
-  _ site: SwiftMutagenReturnBranchSite,
+private func swiftmutInjectReturnBranchSite(
+  _ site: SwiftmutReturnBranchSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context),
-        let siteID = swiftMutagenMakeRuntimeSiteID(
+  guard let visitFunction = swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+        let siteID = swiftmutMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,
           insertionPoint: site.branch,
@@ -2237,7 +2237,7 @@ private func swiftMutagenInjectReturnBranchSite(
   let function = site.branch.parentFunction
   guard valueType.isTrivial(in: function),
         site.alternatives.allSatisfy({
-          swiftMutagenCanMakeReturnAlternative(
+          swiftmutCanMakeReturnAlternative(
             $0.mutation,
             returnType: valueType,
             in: function,
@@ -2260,7 +2260,7 @@ private func swiftMutagenInjectReturnBranchSite(
     SubstitutionMap(),
     arguments: [siteID]
   )
-  guard let rawChoice = swiftMutagenRuntimeChoiceRawValue(
+  guard let rawChoice = swiftmutRuntimeChoiceRawValue(
     choice,
     builder: dispatchBuilder,
     function: function
@@ -2270,7 +2270,7 @@ private func swiftMutagenInjectReturnBranchSite(
 
   for (index, alternative) in site.alternatives.enumerated() {
     let builder = Builder(atEndOf: alternativeBlocks[index], location: site.branch.location, context)
-    guard let replacement = swiftMutagenMakeReturnAlternative(
+    guard let replacement = swiftmutMakeReturnAlternative(
       alternative.mutation,
       returnType: valueType,
       function: function,
@@ -2311,12 +2311,12 @@ private func swiftMutagenInjectReturnBranchSite(
   return true
 }
 
-private func swiftMutagenInjectArithmeticSite(
-  _ site: SwiftMutagenArithmeticSite,
+private func swiftmutInjectArithmeticSite(
+  _ site: SwiftmutArithmeticSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context),
-        let siteID = swiftMutagenMakeRuntimeSiteID(
+  guard let visitFunction = swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+        let siteID = swiftmutMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,
           insertionPoint: site.builtin,
@@ -2325,7 +2325,7 @@ private func swiftMutagenInjectArithmeticSite(
     return false
   }
   guard let firstArgument = site.builtin.arguments.first,
-        let originalBuiltinName = swiftMutagenBuiltinFunctionName(site.builtin) else {
+        let originalBuiltinName = swiftmutBuiltinFunctionName(site.builtin) else {
     return false
   }
 
@@ -2348,7 +2348,7 @@ private func swiftMutagenInjectArithmeticSite(
     SubstitutionMap(),
     arguments: [siteID]
   )
-  guard let rawChoice = swiftMutagenRuntimeChoiceRawValue(
+  guard let rawChoice = swiftmutRuntimeChoiceRawValue(
     choice,
     builder: dispatchBuilder,
     function: function
@@ -2401,12 +2401,12 @@ private func swiftMutagenInjectArithmeticSite(
   return true
 }
 
-private func swiftMutagenInjectScalarValueSite(
-  _ site: SwiftMutagenScalarValueSite,
+private func swiftmutInjectScalarValueSite(
+  _ site: SwiftmutScalarValueSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context),
-        let siteID = swiftMutagenMakeRuntimeSiteID(
+  guard let visitFunction = swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+        let siteID = swiftmutMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,
           insertionPoint: site.value,
@@ -2418,7 +2418,7 @@ private func swiftMutagenInjectScalarValueSite(
   let valueType = site.value.type
   let function = site.value.parentFunction
   guard site.alternatives.allSatisfy({
-    swiftMutagenCanMakeReturnAlternative($0.mutation, returnType: valueType, in: function, context)
+    swiftmutCanMakeReturnAlternative($0.mutation, returnType: valueType, in: function, context)
   }) else {
     return false
   }
@@ -2441,7 +2441,7 @@ private func swiftMutagenInjectScalarValueSite(
     SubstitutionMap(),
     arguments: [siteID]
   )
-  guard let rawChoice = swiftMutagenRuntimeChoiceRawValue(
+  guard let rawChoice = swiftmutRuntimeChoiceRawValue(
     choice,
     builder: dispatchBuilder,
     function: function
@@ -2451,7 +2451,7 @@ private func swiftMutagenInjectScalarValueSite(
 
   for (index, alternative) in site.alternatives.enumerated() {
     let builder = Builder(atEndOf: alternativeBlocks[index], location: site.value.location, context)
-    guard let replacement = swiftMutagenMakeReturnAlternative(
+    guard let replacement = swiftmutMakeReturnAlternative(
       alternative.mutation,
       returnType: valueType,
       function: function,
@@ -2492,12 +2492,12 @@ private func swiftMutagenInjectScalarValueSite(
   return true
 }
 
-private func swiftMutagenInjectValueApplySite(
-  _ site: SwiftMutagenValueApplySite,
+private func swiftmutInjectValueApplySite(
+  _ site: SwiftmutValueApplySite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context),
-        let siteID = swiftMutagenMakeRuntimeSiteID(
+  guard let visitFunction = swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+        let siteID = swiftmutMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,
           insertionPoint: site.apply,
@@ -2509,7 +2509,7 @@ private func swiftMutagenInjectValueApplySite(
   let valueType = site.apply.type
   let function = site.apply.parentFunction
   guard site.alternatives.allSatisfy({
-    swiftMutagenCanMakeReturnAlternative($0.mutation, returnType: valueType, in: function, context)
+    swiftmutCanMakeReturnAlternative($0.mutation, returnType: valueType, in: function, context)
   }) else {
     return false
   }
@@ -2532,7 +2532,7 @@ private func swiftMutagenInjectValueApplySite(
     SubstitutionMap(),
     arguments: [siteID]
   )
-  guard let rawChoice = swiftMutagenRuntimeChoiceRawValue(
+  guard let rawChoice = swiftmutRuntimeChoiceRawValue(
     choice,
     builder: dispatchBuilder,
     function: function
@@ -2542,7 +2542,7 @@ private func swiftMutagenInjectValueApplySite(
 
   for (index, alternative) in site.alternatives.enumerated() {
     let builder = Builder(atEndOf: alternativeBlocks[index], location: site.apply.location, context)
-    guard let replacement = swiftMutagenMakeReturnAlternative(
+    guard let replacement = swiftmutMakeReturnAlternative(
       alternative.mutation,
       returnType: valueType,
       function: function,
@@ -2590,12 +2590,12 @@ private func swiftMutagenInjectValueApplySite(
   return true
 }
 
-private func swiftMutagenInjectAssignmentValueSite(
-  _ site: SwiftMutagenAssignmentValueSite,
+private func swiftmutInjectAssignmentValueSite(
+  _ site: SwiftmutAssignmentValueSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context),
-        let siteID = swiftMutagenMakeRuntimeSiteID(
+  guard let visitFunction = swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+        let siteID = swiftmutMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,
           insertionPoint: site.store,
@@ -2606,9 +2606,9 @@ private func swiftMutagenInjectAssignmentValueSite(
 
   let valueType = site.store.source.type
   let function = site.store.parentFunction
-  guard swiftMutagenCanDispatchAssignmentValue(site.store),
+  guard swiftmutCanDispatchAssignmentValue(site.store),
         site.alternatives.allSatisfy({
-          swiftMutagenCanMakeReturnAlternative(
+          swiftmutCanMakeReturnAlternative(
             $0.mutation,
             returnType: valueType,
             in: function,
@@ -2637,7 +2637,7 @@ private func swiftMutagenInjectAssignmentValueSite(
     SubstitutionMap(),
     arguments: [siteID]
   )
-  guard let rawChoice = swiftMutagenRuntimeChoiceRawValue(
+  guard let rawChoice = swiftmutRuntimeChoiceRawValue(
     choice,
     builder: dispatchBuilder,
     function: function
@@ -2647,7 +2647,7 @@ private func swiftMutagenInjectAssignmentValueSite(
 
   for (index, alternative) in site.alternatives.enumerated() {
     let builder = Builder(atEndOf: alternativeBlocks[index], location: site.store.location, context)
-    guard let replacement = swiftMutagenMakeReturnAlternative(
+    guard let replacement = swiftmutMakeReturnAlternative(
       alternative.mutation,
       returnType: valueType,
       function: function,
@@ -2693,12 +2693,12 @@ private func swiftMutagenInjectAssignmentValueSite(
   return true
 }
 
-private func swiftMutagenInjectVoidCallSite(
-  _ site: SwiftMutagenVoidCallSite,
+private func swiftmutInjectVoidCallSite(
+  _ site: SwiftmutVoidCallSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context),
-        let siteID = swiftMutagenMakeRuntimeSiteID(
+  guard let visitFunction = swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+        let siteID = swiftmutMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,
           insertionPoint: site.apply,
@@ -2721,7 +2721,7 @@ private func swiftMutagenInjectVoidCallSite(
     SubstitutionMap(),
     arguments: [siteID]
   )
-  guard let rawChoice = swiftMutagenRuntimeChoiceRawValue(
+  guard let rawChoice = swiftmutRuntimeChoiceRawValue(
     choice,
     builder: dispatchBuilder,
     function: function
@@ -2760,61 +2760,61 @@ private func swiftMutagenInjectVoidCallSite(
   return true
 }
 
-private func swiftMutagenRuntimeVisitFunction(_ context: FunctionPassContext) -> Function? {
-  context.lookupFunction(name: "__swift_mutagen_visit")
-    ?? context.lookupFunction(name: "@__swift_mutagen_visit")
-    ?? context.loadFunction(name: "__swift_mutagen_visit", loadCalleesRecursively: false)
-    ?? context.loadFunction(name: "@__swift_mutagen_visit", loadCalleesRecursively: false)
+private func swiftmutRuntimeVisitFunction(_ context: FunctionPassContext) -> Function? {
+  context.lookupFunction(name: "__swiftmut_visit")
+    ?? context.lookupFunction(name: "@__swiftmut_visit")
+    ?? context.loadFunction(name: "__swiftmut_visit", loadCalleesRecursively: false)
+    ?? context.loadFunction(name: "@__swiftmut_visit", loadCalleesRecursively: false)
 }
 
-private func swiftMutagenRuntimeVisitFunction(
+private func swiftmutRuntimeVisitFunction(
   named functionName: String,
   _ context: FunctionPassContext
 ) -> Function? {
   context.lookupFunction(name: functionName)
     ?? context.lookupFunction(name: "@\(functionName)")
-    ?? swiftMutagenRuntimeVisitFunction(context)
+    ?? swiftmutRuntimeVisitFunction(context)
 }
 
-private func swiftMutagenAnyRuntimeVisitFunctionAvailable(
-  conditionSites: [SwiftMutagenConditionSite],
-  arithmeticSites: [SwiftMutagenArithmeticSite],
-  scalarValueSites: [SwiftMutagenScalarValueSite],
-  valueApplySites: [SwiftMutagenValueApplySite],
-  assignmentValueSites: [SwiftMutagenAssignmentValueSite],
-  returnSites: [SwiftMutagenReturnSite],
-  returnBranchSites: [SwiftMutagenReturnBranchSite],
-  voidCallSites: [SwiftMutagenVoidCallSite],
+private func swiftmutAnyRuntimeVisitFunctionAvailable(
+  conditionSites: [SwiftmutConditionSite],
+  arithmeticSites: [SwiftmutArithmeticSite],
+  scalarValueSites: [SwiftmutScalarValueSite],
+  valueApplySites: [SwiftmutValueApplySite],
+  assignmentValueSites: [SwiftmutAssignmentValueSite],
+  returnSites: [SwiftmutReturnSite],
+  returnBranchSites: [SwiftmutReturnBranchSite],
+  voidCallSites: [SwiftmutVoidCallSite],
   _ context: FunctionPassContext
 ) -> Bool {
-  for site in conditionSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+  for site in conditionSites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
     return true
   }
-  for site in arithmeticSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+  for site in arithmeticSites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
     return true
   }
-  for site in scalarValueSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+  for site in scalarValueSites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
     return true
   }
-  for site in valueApplySites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+  for site in valueApplySites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
     return true
   }
-  for site in assignmentValueSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+  for site in assignmentValueSites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
     return true
   }
-  for site in returnSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+  for site in returnSites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
     return true
   }
-  for site in returnBranchSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+  for site in returnBranchSites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
     return true
   }
-  for site in voidCallSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+  for site in voidCallSites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
     return true
   }
-  return swiftMutagenRuntimeVisitFunction(context) != nil
+  return swiftmutRuntimeVisitFunction(context) != nil
 }
 
-private func swiftMutagenRuntimeVisitThunkName(file: String, config: SwiftMutagenConfig) -> String {
+private func swiftmutRuntimeVisitThunkName(file: String, config: SwiftmutConfig) -> String {
   let absolutePath: String
   if file.hasPrefix("/") {
     absolutePath = file
@@ -2823,11 +2823,11 @@ private func swiftMutagenRuntimeVisitThunkName(file: String, config: SwiftMutage
   } else {
     absolutePath = config.packageRoot + "/" + file
   }
-  return "__swift_mutagen_visit_\(swiftMutagenHex(swiftMutagenStableHash(absolutePath)))"
+  return "__swiftmut_visit_\(swiftmutHex(swiftmutStableHash(absolutePath)))"
 }
 
-private func swiftMutagenCanMakeReturnAlternative(
-  _ mutation: SwiftMutagenMutation,
+private func swiftmutCanMakeReturnAlternative(
+  _ mutation: SwiftmutMutation,
   returnType: Type,
   in function: Function,
   runtimeFunctionName: String? = nil,
@@ -2835,45 +2835,45 @@ private func swiftMutagenCanMakeReturnAlternative(
 ) -> Bool {
   switch mutation.mutatedBuiltinName {
   case "return_false", "return_true":
-    return swiftMutagenIsBoolType(returnType, in: function)
+    return swiftmutIsBoolType(returnType, in: function)
   case "return_nil":
     return returnType.isOptional
   case "return_zero":
-    return swiftMutagenIsIntegerStructType(returnType, in: function)
+    return swiftmutIsIntegerStructType(returnType, in: function)
   case "return_empty_string":
-    return swiftMutagenIsStringType(returnType)
-      && swiftMutagenEmptyStringFunction(named: swiftMutagenRuntimeHelperThunkName(
+    return swiftmutIsStringType(returnType)
+      && swiftmutEmptyStringFunction(named: swiftmutRuntimeHelperThunkName(
         runtimeFunctionName: runtimeFunctionName,
         suffix: "empty_string"
       ), context) != nil
   case "return_empty_array":
-    return swiftMutagenIsCollectionType(returnType, named: "Array")
-      && swiftMutagenEmptyCollectionFunction(named: swiftMutagenRuntimeHelperThunkName(
+    return swiftmutIsCollectionType(returnType, named: "Array")
+      && swiftmutEmptyCollectionFunction(named: swiftmutRuntimeHelperThunkName(
         runtimeFunctionName: runtimeFunctionName,
         suffix: "empty_array",
-        fallbackName: "__swift_mutagen_empty_array"
+        fallbackName: "__swiftmut_empty_array"
       ), context) != nil
   case "return_empty_dictionary":
-    return swiftMutagenIsCollectionType(returnType, named: "Dictionary")
-      && swiftMutagenEmptyCollectionFunction(named: swiftMutagenRuntimeHelperThunkName(
+    return swiftmutIsCollectionType(returnType, named: "Dictionary")
+      && swiftmutEmptyCollectionFunction(named: swiftmutRuntimeHelperThunkName(
         runtimeFunctionName: runtimeFunctionName,
         suffix: "empty_dictionary",
-        fallbackName: "__swift_mutagen_empty_dictionary"
+        fallbackName: "__swiftmut_empty_dictionary"
       ), context) != nil
   case "return_empty_set":
-    return swiftMutagenIsCollectionType(returnType, named: "Set")
-      && swiftMutagenEmptyCollectionFunction(named: swiftMutagenRuntimeHelperThunkName(
+    return swiftmutIsCollectionType(returnType, named: "Set")
+      && swiftmutEmptyCollectionFunction(named: swiftmutRuntimeHelperThunkName(
         runtimeFunctionName: runtimeFunctionName,
         suffix: "empty_set",
-        fallbackName: "__swift_mutagen_empty_set"
+        fallbackName: "__swiftmut_empty_set"
       ), context) != nil
   default:
     return false
   }
 }
 
-private func swiftMutagenMakeReturnAlternative(
-  _ mutation: SwiftMutagenMutation,
+private func swiftmutMakeReturnAlternative(
+  _ mutation: SwiftmutMutation,
   returnType: Type,
   function: Function,
   runtimeFunctionName: String? = nil,
@@ -2882,17 +2882,17 @@ private func swiftMutagenMakeReturnAlternative(
 ) -> Value? {
   switch mutation.mutatedBuiltinName {
   case "return_false":
-    return swiftMutagenMakeBool(false, type: returnType, builder: builder)
+    return swiftmutMakeBool(false, type: returnType, builder: builder)
   case "return_true":
-    return swiftMutagenMakeBool(true, type: returnType, builder: builder)
+    return swiftmutMakeBool(true, type: returnType, builder: builder)
   case "return_nil":
-    return swiftMutagenMakeOptionalNone(type: returnType, builder: builder)
+    return swiftmutMakeOptionalNone(type: returnType, builder: builder)
   case "return_zero":
-    return swiftMutagenMakeIntegerZero(type: returnType, in: function, builder: builder)
+    return swiftmutMakeIntegerZero(type: returnType, in: function, builder: builder)
   case "return_empty_string":
-    return swiftMutagenMakeEmptyString(
+    return swiftmutMakeEmptyString(
       type: returnType,
-      helperName: swiftMutagenRuntimeHelperThunkName(
+      helperName: swiftmutRuntimeHelperThunkName(
         runtimeFunctionName: runtimeFunctionName,
         suffix: "empty_string"
       ),
@@ -2900,36 +2900,36 @@ private func swiftMutagenMakeReturnAlternative(
       builder: builder
     )
   case "return_empty_array":
-    return swiftMutagenMakeEmptyCollection(
+    return swiftmutMakeEmptyCollection(
       type: returnType,
-      helperName: swiftMutagenRuntimeHelperThunkName(
+      helperName: swiftmutRuntimeHelperThunkName(
         runtimeFunctionName: runtimeFunctionName,
         suffix: "empty_array",
-        fallbackName: "__swift_mutagen_empty_array"
+        fallbackName: "__swiftmut_empty_array"
       ),
       expectedReplacementCount: 1,
       context: context,
       builder: builder
     )
   case "return_empty_dictionary":
-    return swiftMutagenMakeEmptyCollection(
+    return swiftmutMakeEmptyCollection(
       type: returnType,
-      helperName: swiftMutagenRuntimeHelperThunkName(
+      helperName: swiftmutRuntimeHelperThunkName(
         runtimeFunctionName: runtimeFunctionName,
         suffix: "empty_dictionary",
-        fallbackName: "__swift_mutagen_empty_dictionary"
+        fallbackName: "__swiftmut_empty_dictionary"
       ),
       expectedReplacementCount: 2,
       context: context,
       builder: builder
     )
   case "return_empty_set":
-    return swiftMutagenMakeEmptyCollection(
+    return swiftmutMakeEmptyCollection(
       type: returnType,
-      helperName: swiftMutagenRuntimeHelperThunkName(
+      helperName: swiftmutRuntimeHelperThunkName(
         runtimeFunctionName: runtimeFunctionName,
         suffix: "empty_set",
-        fallbackName: "__swift_mutagen_empty_set"
+        fallbackName: "__swiftmut_empty_set"
       ),
       expectedReplacementCount: 1,
       context: context,
@@ -2940,8 +2940,8 @@ private func swiftMutagenMakeReturnAlternative(
   }
 }
 
-private func swiftMutagenMakeConditionAlternative(
-  _ mutation: SwiftMutagenMutation,
+private func swiftmutMakeConditionAlternative(
+  _ mutation: SwiftmutMutation,
   comparison: BuiltinInst?,
   originalCondition: Value,
   builder: Builder
@@ -2964,7 +2964,7 @@ private func swiftMutagenMakeConditionAlternative(
   }
 }
 
-private func swiftMutagenCreateConditionBranch(
+private func swiftmutCreateConditionBranch(
   condition: Value,
   trueBlock: BasicBlock,
   falseBlock: BasicBlock,
@@ -2992,7 +2992,7 @@ private func swiftMutagenCreateConditionBranch(
   )
 }
 
-private func swiftMutagenMakeRuntimeSiteID(
+private func swiftmutMakeRuntimeSiteID(
   _ siteID: UInt64,
   visitFunction: Function,
   insertionPoint: Instruction,
@@ -3018,7 +3018,7 @@ private func swiftMutagenMakeRuntimeSiteID(
   return builder.createStruct(type: parameterType, elements: [literal])
 }
 
-private func swiftMutagenRuntimeChoiceRawValue(
+private func swiftmutRuntimeChoiceRawValue(
   _ choice: Value,
   builder: Builder,
   function: Function
@@ -3034,11 +3034,11 @@ private func swiftMutagenRuntimeChoiceRawValue(
   return builder.createStructExtract(struct: choice, fieldIndex: 0)
 }
 
-private func swiftMutagenWriteMetamutantFragment(
+private func swiftmutWriteMetamutantFragment(
   _ siteJSON: [String],
   moduleName: String,
   functionName: String,
-  config: SwiftMutagenConfig
+  config: SwiftmutConfig
 ) {
   guard !config.manifestFragmentsDirectory.isEmpty else {
     return
@@ -3055,210 +3055,210 @@ private func swiftMutagenWriteMetamutantFragment(
 
   let path = config.manifestFragmentsDirectory
     + "/"
-    + swiftMutagenSanitizeFileComponent(moduleName)
+    + swiftmutSanitizeFileComponent(moduleName)
     + "-"
-    + "\(swiftMutagenProcessID())"
+    + "\(swiftmutProcessID())"
     + "-"
-    + swiftMutagenHex(swiftMutagenStableHash(functionName))
+    + swiftmutHex(swiftmutStableHash(functionName))
     + ".json"
-  swiftMutagenCreateParentDirectories(forFile: path)
-  swiftMutagenWrite(output, to: path, append: false)
+  swiftmutCreateParentDirectories(forFile: path)
+  swiftmutWrite(output, to: path, append: false)
 }
 
-private func swiftMutagenConditionSiteJSON(_ site: SwiftMutagenConditionSite) -> String {
+private func swiftmutConditionSiteJSON(_ site: SwiftmutConditionSite) -> String {
   var fields: [String] = []
   fields.append(#""siteID":\#(site.siteID)"#)
-  fields.append(#""module":"\#(swiftMutagenEscapeJSON(site.module))""#)
-  fields.append(#""function":"\#(swiftMutagenEscapeJSON(site.function))""#)
+  fields.append(#""module":"\#(swiftmutEscapeJSON(site.module))""#)
+  fields.append(#""function":"\#(swiftmutEscapeJSON(site.function))""#)
   fields.append(
-    #""sourceLocation":{"file":"\#(swiftMutagenEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#
+    #""sourceLocation":{"file":"\#(swiftmutEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#
   )
   fields.append(#""siteKind":"condition""#)
   fields.append(#""resultKind":"condition""#)
   var alternatives: [String] = []
   for alternative in site.alternatives {
-    alternatives.append(swiftMutagenConditionAlternativeJSON(alternative))
+    alternatives.append(swiftmutConditionAlternativeJSON(alternative))
   }
   fields.append(#""alternatives":[\#(alternatives.joined(separator: ","))]"#)
   return "{\(fields.joined(separator: ","))}"
 }
 
-private func swiftMutagenConditionAlternativeJSON(_ alternative: SwiftMutagenConditionAlternative) -> String {
+private func swiftmutConditionAlternativeJSON(_ alternative: SwiftmutConditionAlternative) -> String {
   var fields: [String] = []
-  fields.append(#""mutantID":"\#(swiftMutagenEscapeJSON(alternative.mutantID))""#)
+  fields.append(#""mutantID":"\#(swiftmutEscapeJSON(alternative.mutantID))""#)
   fields.append(#""alternativeIndex":\#(alternative.alternativeIndex)"#)
-  fields.append(#""mutator":"\#(swiftMutagenEscapeJSON(alternative.mutation.mutator))""#)
-  fields.append(#""sourceOriginal":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceOriginal))""#)
-  fields.append(#""sourceMutated":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceMutated))""#)
-  fields.append(#""behaviorKey":"\#(swiftMutagenEscapeJSON(alternative.mutation.silMutated))""#)
+  fields.append(#""mutator":"\#(swiftmutEscapeJSON(alternative.mutation.mutator))""#)
+  fields.append(#""sourceOriginal":"\#(swiftmutEscapeJSON(alternative.mutation.sourceOriginal))""#)
+  fields.append(#""sourceMutated":"\#(swiftmutEscapeJSON(alternative.mutation.sourceMutated))""#)
+  fields.append(#""behaviorKey":"\#(swiftmutEscapeJSON(alternative.mutation.silMutated))""#)
   return "{\(fields.joined(separator: ","))}"
 }
 
-private func swiftMutagenArithmeticSiteJSON(_ site: SwiftMutagenArithmeticSite) -> String {
+private func swiftmutArithmeticSiteJSON(_ site: SwiftmutArithmeticSite) -> String {
   var fields: [String] = []
   fields.append(#""siteID":\#(site.siteID)"#)
-  fields.append(#""module":"\#(swiftMutagenEscapeJSON(site.module))""#)
-  fields.append(#""function":"\#(swiftMutagenEscapeJSON(site.function))""#)
-  fields.append(#""sourceLocation":{"file":"\#(swiftMutagenEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#)
+  fields.append(#""module":"\#(swiftmutEscapeJSON(site.module))""#)
+  fields.append(#""function":"\#(swiftmutEscapeJSON(site.function))""#)
+  fields.append(#""sourceLocation":{"file":"\#(swiftmutEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#)
   fields.append(#""siteKind":"arithmetic""#)
   fields.append(#""resultKind":"value""#)
-  fields.append(#""alternatives":[\#(site.alternatives.map(swiftMutagenArithmeticAlternativeJSON).joined(separator: ","))]"#)
+  fields.append(#""alternatives":[\#(site.alternatives.map(swiftmutArithmeticAlternativeJSON).joined(separator: ","))]"#)
   return "{\(fields.joined(separator: ","))}"
 }
 
-private func swiftMutagenArithmeticAlternativeJSON(_ alternative: SwiftMutagenArithmeticAlternative) -> String {
+private func swiftmutArithmeticAlternativeJSON(_ alternative: SwiftmutArithmeticAlternative) -> String {
   var fields: [String] = []
-  fields.append(#""mutantID":"\#(swiftMutagenEscapeJSON(alternative.mutantID))""#)
+  fields.append(#""mutantID":"\#(swiftmutEscapeJSON(alternative.mutantID))""#)
   fields.append(#""alternativeIndex":\#(alternative.alternativeIndex)"#)
-  fields.append(#""mutator":"\#(swiftMutagenEscapeJSON(alternative.mutation.mutator))""#)
-  fields.append(#""sourceOriginal":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceOriginal))""#)
-  fields.append(#""sourceMutated":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceMutated))""#)
-  fields.append(#""behaviorKey":"\#(swiftMutagenEscapeJSON(alternative.mutation.silMutated))""#)
+  fields.append(#""mutator":"\#(swiftmutEscapeJSON(alternative.mutation.mutator))""#)
+  fields.append(#""sourceOriginal":"\#(swiftmutEscapeJSON(alternative.mutation.sourceOriginal))""#)
+  fields.append(#""sourceMutated":"\#(swiftmutEscapeJSON(alternative.mutation.sourceMutated))""#)
+  fields.append(#""behaviorKey":"\#(swiftmutEscapeJSON(alternative.mutation.silMutated))""#)
   return "{\(fields.joined(separator: ","))}"
 }
 
-private func swiftMutagenScalarValueSiteJSON(_ site: SwiftMutagenScalarValueSite) -> String {
+private func swiftmutScalarValueSiteJSON(_ site: SwiftmutScalarValueSite) -> String {
   var fields: [String] = []
   fields.append(#""siteID":\#(site.siteID)"#)
-  fields.append(#""module":"\#(swiftMutagenEscapeJSON(site.module))""#)
-  fields.append(#""function":"\#(swiftMutagenEscapeJSON(site.function))""#)
-  fields.append(#""sourceLocation":{"file":"\#(swiftMutagenEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#)
+  fields.append(#""module":"\#(swiftmutEscapeJSON(site.module))""#)
+  fields.append(#""function":"\#(swiftmutEscapeJSON(site.function))""#)
+  fields.append(#""sourceLocation":{"file":"\#(swiftmutEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#)
   fields.append(#""siteKind":"scalarValue""#)
   fields.append(#""resultKind":"value""#)
-  fields.append(#""alternatives":[\#(site.alternatives.map(swiftMutagenScalarValueAlternativeJSON).joined(separator: ","))]"#)
+  fields.append(#""alternatives":[\#(site.alternatives.map(swiftmutScalarValueAlternativeJSON).joined(separator: ","))]"#)
   return "{\(fields.joined(separator: ","))}"
 }
 
-private func swiftMutagenScalarValueAlternativeJSON(_ alternative: SwiftMutagenScalarValueAlternative) -> String {
+private func swiftmutScalarValueAlternativeJSON(_ alternative: SwiftmutScalarValueAlternative) -> String {
   var fields: [String] = []
-  fields.append(#""mutantID":"\#(swiftMutagenEscapeJSON(alternative.mutantID))""#)
+  fields.append(#""mutantID":"\#(swiftmutEscapeJSON(alternative.mutantID))""#)
   fields.append(#""alternativeIndex":\#(alternative.alternativeIndex)"#)
-  fields.append(#""mutator":"\#(swiftMutagenEscapeJSON(alternative.mutation.mutator))""#)
-  fields.append(#""sourceOriginal":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceOriginal))""#)
-  fields.append(#""sourceMutated":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceMutated))""#)
-  fields.append(#""behaviorKey":"\#(swiftMutagenEscapeJSON(alternative.mutation.silMutated))""#)
+  fields.append(#""mutator":"\#(swiftmutEscapeJSON(alternative.mutation.mutator))""#)
+  fields.append(#""sourceOriginal":"\#(swiftmutEscapeJSON(alternative.mutation.sourceOriginal))""#)
+  fields.append(#""sourceMutated":"\#(swiftmutEscapeJSON(alternative.mutation.sourceMutated))""#)
+  fields.append(#""behaviorKey":"\#(swiftmutEscapeJSON(alternative.mutation.silMutated))""#)
   return "{\(fields.joined(separator: ","))}"
 }
 
-private func swiftMutagenValueApplySiteJSON(_ site: SwiftMutagenValueApplySite) -> String {
+private func swiftmutValueApplySiteJSON(_ site: SwiftmutValueApplySite) -> String {
   var fields: [String] = []
   fields.append(#""siteID":\#(site.siteID)"#)
-  fields.append(#""module":"\#(swiftMutagenEscapeJSON(site.module))""#)
-  fields.append(#""function":"\#(swiftMutagenEscapeJSON(site.function))""#)
-  fields.append(#""sourceLocation":{"file":"\#(swiftMutagenEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#)
+  fields.append(#""module":"\#(swiftmutEscapeJSON(site.module))""#)
+  fields.append(#""function":"\#(swiftmutEscapeJSON(site.function))""#)
+  fields.append(#""sourceLocation":{"file":"\#(swiftmutEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#)
   fields.append(#""siteKind":"valueApply""#)
   fields.append(#""resultKind":"value""#)
-  fields.append(#""alternatives":[\#(site.alternatives.map(swiftMutagenValueApplyAlternativeJSON).joined(separator: ","))]"#)
+  fields.append(#""alternatives":[\#(site.alternatives.map(swiftmutValueApplyAlternativeJSON).joined(separator: ","))]"#)
   return "{\(fields.joined(separator: ","))}"
 }
 
-private func swiftMutagenValueApplyAlternativeJSON(_ alternative: SwiftMutagenValueApplyAlternative) -> String {
+private func swiftmutValueApplyAlternativeJSON(_ alternative: SwiftmutValueApplyAlternative) -> String {
   var fields: [String] = []
-  fields.append(#""mutantID":"\#(swiftMutagenEscapeJSON(alternative.mutantID))""#)
+  fields.append(#""mutantID":"\#(swiftmutEscapeJSON(alternative.mutantID))""#)
   fields.append(#""alternativeIndex":\#(alternative.alternativeIndex)"#)
-  fields.append(#""mutator":"\#(swiftMutagenEscapeJSON(alternative.mutation.mutator))""#)
-  fields.append(#""sourceOriginal":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceOriginal))""#)
-  fields.append(#""sourceMutated":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceMutated))""#)
-  fields.append(#""behaviorKey":"\#(swiftMutagenEscapeJSON(alternative.mutation.silMutated))""#)
+  fields.append(#""mutator":"\#(swiftmutEscapeJSON(alternative.mutation.mutator))""#)
+  fields.append(#""sourceOriginal":"\#(swiftmutEscapeJSON(alternative.mutation.sourceOriginal))""#)
+  fields.append(#""sourceMutated":"\#(swiftmutEscapeJSON(alternative.mutation.sourceMutated))""#)
+  fields.append(#""behaviorKey":"\#(swiftmutEscapeJSON(alternative.mutation.silMutated))""#)
   return "{\(fields.joined(separator: ","))}"
 }
 
-private func swiftMutagenAssignmentValueSiteJSON(_ site: SwiftMutagenAssignmentValueSite) -> String {
+private func swiftmutAssignmentValueSiteJSON(_ site: SwiftmutAssignmentValueSite) -> String {
   var fields: [String] = []
   fields.append(#""siteID":\#(site.siteID)"#)
-  fields.append(#""module":"\#(swiftMutagenEscapeJSON(site.module))""#)
-  fields.append(#""function":"\#(swiftMutagenEscapeJSON(site.function))""#)
-  fields.append(#""sourceLocation":{"file":"\#(swiftMutagenEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#)
+  fields.append(#""module":"\#(swiftmutEscapeJSON(site.module))""#)
+  fields.append(#""function":"\#(swiftmutEscapeJSON(site.function))""#)
+  fields.append(#""sourceLocation":{"file":"\#(swiftmutEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#)
   fields.append(#""siteKind":"assignmentValue""#)
   fields.append(#""resultKind":"value""#)
-  fields.append(#""alternatives":[\#(site.alternatives.map(swiftMutagenAssignmentValueAlternativeJSON).joined(separator: ","))]"#)
+  fields.append(#""alternatives":[\#(site.alternatives.map(swiftmutAssignmentValueAlternativeJSON).joined(separator: ","))]"#)
   return "{\(fields.joined(separator: ","))}"
 }
 
-private func swiftMutagenAssignmentValueAlternativeJSON(_ alternative: SwiftMutagenAssignmentValueAlternative) -> String {
+private func swiftmutAssignmentValueAlternativeJSON(_ alternative: SwiftmutAssignmentValueAlternative) -> String {
   var fields: [String] = []
-  fields.append(#""mutantID":"\#(swiftMutagenEscapeJSON(alternative.mutantID))""#)
+  fields.append(#""mutantID":"\#(swiftmutEscapeJSON(alternative.mutantID))""#)
   fields.append(#""alternativeIndex":\#(alternative.alternativeIndex)"#)
-  fields.append(#""mutator":"\#(swiftMutagenEscapeJSON(alternative.mutation.mutator))""#)
-  fields.append(#""sourceOriginal":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceOriginal))""#)
-  fields.append(#""sourceMutated":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceMutated))""#)
-  fields.append(#""behaviorKey":"\#(swiftMutagenEscapeJSON(alternative.mutation.silMutated))""#)
+  fields.append(#""mutator":"\#(swiftmutEscapeJSON(alternative.mutation.mutator))""#)
+  fields.append(#""sourceOriginal":"\#(swiftmutEscapeJSON(alternative.mutation.sourceOriginal))""#)
+  fields.append(#""sourceMutated":"\#(swiftmutEscapeJSON(alternative.mutation.sourceMutated))""#)
+  fields.append(#""behaviorKey":"\#(swiftmutEscapeJSON(alternative.mutation.silMutated))""#)
   return "{\(fields.joined(separator: ","))}"
 }
 
-private func swiftMutagenReturnSiteJSON(_ site: SwiftMutagenReturnSite) -> String {
+private func swiftmutReturnSiteJSON(_ site: SwiftmutReturnSite) -> String {
   var fields: [String] = []
   fields.append(#""siteID":\#(site.siteID)"#)
-  fields.append(#""module":"\#(swiftMutagenEscapeJSON(site.module))""#)
-  fields.append(#""function":"\#(swiftMutagenEscapeJSON(site.function))""#)
+  fields.append(#""module":"\#(swiftmutEscapeJSON(site.module))""#)
+  fields.append(#""function":"\#(swiftmutEscapeJSON(site.function))""#)
   fields.append(
-    #""sourceLocation":{"file":"\#(swiftMutagenEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#
+    #""sourceLocation":{"file":"\#(swiftmutEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#
   )
   fields.append(#""siteKind":"returnValue""#)
   fields.append(#""resultKind":"returnValue""#)
   var alternatives: [String] = []
   for alternative in site.alternatives {
-    alternatives.append(swiftMutagenReturnAlternativeJSON(alternative))
+    alternatives.append(swiftmutReturnAlternativeJSON(alternative))
   }
   fields.append(#""alternatives":[\#(alternatives.joined(separator: ","))]"#)
   return "{\(fields.joined(separator: ","))}"
 }
 
-private func swiftMutagenReturnBranchSiteJSON(_ site: SwiftMutagenReturnBranchSite) -> String {
+private func swiftmutReturnBranchSiteJSON(_ site: SwiftmutReturnBranchSite) -> String {
   var fields: [String] = []
   fields.append(#""siteID":\#(site.siteID)"#)
-  fields.append(#""module":"\#(swiftMutagenEscapeJSON(site.module))""#)
-  fields.append(#""function":"\#(swiftMutagenEscapeJSON(site.function))""#)
+  fields.append(#""module":"\#(swiftmutEscapeJSON(site.module))""#)
+  fields.append(#""function":"\#(swiftmutEscapeJSON(site.function))""#)
   fields.append(
-    #""sourceLocation":{"file":"\#(swiftMutagenEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#
+    #""sourceLocation":{"file":"\#(swiftmutEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#
   )
   fields.append(#""siteKind":"returnBranchValue""#)
   fields.append(#""resultKind":"returnValue""#)
   var alternatives: [String] = []
   for alternative in site.alternatives {
-    alternatives.append(swiftMutagenReturnAlternativeJSON(alternative))
+    alternatives.append(swiftmutReturnAlternativeJSON(alternative))
   }
   fields.append(#""alternatives":[\#(alternatives.joined(separator: ","))]"#)
   return "{\(fields.joined(separator: ","))}"
 }
 
-private func swiftMutagenReturnAlternativeJSON(_ alternative: SwiftMutagenReturnAlternative) -> String {
+private func swiftmutReturnAlternativeJSON(_ alternative: SwiftmutReturnAlternative) -> String {
   var fields: [String] = []
-  fields.append(#""mutantID":"\#(swiftMutagenEscapeJSON(alternative.mutantID))""#)
+  fields.append(#""mutantID":"\#(swiftmutEscapeJSON(alternative.mutantID))""#)
   fields.append(#""alternativeIndex":\#(alternative.alternativeIndex)"#)
-  fields.append(#""mutator":"\#(swiftMutagenEscapeJSON(alternative.mutation.mutator))""#)
-  fields.append(#""sourceOriginal":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceOriginal))""#)
-  fields.append(#""sourceMutated":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceMutated))""#)
-  fields.append(#""behaviorKey":"\#(swiftMutagenEscapeJSON(alternative.mutation.silMutated))""#)
+  fields.append(#""mutator":"\#(swiftmutEscapeJSON(alternative.mutation.mutator))""#)
+  fields.append(#""sourceOriginal":"\#(swiftmutEscapeJSON(alternative.mutation.sourceOriginal))""#)
+  fields.append(#""sourceMutated":"\#(swiftmutEscapeJSON(alternative.mutation.sourceMutated))""#)
+  fields.append(#""behaviorKey":"\#(swiftmutEscapeJSON(alternative.mutation.silMutated))""#)
   return "{\(fields.joined(separator: ","))}"
 }
 
-private func swiftMutagenVoidCallSiteJSON(_ site: SwiftMutagenVoidCallSite) -> String {
+private func swiftmutVoidCallSiteJSON(_ site: SwiftmutVoidCallSite) -> String {
   var fields: [String] = []
   fields.append(#""siteID":\#(site.siteID)"#)
-  fields.append(#""module":"\#(swiftMutagenEscapeJSON(site.module))""#)
-  fields.append(#""function":"\#(swiftMutagenEscapeJSON(site.function))""#)
+  fields.append(#""module":"\#(swiftmutEscapeJSON(site.module))""#)
+  fields.append(#""function":"\#(swiftmutEscapeJSON(site.function))""#)
   fields.append(
-    #""sourceLocation":{"file":"\#(swiftMutagenEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#
+    #""sourceLocation":{"file":"\#(swiftmutEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#
   )
   fields.append(#""siteKind":"voidCall""#)
   fields.append(#""resultKind":"statement""#)
-  fields.append(#""alternatives":[\#(site.alternatives.map(swiftMutagenVoidCallAlternativeJSON).joined(separator: ","))]"#)
+  fields.append(#""alternatives":[\#(site.alternatives.map(swiftmutVoidCallAlternativeJSON).joined(separator: ","))]"#)
   return "{\(fields.joined(separator: ","))}"
 }
 
-private func swiftMutagenVoidCallAlternativeJSON(_ alternative: SwiftMutagenVoidCallAlternative) -> String {
+private func swiftmutVoidCallAlternativeJSON(_ alternative: SwiftmutVoidCallAlternative) -> String {
   var fields: [String] = []
-  fields.append(#""mutantID":"\#(swiftMutagenEscapeJSON(alternative.mutantID))""#)
+  fields.append(#""mutantID":"\#(swiftmutEscapeJSON(alternative.mutantID))""#)
   fields.append(#""alternativeIndex":\#(alternative.alternativeIndex)"#)
-  fields.append(#""mutator":"\#(swiftMutagenEscapeJSON(alternative.mutation.mutator))""#)
-  fields.append(#""sourceOriginal":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceOriginal))""#)
-  fields.append(#""sourceMutated":"\#(swiftMutagenEscapeJSON(alternative.mutation.sourceMutated))""#)
-  fields.append(#""behaviorKey":"\#(swiftMutagenEscapeJSON(alternative.mutation.silMutated))""#)
+  fields.append(#""mutator":"\#(swiftmutEscapeJSON(alternative.mutation.mutator))""#)
+  fields.append(#""sourceOriginal":"\#(swiftmutEscapeJSON(alternative.mutation.sourceOriginal))""#)
+  fields.append(#""sourceMutated":"\#(swiftmutEscapeJSON(alternative.mutation.sourceMutated))""#)
+  fields.append(#""behaviorKey":"\#(swiftmutEscapeJSON(alternative.mutation.silMutated))""#)
   return "{\(fields.joined(separator: ","))}"
 }
 
-private func swiftMutagenModeName(_ mode: SwiftMutagenMode) -> String {
+private func swiftmutModeName(_ mode: SwiftmutMode) -> String {
   switch mode {
   case .discover:
     return "discover"
@@ -3269,15 +3269,15 @@ private func swiftMutagenModeName(_ mode: SwiftMutagenMode) -> String {
   }
 }
 
-private func swiftMutagenShouldLog(
+private func swiftmutShouldLog(
   function: Function,
   moduleName: String,
-  config: SwiftMutagenConfig
+  config: SwiftmutConfig
 ) -> Bool {
   if config.compilerEventsPath.isEmpty {
     return false
   }
-  if swiftMutagenFunctionName(function.name.string, belongsToModule: moduleName) {
+  if swiftmutFunctionName(function.name.string, belongsToModule: moduleName) {
     return true
   }
   let location = function.location.description
@@ -3289,24 +3289,24 @@ private func swiftMutagenShouldLog(
   return false
 }
 
-private func swiftMutagenLogEvent(
+private func swiftmutLogEvent(
   _ event: String,
-  config: SwiftMutagenConfig,
+  config: SwiftmutConfig,
   fields: [(String, String)]
 ) {
   guard !config.compilerEventsPath.isEmpty else {
     return
   }
 
-  var jsonFields = [#""event":"\#(swiftMutagenEscapeJSON(event))""#]
+  var jsonFields = [#""event":"\#(swiftmutEscapeJSON(event))""#]
   for (key, value) in fields {
-    jsonFields.append(#""\#(swiftMutagenEscapeJSON(key))":"\#(swiftMutagenEscapeJSON(value))""#)
+    jsonFields.append(#""\#(swiftmutEscapeJSON(key))":"\#(swiftmutEscapeJSON(value))""#)
   }
-  swiftMutagenCreateParentDirectories(forFile: config.compilerEventsPath)
-  swiftMutagenWrite("{\(jsonFields.joined(separator: ","))}\n", to: config.compilerEventsPath, append: true)
+  swiftmutCreateParentDirectories(forFile: config.compilerEventsPath)
+  swiftmutWrite("{\(jsonFields.joined(separator: ","))}\n", to: config.compilerEventsPath, append: true)
 }
 
-private func swiftMutagenFunctionName(_ functionName: String, belongsToModule moduleName: String) -> Bool {
+private func swiftmutFunctionName(_ functionName: String, belongsToModule moduleName: String) -> Bool {
   let mangledModulePrefix = "$s\(moduleName.utf8.count)\(moduleName)"
   if functionName.hasPrefix(mangledModulePrefix) {
     return true
@@ -3314,7 +3314,7 @@ private func swiftMutagenFunctionName(_ functionName: String, belongsToModule mo
   return functionName.hasPrefix("@\(mangledModulePrefix)")
 }
 
-private func swiftMutagenStableSiteID(
+private func swiftmutStableSiteID(
   packageRoot: String,
   module: String,
   file: String,
@@ -3324,7 +3324,7 @@ private func swiftMutagenStableSiteID(
   siteKind: String,
   localOrdinal: Int
 ) -> UInt64 {
-  swiftMutagenStableHash([
+  swiftmutStableHash([
     packageRoot,
     module,
     file,
@@ -3336,7 +3336,7 @@ private func swiftMutagenStableSiteID(
   ].joined(separator: "\u{1f}"))
 }
 
-private func swiftMutagenStableHash(_ text: String) -> UInt64 {
+private func swiftmutStableHash(_ text: String) -> UInt64 {
   var hash: UInt64 = 0xcbf29ce484222325
   for byte in text.utf8 {
     hash ^= UInt64(byte)
@@ -3345,7 +3345,7 @@ private func swiftMutagenStableHash(_ text: String) -> UInt64 {
   return hash
 }
 
-private func swiftMutagenHex(_ value: UInt64) -> String {
+private func swiftmutHex(_ value: UInt64) -> String {
   let digits = Array("0123456789ABCDEF".utf8)
   var output = [UInt8](repeating: 48, count: 16)
   for index in 0..<16 {
@@ -3356,7 +3356,7 @@ private func swiftMutagenHex(_ value: UInt64) -> String {
   return String(decoding: output, as: UTF8.self)
 }
 
-private func swiftMutagenSanitizeFileComponent(_ value: String) -> String {
+private func swiftmutSanitizeFileComponent(_ value: String) -> String {
   var output = ""
   for byte in value.utf8 {
     let isDigit = byte >= 48 && byte <= 57
@@ -3371,7 +3371,7 @@ private func swiftMutagenSanitizeFileComponent(_ value: String) -> String {
   return output.isEmpty ? "fragment" : output
 }
 
-private func swiftMutagenProcessID() -> Int32 {
+private func swiftmutProcessID() -> Int32 {
   #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS) || os(Linux) || os(Android)
   return getpid()
   #else
@@ -3379,7 +3379,7 @@ private func swiftMutagenProcessID() -> Int32 {
   #endif
 }
 
-private func swiftMutagenClockMicroseconds() -> UInt64 {
+private func swiftmutClockMicroseconds() -> UInt64 {
   #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS) || os(Linux) || os(Android)
   var now = timeval()
   gettimeofday(&now, nil)
@@ -3389,68 +3389,68 @@ private func swiftMutagenClockMicroseconds() -> UInt64 {
   #endif
 }
 
-private func swiftMutagenReturnMutations(
+private func swiftmutReturnMutations(
   for returnInst: ReturnInst,
-  config: SwiftMutagenConfig
-) -> [SwiftMutagenMutation] {
+  config: SwiftmutConfig
+) -> [SwiftmutMutation] {
   let returnedValue = returnInst.returnedValue
   let returnType = returnedValue.type
-  var mutations: [SwiftMutagenMutation] = []
+  var mutations: [SwiftmutMutation] = []
 
-  if swiftMutagenIsBoolType(returnType, in: returnInst.parentFunction) {
-    let literal = swiftMutagenBoolLiteralValue(returnedValue)
+  if swiftmutIsBoolType(returnType, in: returnInst.parentFunction) {
+    let literal = swiftmutBoolLiteralValue(returnedValue)
     if literal != false,
-       let rule = swiftMutagenFirstReturnRule(context: "boolToFalse", config: config) {
-      mutations.append(swiftMutagenReturnMutation(rule, silOriginal: returnType.description))
+       let rule = swiftmutFirstReturnRule(context: "boolToFalse", config: config) {
+      mutations.append(swiftmutReturnMutation(rule, silOriginal: returnType.description))
     }
     if literal != true,
-       let rule = swiftMutagenFirstReturnRule(context: "boolToTrue", config: config) {
-      mutations.append(swiftMutagenReturnMutation(rule, silOriginal: returnType.description))
+       let rule = swiftmutFirstReturnRule(context: "boolToTrue", config: config) {
+      mutations.append(swiftmutReturnMutation(rule, silOriginal: returnType.description))
     }
     return mutations
   }
 
-  if returnType.isOptional && !swiftMutagenIsOptionalNone(returnedValue) {
-    if let rule = swiftMutagenFirstReturnRule(context: "optionalToNil", config: config) {
-      mutations.append(swiftMutagenReturnMutation(rule, silOriginal: returnType.description))
+  if returnType.isOptional && !swiftmutIsOptionalNone(returnedValue) {
+    if let rule = swiftmutFirstReturnRule(context: "optionalToNil", config: config) {
+      mutations.append(swiftmutReturnMutation(rule, silOriginal: returnType.description))
     }
     return mutations
   }
 
-  if swiftMutagenIsIntegerStructType(returnType, in: returnInst.parentFunction),
-     swiftMutagenIntegerStructLiteralValue(returnedValue) != 0,
-     let rule = swiftMutagenFirstReturnRule(context: "integerToZero", config: config) {
-    mutations.append(swiftMutagenReturnMutation(rule, silOriginal: returnType.description))
+  if swiftmutIsIntegerStructType(returnType, in: returnInst.parentFunction),
+     swiftmutIntegerStructLiteralValue(returnedValue) != 0,
+     let rule = swiftmutFirstReturnRule(context: "integerToZero", config: config) {
+    mutations.append(swiftmutReturnMutation(rule, silOriginal: returnType.description))
   }
 
-  if swiftMutagenIsStringType(returnType),
-     let rule = swiftMutagenFirstReturnRule(context: "stringToEmpty", config: config) {
-    mutations.append(swiftMutagenReturnMutation(rule, silOriginal: returnType.description))
+  if swiftmutIsStringType(returnType),
+     let rule = swiftmutFirstReturnRule(context: "stringToEmpty", config: config) {
+    mutations.append(swiftmutReturnMutation(rule, silOriginal: returnType.description))
   }
 
-  if swiftMutagenIsCollectionType(returnType, named: "Array"),
-     let rule = swiftMutagenFirstReturnRule(context: "arrayToEmpty", config: config) {
-    mutations.append(swiftMutagenReturnMutation(rule, silOriginal: returnType.description))
+  if swiftmutIsCollectionType(returnType, named: "Array"),
+     let rule = swiftmutFirstReturnRule(context: "arrayToEmpty", config: config) {
+    mutations.append(swiftmutReturnMutation(rule, silOriginal: returnType.description))
   }
 
-  if swiftMutagenIsCollectionType(returnType, named: "Dictionary"),
-     let rule = swiftMutagenFirstReturnRule(context: "dictionaryToEmpty", config: config) {
-    mutations.append(swiftMutagenReturnMutation(rule, silOriginal: returnType.description))
+  if swiftmutIsCollectionType(returnType, named: "Dictionary"),
+     let rule = swiftmutFirstReturnRule(context: "dictionaryToEmpty", config: config) {
+    mutations.append(swiftmutReturnMutation(rule, silOriginal: returnType.description))
   }
 
-  if swiftMutagenIsCollectionType(returnType, named: "Set"),
-     let rule = swiftMutagenFirstReturnRule(context: "setToEmpty", config: config) {
-    mutations.append(swiftMutagenReturnMutation(rule, silOriginal: returnType.description))
+  if swiftmutIsCollectionType(returnType, named: "Set"),
+     let rule = swiftmutFirstReturnRule(context: "setToEmpty", config: config) {
+    mutations.append(swiftmutReturnMutation(rule, silOriginal: returnType.description))
   }
 
   return mutations
 }
 
-private func swiftMutagenReturnMutation(
-  _ rule: SwiftMutagenReturnMutationRule,
+private func swiftmutReturnMutation(
+  _ rule: SwiftmutReturnMutationRule,
   silOriginal: String
-) -> SwiftMutagenMutation {
-  return SwiftMutagenMutation(
+) -> SwiftmutMutation {
+  return SwiftmutMutation(
     originalID: nil,
     mutator: rule.mutator,
     mutatedBuiltinName: rule.mutatedBuiltinName,
@@ -3460,30 +3460,30 @@ private func swiftMutagenReturnMutation(
     silMutated: rule.silMutated)
 }
 
-private func swiftMutagenFirstReturnRule(
+private func swiftmutFirstReturnRule(
   context: String,
-  config: SwiftMutagenConfig
-) -> SwiftMutagenReturnMutationRule? {
+  config: SwiftmutConfig
+) -> SwiftmutReturnMutationRule? {
   for rule in config.returnMutationRules where rule.context == context {
-    if swiftMutagenMutatorIsEnabled(rule.mutator, config: config) {
+    if swiftmutMutatorIsEnabled(rule.mutator, config: config) {
       return rule
     }
   }
   return nil
 }
 
-private func swiftMutagenVoidCallMutation(
+private func swiftmutVoidCallMutation(
   for apply: ApplyInst,
-  config: SwiftMutagenConfig
-) -> SwiftMutagenMutation? {
+  config: SwiftmutConfig
+) -> SwiftmutMutation? {
   guard apply.type.isVoid else {
     return nil
   }
-  guard let rule = swiftMutagenFirstVoidCallRule(config: config) else {
+  guard let rule = swiftmutFirstVoidCallRule(config: config) else {
     return nil
   }
 
-  return SwiftMutagenMutation(
+  return SwiftmutMutation(
     originalID: nil,
     mutator: rule.mutator,
     mutatedBuiltinName: rule.mutatedBuiltinName,
@@ -3493,51 +3493,51 @@ private func swiftMutagenVoidCallMutation(
     silMutated: rule.silMutated)
 }
 
-private func swiftMutagenFirstVoidCallRule(
-  config: SwiftMutagenConfig
-) -> SwiftMutagenVoidCallMutationRule? {
+private func swiftmutFirstVoidCallRule(
+  config: SwiftmutConfig
+) -> SwiftmutVoidCallMutationRule? {
   for rule in config.voidCallMutationRules {
-    if swiftMutagenMutatorIsEnabled(rule.mutator, config: config) {
+    if swiftmutMutatorIsEnabled(rule.mutator, config: config) {
       return rule
     }
   }
   return nil
 }
 
-private func swiftMutagenMutations(
+private func swiftmutMutations(
   for builtin: BuiltinInst,
-  config: SwiftMutagenConfig
-) -> [SwiftMutagenMutation] {
-  var mutations = swiftMutagenConditionMutations(
+  config: SwiftmutConfig
+) -> [SwiftmutMutation] {
+  var mutations = swiftmutConditionMutations(
     for: builtin,
     config: config,
     includeGenericComparisonRules: false)
-  mutations += swiftMutagenArithmeticSiteMutations(for: builtin, config: config)
+  mutations += swiftmutArithmeticSiteMutations(for: builtin, config: config)
   return mutations
 }
 
-private func swiftMutagenContextualArithmeticRule(
+private func swiftmutContextualArithmeticRule(
   for builtin: BuiltinInst,
   builtinID: String,
-  config: SwiftMutagenConfig
-) -> SwiftMutagenContextualArithmeticMutationRule? {
+  config: SwiftmutConfig
+) -> SwiftmutContextualArithmeticMutationRule? {
   for rule in config.contextualArithmeticMutationRules where rule.builtinID == builtinID {
-    if swiftMutagenContext(rule.context, matches: builtin) {
+    if swiftmutContext(rule.context, matches: builtin) {
       return rule
     }
   }
   return nil
 }
 
-private func swiftMutagenContext(
+private func swiftmutContext(
   _ context: String,
   matches builtin: BuiltinInst
 ) -> Bool {
   switch context {
   case "increment":
-    return swiftMutagenIsIncrementBuiltin(builtin)
+    return swiftmutIsIncrementBuiltin(builtin)
   case "unaryNegation":
-    return swiftMutagenIsUnaryNegationBuiltin(builtin)
+    return swiftmutIsUnaryNegationBuiltin(builtin)
   case "otherwise":
     return true
   default:
@@ -3545,11 +3545,11 @@ private func swiftMutagenContext(
   }
 }
 
-private func swiftMutagenContextualArithmeticMutation(
-  _ rule: SwiftMutagenContextualArithmeticMutationRule,
+private func swiftmutContextualArithmeticMutation(
+  _ rule: SwiftmutContextualArithmeticMutationRule,
   for builtin: BuiltinInst
-) -> SwiftMutagenMutation {
-  SwiftMutagenMutation(
+) -> SwiftmutMutation {
+  SwiftmutMutation(
     originalID: builtin.id,
     mutator: rule.mutator,
     mutatedBuiltinName: rule.mutatedBuiltinName,
@@ -3559,7 +3559,7 @@ private func swiftMutagenContextualArithmeticMutation(
     silMutated: rule.mutatedBuiltinName)
 }
 
-private func swiftMutagenArithmeticBuiltinIDName(_ builtin: BuiltinInst) -> String? {
+private func swiftmutArithmeticBuiltinIDName(_ builtin: BuiltinInst) -> String? {
   switch builtin.id {
   case .Add:
     return "Add"
@@ -3602,7 +3602,7 @@ private func swiftMutagenArithmeticBuiltinIDName(_ builtin: BuiltinInst) -> Stri
   }
 }
 
-private func swiftMutagenBuiltinFunctionName(_ builtin: BuiltinInst) -> String? {
+private func swiftmutBuiltinFunctionName(_ builtin: BuiltinInst) -> String? {
   switch builtin.id {
   case .Add:
     return "add"
@@ -3649,7 +3649,7 @@ private func swiftMutagenBuiltinFunctionName(_ builtin: BuiltinInst) -> String? 
   }
 }
 
-private func swiftMutagenBuiltinIDName(_ id: BuiltinInst.ID?) -> String? {
+private func swiftmutBuiltinIDName(_ id: BuiltinInst.ID?) -> String? {
   guard let id else {
     return nil
   }
@@ -3719,14 +3719,14 @@ private func swiftMutagenBuiltinIDName(_ id: BuiltinInst.ID?) -> String? {
   }
 }
 
-private func swiftMutagenBinaryMutation(
+private func swiftmutBinaryMutation(
   _ builtin: BuiltinInst,
   mutator: String,
   mutatedBuiltinName: String,
   sourceOriginal: String,
   sourceMutated: String
-) -> SwiftMutagenMutation {
-  SwiftMutagenMutation(
+) -> SwiftmutMutation {
+  SwiftmutMutation(
     originalID: builtin.id,
     mutator: mutator,
     mutatedBuiltinName: mutatedBuiltinName,
@@ -3736,23 +3736,23 @@ private func swiftMutagenBinaryMutation(
     silMutated: mutatedBuiltinName)
 }
 
-private func swiftMutagenIsIncrementBuiltin(_ builtin: BuiltinInst) -> Bool {
+private func swiftmutIsIncrementBuiltin(_ builtin: BuiltinInst) -> Bool {
   let arguments = Array(builtin.arguments)
   guard arguments.count >= 2 else {
     return false
   }
-  return swiftMutagenIsOneInteger(arguments[0]) || swiftMutagenIsOneInteger(arguments[1])
+  return swiftmutIsOneInteger(arguments[0]) || swiftmutIsOneInteger(arguments[1])
 }
 
-private func swiftMutagenIsUnaryNegationBuiltin(_ builtin: BuiltinInst) -> Bool {
+private func swiftmutIsUnaryNegationBuiltin(_ builtin: BuiltinInst) -> Bool {
   let arguments = Array(builtin.arguments)
   guard arguments.count >= 2 else {
     return false
   }
-  return swiftMutagenIsZeroInteger(arguments[0]) && !swiftMutagenIsZeroInteger(arguments[1])
+  return swiftmutIsZeroInteger(arguments[0]) && !swiftmutIsZeroInteger(arguments[1])
 }
 
-private func swiftMutagenIsOneInteger(_ value: Value) -> Bool {
+private func swiftmutIsOneInteger(_ value: Value) -> Bool {
   guard let literal = value as? IntegerLiteralInst,
         let literalValue = literal.value else {
     return false
@@ -3760,7 +3760,7 @@ private func swiftMutagenIsOneInteger(_ value: Value) -> Bool {
   return literalValue == 1
 }
 
-private func swiftMutagenIsZeroInteger(_ value: Value) -> Bool {
+private func swiftmutIsZeroInteger(_ value: Value) -> Bool {
   guard let literal = value as? IntegerLiteralInst,
         let literalValue = literal.value else {
     return false
@@ -3768,8 +3768,8 @@ private func swiftMutagenIsZeroInteger(_ value: Value) -> Bool {
   return literalValue == 0
 }
 
-private func swiftMutagenApply(
-  mutation: SwiftMutagenMutation,
+private func swiftmutApply(
+  mutation: SwiftmutMutation,
   to builtin: BuiltinInst,
   _ context: FunctionPassContext
 ) {
@@ -3786,8 +3786,8 @@ private func swiftMutagenApply(
   builtin.replace(with: replacement, context)
 }
 
-private func swiftMutagenApplyReturn(
-  mutation: SwiftMutagenMutation,
+private func swiftmutApplyReturn(
+  mutation: SwiftmutMutation,
   to returnInst: ReturnInst,
   _ context: FunctionPassContext
 ) {
@@ -3796,40 +3796,40 @@ private func swiftMutagenApplyReturn(
   let replacement: Value?
   switch mutation.mutatedBuiltinName {
   case "return_false":
-    replacement = swiftMutagenMakeBool(false, type: returnType, builder: builder)
+    replacement = swiftmutMakeBool(false, type: returnType, builder: builder)
   case "return_true":
-    replacement = swiftMutagenMakeBool(true, type: returnType, builder: builder)
+    replacement = swiftmutMakeBool(true, type: returnType, builder: builder)
   case "return_nil":
-    replacement = swiftMutagenMakeOptionalNone(type: returnType, builder: builder)
+    replacement = swiftmutMakeOptionalNone(type: returnType, builder: builder)
   case "return_zero":
-    replacement = swiftMutagenMakeIntegerZero(type: returnType, in: returnInst.parentFunction, builder: builder)
+    replacement = swiftmutMakeIntegerZero(type: returnType, in: returnInst.parentFunction, builder: builder)
   case "return_empty_string":
-    replacement = swiftMutagenMakeEmptyString(
+    replacement = swiftmutMakeEmptyString(
       type: returnType,
-      helperName: "__swift_mutagen_empty_string",
+      helperName: "__swiftmut_empty_string",
       context: context,
       builder: builder
     )
   case "return_empty_array":
-    replacement = swiftMutagenMakeEmptyCollection(
+    replacement = swiftmutMakeEmptyCollection(
       type: returnType,
-      helperName: "__swift_mutagen_empty_array",
+      helperName: "__swiftmut_empty_array",
       expectedReplacementCount: 1,
       context: context,
       builder: builder
     )
   case "return_empty_dictionary":
-    replacement = swiftMutagenMakeEmptyCollection(
+    replacement = swiftmutMakeEmptyCollection(
       type: returnType,
-      helperName: "__swift_mutagen_empty_dictionary",
+      helperName: "__swiftmut_empty_dictionary",
       expectedReplacementCount: 2,
       context: context,
       builder: builder
     )
   case "return_empty_set":
-    replacement = swiftMutagenMakeEmptyCollection(
+    replacement = swiftmutMakeEmptyCollection(
       type: returnType,
-      helperName: "__swift_mutagen_empty_set",
+      helperName: "__swiftmut_empty_set",
       expectedReplacementCount: 1,
       context: context,
       builder: builder
@@ -3845,7 +3845,7 @@ private func swiftMutagenApplyReturn(
   context.erase(instruction: returnInst)
 }
 
-private func swiftMutagenMakeBool(
+private func swiftmutMakeBool(
   _ value: Bool,
   type: Type,
   builder: Builder
@@ -3854,7 +3854,7 @@ private func swiftMutagenMakeBool(
   return builder.createStruct(type: type, elements: [literal])
 }
 
-private func swiftMutagenMakeIntegerZero(
+private func swiftmutMakeIntegerZero(
   type: Type,
   in function: Function,
   builder: Builder
@@ -3868,21 +3868,21 @@ private func swiftMutagenMakeIntegerZero(
   return builder.createStruct(type: type, elements: [zero])
 }
 
-private func swiftMutagenMakeOptionalNone(
+private func swiftmutMakeOptionalNone(
   type: Type,
   builder: Builder
 ) -> Value {
   return builder.createEnum(caseIndex: 0, payload: nil, enumType: type)
 }
 
-private func swiftMutagenMakeEmptyString(
+private func swiftmutMakeEmptyString(
   type: Type,
   helperName: String,
   context: FunctionPassContext,
   builder: Builder
 ) -> Value? {
-  guard swiftMutagenIsStringType(type),
-        let emptyStringFunction = swiftMutagenEmptyStringFunction(named: helperName, context) else {
+  guard swiftmutIsStringType(type),
+        let emptyStringFunction = swiftmutEmptyStringFunction(named: helperName, context) else {
     return nil
   }
   let functionRef = builder.createFunctionRef(emptyStringFunction)
@@ -3893,7 +3893,7 @@ private func swiftMutagenMakeEmptyString(
   )
 }
 
-private func swiftMutagenEmptyStringFunction(
+private func swiftmutEmptyStringFunction(
   named helperName: String,
   _ context: FunctionPassContext
 ) -> Function? {
@@ -3901,16 +3901,16 @@ private func swiftMutagenEmptyStringFunction(
     ?? context.lookupFunction(name: "@\(helperName)") {
     return helper
   }
-  return context.lookupFunction(name: "__swift_mutagen_empty_string")
-    ?? context.lookupFunction(name: "@__swift_mutagen_empty_string")
-    ?? context.loadFunction(name: "__swift_mutagen_empty_string", loadCalleesRecursively: false)
-    ?? context.loadFunction(name: "@__swift_mutagen_empty_string", loadCalleesRecursively: false)
+  return context.lookupFunction(name: "__swiftmut_empty_string")
+    ?? context.lookupFunction(name: "@__swiftmut_empty_string")
+    ?? context.loadFunction(name: "__swiftmut_empty_string", loadCalleesRecursively: false)
+    ?? context.loadFunction(name: "@__swiftmut_empty_string", loadCalleesRecursively: false)
 }
 
-private func swiftMutagenRuntimeHelperThunkName(
+private func swiftmutRuntimeHelperThunkName(
   runtimeFunctionName: String?,
   suffix: String,
-  fallbackName: String = "__swift_mutagen_empty_string"
+  fallbackName: String = "__swiftmut_empty_string"
 ) -> String {
   guard let runtimeFunctionName else {
     return fallbackName
@@ -3918,14 +3918,14 @@ private func swiftMutagenRuntimeHelperThunkName(
   return "\(runtimeFunctionName)_\(suffix)"
 }
 
-private func swiftMutagenMakeEmptyCollection(
+private func swiftmutMakeEmptyCollection(
   type: Type,
   helperName: String,
   expectedReplacementCount: Int,
   context: FunctionPassContext,
   builder: Builder
 ) -> Value? {
-  guard let emptyCollectionFunction = swiftMutagenEmptyCollectionFunction(named: helperName, context) else {
+  guard let emptyCollectionFunction = swiftmutEmptyCollectionFunction(named: helperName, context) else {
     return nil
   }
   let replacements = Array(type.contextSubstitutionMap.replacementTypes)
@@ -3943,7 +3943,7 @@ private func swiftMutagenMakeEmptyCollection(
   )
 }
 
-private func swiftMutagenEmptyCollectionFunction(
+private func swiftmutEmptyCollectionFunction(
   named helperName: String,
   _ context: FunctionPassContext
 ) -> Function? {
@@ -3952,27 +3952,27 @@ private func swiftMutagenEmptyCollectionFunction(
     return helper
   }
   switch helperName {
-  case "__swift_mutagen_empty_array":
-    return context.lookupFunction(name: "__swift_mutagen_empty_array")
-      ?? context.lookupFunction(name: "@__swift_mutagen_empty_array")
-      ?? context.loadFunction(name: "__swift_mutagen_empty_array", loadCalleesRecursively: false)
-      ?? context.loadFunction(name: "@__swift_mutagen_empty_array", loadCalleesRecursively: false)
-  case "__swift_mutagen_empty_dictionary":
-    return context.lookupFunction(name: "__swift_mutagen_empty_dictionary")
-      ?? context.lookupFunction(name: "@__swift_mutagen_empty_dictionary")
-      ?? context.loadFunction(name: "__swift_mutagen_empty_dictionary", loadCalleesRecursively: false)
-      ?? context.loadFunction(name: "@__swift_mutagen_empty_dictionary", loadCalleesRecursively: false)
-  case "__swift_mutagen_empty_set":
-    return context.lookupFunction(name: "__swift_mutagen_empty_set")
-      ?? context.lookupFunction(name: "@__swift_mutagen_empty_set")
-      ?? context.loadFunction(name: "__swift_mutagen_empty_set", loadCalleesRecursively: false)
-      ?? context.loadFunction(name: "@__swift_mutagen_empty_set", loadCalleesRecursively: false)
+  case "__swiftmut_empty_array":
+    return context.lookupFunction(name: "__swiftmut_empty_array")
+      ?? context.lookupFunction(name: "@__swiftmut_empty_array")
+      ?? context.loadFunction(name: "__swiftmut_empty_array", loadCalleesRecursively: false)
+      ?? context.loadFunction(name: "@__swiftmut_empty_array", loadCalleesRecursively: false)
+  case "__swiftmut_empty_dictionary":
+    return context.lookupFunction(name: "__swiftmut_empty_dictionary")
+      ?? context.lookupFunction(name: "@__swiftmut_empty_dictionary")
+      ?? context.loadFunction(name: "__swiftmut_empty_dictionary", loadCalleesRecursively: false)
+      ?? context.loadFunction(name: "@__swiftmut_empty_dictionary", loadCalleesRecursively: false)
+  case "__swiftmut_empty_set":
+    return context.lookupFunction(name: "__swiftmut_empty_set")
+      ?? context.lookupFunction(name: "@__swiftmut_empty_set")
+      ?? context.loadFunction(name: "__swiftmut_empty_set", loadCalleesRecursively: false)
+      ?? context.loadFunction(name: "@__swiftmut_empty_set", loadCalleesRecursively: false)
   default:
     return nil
   }
 }
 
-private func swiftMutagenIsBoolType(_ type: Type, in function: Function) -> Bool {
+private func swiftmutIsBoolType(_ type: Type, in function: Function) -> Bool {
   guard let nominal = type.nominal,
         nominal.name.string == "Bool",
         let fields = type.getNominalFields(in: function),
@@ -3982,7 +3982,7 @@ private func swiftMutagenIsBoolType(_ type: Type, in function: Function) -> Bool
   return fields[0].canonicalType.isBuiltinInteger(withFixedWidth: 1)
 }
 
-private func swiftMutagenIsIntegerStructType(_ type: Type, in function: Function) -> Bool {
+private func swiftmutIsIntegerStructType(_ type: Type, in function: Function) -> Bool {
   guard let nominal = type.nominal,
         nominal.name.string != "Bool",
         let fields = type.getNominalFields(in: function),
@@ -3992,26 +3992,26 @@ private func swiftMutagenIsIntegerStructType(_ type: Type, in function: Function
   return fields[0].canonicalType.isBuiltinInteger
 }
 
-private func swiftMutagenIsStringType(_ type: Type) -> Bool {
+private func swiftmutIsStringType(_ type: Type) -> Bool {
   guard let nominal = type.nominal else {
     return false
   }
   return nominal.name.string == "String"
 }
 
-private func swiftMutagenIsCollectionType(_ type: Type, named name: String) -> Bool {
+private func swiftmutIsCollectionType(_ type: Type, named name: String) -> Bool {
   guard let nominal = type.nominal else {
     return false
   }
   return nominal.name.string == name
 }
 
-private func swiftMutagenRecordReturnType(
+private func swiftmutRecordReturnType(
   _ type: Type,
   in function: Function,
-  stats: inout SwiftMutagenReturnDiscoveryStats
+  stats: inout SwiftmutReturnDiscoveryStats
 ) {
-  if swiftMutagenIsBoolType(type, in: function) {
+  if swiftmutIsBoolType(type, in: function) {
     stats.boolTerminators += 1
     return
   }
@@ -4019,11 +4019,11 @@ private func swiftMutagenRecordReturnType(
     stats.optionalTerminators += 1
     return
   }
-  if swiftMutagenIsIntegerStructType(type, in: function) {
+  if swiftmutIsIntegerStructType(type, in: function) {
     stats.integerTerminators += 1
     return
   }
-  if swiftMutagenIsStringType(type) {
+  if swiftmutIsStringType(type) {
     stats.stringTerminators += 1
     return
   }
@@ -4039,12 +4039,12 @@ private func swiftMutagenRecordReturnType(
   }
 }
 
-private func swiftMutagenRecordReturnSourceLocationMiss(
+private func swiftmutRecordReturnSourceLocationMiss(
   _ type: Type,
   in function: Function,
-  stats: inout SwiftMutagenReturnDiscoveryStats
+  stats: inout SwiftmutReturnDiscoveryStats
 ) {
-  if swiftMutagenIsBoolType(type, in: function) {
+  if swiftmutIsBoolType(type, in: function) {
     stats.missingBoolSourceLocations += 1
     return
   }
@@ -4052,11 +4052,11 @@ private func swiftMutagenRecordReturnSourceLocationMiss(
     stats.missingOptionalSourceLocations += 1
     return
   }
-  if swiftMutagenIsIntegerStructType(type, in: function) {
+  if swiftmutIsIntegerStructType(type, in: function) {
     stats.missingIntegerSourceLocations += 1
     return
   }
-  if swiftMutagenIsStringType(type) {
+  if swiftmutIsStringType(type) {
     stats.missingStringSourceLocations += 1
     return
   }
@@ -4072,7 +4072,7 @@ private func swiftMutagenRecordReturnSourceLocationMiss(
   }
 }
 
-private func swiftMutagenBoolLiteralValue(_ value: Value) -> Bool? {
+private func swiftmutBoolLiteralValue(_ value: Value) -> Bool? {
   guard let structInst = value as? StructInst,
         let literal = structInst.operands.first?.value as? IntegerLiteralInst,
         let literalValue = literal.value else {
@@ -4087,7 +4087,7 @@ private func swiftMutagenBoolLiteralValue(_ value: Value) -> Bool? {
   return nil
 }
 
-private func swiftMutagenIntegerStructLiteralValue(_ value: Value) -> Int? {
+private func swiftmutIntegerStructLiteralValue(_ value: Value) -> Int? {
   guard let structInst = value as? StructInst,
         let literal = structInst.operands.first?.value as? IntegerLiteralInst else {
     return nil
@@ -4095,16 +4095,16 @@ private func swiftMutagenIntegerStructLiteralValue(_ value: Value) -> Int? {
   return literal.value
 }
 
-private func swiftMutagenIsOptionalNone(_ value: Value) -> Bool {
+private func swiftmutIsOptionalNone(_ value: Value) -> Bool {
   guard let enumInst = value as? EnumInst else {
     return false
   }
   return enumInst.type.isOptional && enumInst.caseIndex == 0
 }
 
-private func swiftMutagenMutatorIsEnabled(
+private func swiftmutMutatorIsEnabled(
   _ mutator: String,
-  config: SwiftMutagenConfig
+  config: SwiftmutConfig
 ) -> Bool {
   if config.enabledMutators.isEmpty {
     return true
@@ -4117,24 +4117,24 @@ private func swiftMutagenMutatorIsEnabled(
   return false
 }
 
-private func swiftMutagenReturnSourceLocation(
+private func swiftmutReturnSourceLocation(
   for returnInst: ReturnInst,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   if let fileNameAndPosition = returnInst.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
-    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
+    if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
       let candidate = (
-        swiftMutagenTrimPackageRoot(matchedPath, config: config),
+        swiftmutTrimPackageRoot(matchedPath, config: config),
         fileNameAndPosition.line,
         fileNameAndPosition.column,
         mutation.sourceOriginal,
         mutation.sourceMutated)
-      if swiftMutagenReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
+      if swiftmutReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
         return candidate
       }
-      if let anchored = swiftMutagenFindAssignmentReturnSourceLocation(
+      if let anchored = swiftmutFindAssignmentReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -4142,7 +4142,7 @@ private func swiftMutagenReturnSourceLocation(
       ) {
         return anchored
       }
-      if let anchored = swiftMutagenFindDescribedExplicitReturnSourceLocation(
+      if let anchored = swiftmutFindDescribedExplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         locationDescription: returnInst.location.description,
@@ -4151,7 +4151,7 @@ private func swiftMutagenReturnSourceLocation(
       ) {
         return anchored
       }
-      if let anchored = swiftMutagenFindUniqueExplicitReturnSourceLocation(
+      if let anchored = swiftmutFindUniqueExplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -4159,7 +4159,7 @@ private func swiftMutagenReturnSourceLocation(
       ) {
         return anchored
       }
-      if let anchored = swiftMutagenFindNearestPriorExplicitReturnSourceLocation(
+      if let anchored = swiftmutFindNearestPriorExplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -4167,7 +4167,7 @@ private func swiftMutagenReturnSourceLocation(
       ) {
         return anchored
       }
-      if let anchored = swiftMutagenFindNearestPriorImplicitReturnSourceLocation(
+      if let anchored = swiftmutFindNearestPriorImplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -4175,7 +4175,7 @@ private func swiftMutagenReturnSourceLocation(
       ) {
         return anchored
       }
-      if let anchored = swiftMutagenFindUniqueImplicitReturnSourceLocation(
+      if let anchored = swiftmutFindUniqueImplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -4183,7 +4183,7 @@ private func swiftMutagenReturnSourceLocation(
       ) {
         return anchored
       }
-      if let anchored = swiftMutagenFindPropertyGetterReturnSourceLocation(
+      if let anchored = swiftmutFindPropertyGetterReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -4197,17 +4197,17 @@ private func swiftMutagenReturnSourceLocation(
   if let definingInstruction = returnInst.returnedValue.definingInstruction,
      let fileNameAndPosition = definingInstruction.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
-    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
+    if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
       let candidate = (
-        swiftMutagenTrimPackageRoot(matchedPath, config: config),
+        swiftmutTrimPackageRoot(matchedPath, config: config),
         fileNameAndPosition.line,
         fileNameAndPosition.column,
         mutation.sourceOriginal,
         mutation.sourceMutated)
-      if swiftMutagenReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
+      if swiftmutReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
         return candidate
       }
-      if let anchored = swiftMutagenFindAssignmentReturnSourceLocation(
+      if let anchored = swiftmutFindAssignmentReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -4215,7 +4215,7 @@ private func swiftMutagenReturnSourceLocation(
       ) {
         return anchored
       }
-      if let anchored = swiftMutagenFindDescribedExplicitReturnSourceLocation(
+      if let anchored = swiftmutFindDescribedExplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         locationDescription: returnInst.location.description,
@@ -4224,7 +4224,7 @@ private func swiftMutagenReturnSourceLocation(
       ) {
         return anchored
       }
-      if let anchored = swiftMutagenFindUniqueExplicitReturnSourceLocation(
+      if let anchored = swiftmutFindUniqueExplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -4232,7 +4232,7 @@ private func swiftMutagenReturnSourceLocation(
       ) {
         return anchored
       }
-      if let anchored = swiftMutagenFindNearestPriorExplicitReturnSourceLocation(
+      if let anchored = swiftmutFindNearestPriorExplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -4240,7 +4240,7 @@ private func swiftMutagenReturnSourceLocation(
       ) {
         return anchored
       }
-      if let anchored = swiftMutagenFindNearestPriorImplicitReturnSourceLocation(
+      if let anchored = swiftmutFindNearestPriorImplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -4248,7 +4248,7 @@ private func swiftMutagenReturnSourceLocation(
       ) {
         return anchored
       }
-      if let anchored = swiftMutagenFindUniqueImplicitReturnSourceLocation(
+      if let anchored = swiftmutFindUniqueImplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -4256,7 +4256,7 @@ private func swiftMutagenReturnSourceLocation(
       ) {
         return anchored
       }
-      if let anchored = swiftMutagenFindPropertyGetterReturnSourceLocation(
+      if let anchored = swiftmutFindPropertyGetterReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -4267,7 +4267,7 @@ private func swiftMutagenReturnSourceLocation(
     }
   }
 
-  if let anchored = swiftMutagenFindDescribedDefaultArgumentReturnSourceLocation(
+  if let anchored = swiftmutFindDescribedDefaultArgumentReturnSourceLocation(
     functionName: returnInst.parentFunction.name.string,
     locationDescription: returnInst.location.description,
     mutation: mutation,
@@ -4276,7 +4276,7 @@ private func swiftMutagenReturnSourceLocation(
     return anchored
   }
   if let definingInstruction = returnInst.returnedValue.definingInstruction,
-     let anchored = swiftMutagenFindDescribedDefaultArgumentReturnSourceLocation(
+     let anchored = swiftmutFindDescribedDefaultArgumentReturnSourceLocation(
        functionName: returnInst.parentFunction.name.string,
        locationDescription: definingInstruction.location.description,
        mutation: mutation,
@@ -4286,21 +4286,21 @@ private func swiftMutagenReturnSourceLocation(
   }
 
   let returnLocation = returnInst.location.description
-  for path in swiftMutagenSwiftSourcePaths(config: config) {
+  for path in swiftmutSwiftSourcePaths(config: config) {
     guard returnLocation.contains(path),
-          let line = swiftMutagenPreferredLine(in: returnLocation, path: path) else {
+          let line = swiftmutPreferredLine(in: returnLocation, path: path) else {
       continue
     }
     let candidate = (
-      swiftMutagenTrimPackageRoot(path, config: config),
+      swiftmutTrimPackageRoot(path, config: config),
       line,
       1,
       mutation.sourceOriginal,
       mutation.sourceMutated)
-    if swiftMutagenReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
+    if swiftmutReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
       return candidate
     }
-    if let anchored = swiftMutagenFindAssignmentReturnSourceLocation(
+    if let anchored = swiftmutFindAssignmentReturnSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
@@ -4308,7 +4308,7 @@ private func swiftMutagenReturnSourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindDescribedExplicitReturnSourceLocation(
+    if let anchored = swiftmutFindDescribedExplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
       locationDescription: returnLocation,
@@ -4317,7 +4317,7 @@ private func swiftMutagenReturnSourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindUniqueExplicitReturnSourceLocation(
+    if let anchored = swiftmutFindUniqueExplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
@@ -4325,7 +4325,7 @@ private func swiftMutagenReturnSourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindNearestPriorExplicitReturnSourceLocation(
+    if let anchored = swiftmutFindNearestPriorExplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
@@ -4333,7 +4333,7 @@ private func swiftMutagenReturnSourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindNearestPriorImplicitReturnSourceLocation(
+    if let anchored = swiftmutFindNearestPriorImplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
@@ -4341,7 +4341,7 @@ private func swiftMutagenReturnSourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindUniqueImplicitReturnSourceLocation(
+    if let anchored = swiftmutFindUniqueImplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
@@ -4349,7 +4349,7 @@ private func swiftMutagenReturnSourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindPropertyGetterReturnSourceLocation(
+    if let anchored = swiftmutFindPropertyGetterReturnSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
@@ -4360,21 +4360,21 @@ private func swiftMutagenReturnSourceLocation(
   }
 
   let location = returnInst.parentFunction.location.description
-  for path in swiftMutagenSwiftSourcePaths(config: config) {
+  for path in swiftmutSwiftSourcePaths(config: config) {
     guard location.contains(path),
-          let line = swiftMutagenPreferredLine(in: location, path: path) else {
+          let line = swiftmutPreferredLine(in: location, path: path) else {
       continue
     }
     let candidate = (
-      swiftMutagenTrimPackageRoot(path, config: config),
+      swiftmutTrimPackageRoot(path, config: config),
       line,
       1,
       mutation.sourceOriginal,
       mutation.sourceMutated)
-    if swiftMutagenReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
+    if swiftmutReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
       return candidate
     }
-    if let anchored = swiftMutagenFindAssignmentReturnSourceLocation(
+    if let anchored = swiftmutFindAssignmentReturnSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
@@ -4382,7 +4382,7 @@ private func swiftMutagenReturnSourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindDescribedExplicitReturnSourceLocation(
+    if let anchored = swiftmutFindDescribedExplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
       locationDescription: returnInst.location.description,
@@ -4391,7 +4391,7 @@ private func swiftMutagenReturnSourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindUniqueExplicitReturnSourceLocation(
+    if let anchored = swiftmutFindUniqueExplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
@@ -4399,7 +4399,7 @@ private func swiftMutagenReturnSourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindUniqueImplicitReturnSourceLocation(
+    if let anchored = swiftmutFindUniqueImplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
@@ -4407,7 +4407,7 @@ private func swiftMutagenReturnSourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindPropertyGetterReturnSourceLocation(
+    if let anchored = swiftmutFindPropertyGetterReturnSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
@@ -4419,19 +4419,19 @@ private func swiftMutagenReturnSourceLocation(
   return nil
 }
 
-private func swiftMutagenFindPropertyGetterReturnSourceLocation(
+private func swiftmutFindPropertyGetterReturnSourceLocation(
   path: String,
   preferredLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
         mutation.sourceOriginal == "return",
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
-  if let exact = swiftMutagenPropertyGetterReturnSourceLocation(
+  if let exact = swiftmutPropertyGetterReturnSourceLocation(
     in: text,
     path: path,
     lineRange: preferredLine...preferredLine,
@@ -4442,7 +4442,7 @@ private func swiftMutagenFindPropertyGetterReturnSourceLocation(
   }
 
   let firstLine = preferredLine > 1 ? preferredLine - 1 : 1
-  return swiftMutagenPropertyGetterReturnSourceLocation(
+  return swiftmutPropertyGetterReturnSourceLocation(
     in: text,
     path: path,
     lineRange: firstLine...(preferredLine + 2),
@@ -4451,12 +4451,12 @@ private func swiftMutagenFindPropertyGetterReturnSourceLocation(
   )
 }
 
-private func swiftMutagenPropertyGetterReturnSourceLocation(
+private func swiftmutPropertyGetterReturnSourceLocation(
   in text: String,
   path: String,
   lineRange: ClosedRange<Int>,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
   var currentLine = 1
@@ -4466,7 +4466,7 @@ private func swiftMutagenPropertyGetterReturnSourceLocation(
   func inspectLine(_ lineText: String, line: Int) {
     guard lineRange.contains(line),
           matches.count < 2,
-          let property = swiftMutagenStoredPropertyDeclaration(lineText, mutation: mutation) else {
+          let property = swiftmutStoredPropertyDeclaration(lineText, mutation: mutation) else {
       return
     }
     matches.append((line, property.column, property.sourceOriginal, property.sourceMutated))
@@ -4493,50 +4493,50 @@ private func swiftMutagenPropertyGetterReturnSourceLocation(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
 }
 
-private func swiftMutagenStoredPropertyDeclaration(
+private func swiftmutStoredPropertyDeclaration(
   _ line: String,
-  mutation: SwiftMutagenMutation
+  mutation: SwiftmutMutation
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
   let bytes = Array(line.utf8)
-  let lineStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-  let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  let lineStart = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard lineStart < lineEnd,
-        !swiftMutagenASCIIHasPrefix(bytes, start: lineStart, prefix: "case "),
-        !swiftMutagenASCIIHasPrefix(bytes, start: lineStart, prefix: "func "),
-        !swiftMutagenASCIIHasPrefix(bytes, start: lineStart, prefix: "init"),
-        !swiftMutagenASCIIHasPrefix(bytes, start: lineStart, prefix: "return "),
-        !swiftMutagenASCIIHasPrefix(bytes, start: lineStart, prefix: "//") else {
+        !swiftmutASCIIHasPrefix(bytes, start: lineStart, prefix: "case "),
+        !swiftmutASCIIHasPrefix(bytes, start: lineStart, prefix: "func "),
+        !swiftmutASCIIHasPrefix(bytes, start: lineStart, prefix: "init"),
+        !swiftmutASCIIHasPrefix(bytes, start: lineStart, prefix: "return "),
+        !swiftmutASCIIHasPrefix(bytes, start: lineStart, prefix: "//") else {
     return nil
   }
 
-  guard let keyword = swiftMutagenPropertyDeclarationKeyword(bytes: bytes, start: lineStart, end: lineEnd) else {
+  guard let keyword = swiftmutPropertyDeclarationKeyword(bytes: bytes, start: lineStart, end: lineEnd) else {
     return nil
   }
-  let nameStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: keyword.end)
+  let nameStart = swiftmutSkipHorizontalWhitespace(bytes, from: keyword.end)
   if nameStart < lineEnd && bytes[nameStart] == 40 {
     return nil
   }
   guard nameStart < lineEnd,
-        swiftMutagenIsASCIIIdentifierStart(bytes[nameStart]) else {
+        swiftmutIsASCIIIdentifierStart(bytes[nameStart]) else {
     return nil
   }
   var nameEnd = nameStart + 1
-  while nameEnd < lineEnd && swiftMutagenIsASCIILetterNumberOrUnderscore(bytes[nameEnd]) {
+  while nameEnd < lineEnd && swiftmutIsASCIILetterNumberOrUnderscore(bytes[nameEnd]) {
     nameEnd += 1
   }
-  var afterName = swiftMutagenSkipHorizontalWhitespace(bytes, from: nameEnd)
+  var afterName = swiftmutSkipHorizontalWhitespace(bytes, from: nameEnd)
   guard afterName < lineEnd,
         bytes[afterName] == 58 else {
     return nil
   }
-  afterName = swiftMutagenSkipHorizontalWhitespace(bytes, from: afterName + 1)
+  afterName = swiftmutSkipHorizontalWhitespace(bytes, from: afterName + 1)
   guard afterName < lineEnd else {
     return nil
   }
@@ -4549,18 +4549,18 @@ private func swiftMutagenStoredPropertyDeclaration(
   return (
     nameStart + 1,
     String(decoding: bytes[nameStart..<nameEnd], as: UTF8.self),
-    swiftMutagenImplicitReturnSourceMutation(for: mutation))
+    swiftmutImplicitReturnSourceMutation(for: mutation))
 }
 
-private func swiftMutagenPropertyDeclarationKeyword(bytes: [UInt8], start: Int, end: Int) -> (start: Int, end: Int)? {
+private func swiftmutPropertyDeclarationKeyword(bytes: [UInt8], start: Int, end: Int) -> (start: Int, end: Int)? {
   var index = start
   while index < end {
-    let tokenStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: index)
+    let tokenStart = swiftmutSkipHorizontalWhitespace(bytes, from: index)
     guard tokenStart < end else {
       return nil
     }
     var tokenEnd = tokenStart
-    while tokenEnd < end && swiftMutagenIsASCIILetterNumberOrUnderscore(bytes[tokenEnd]) {
+    while tokenEnd < end && swiftmutIsASCIILetterNumberOrUnderscore(bytes[tokenEnd]) {
       tokenEnd += 1
     }
     guard tokenEnd > tokenStart else {
@@ -4570,24 +4570,24 @@ private func swiftMutagenPropertyDeclarationKeyword(bytes: [UInt8], start: Int, 
     if token == "let" || token == "var" {
       return (tokenStart, tokenEnd)
     }
-    if !swiftMutagenIsPropertyDeclarationModifier(token) {
+    if !swiftmutIsPropertyDeclarationModifier(token) {
       return nil
     }
-    index = swiftMutagenSkipPropertyDeclarationModifierSuffix(bytes: bytes, from: tokenEnd, end: end)
+    index = swiftmutSkipPropertyDeclarationModifierSuffix(bytes: bytes, from: tokenEnd, end: end)
   }
   return nil
 }
 
-private func swiftMutagenSkipPropertyDeclarationModifierSuffix(bytes: [UInt8], from index: Int, end: Int) -> Int {
+private func swiftmutSkipPropertyDeclarationModifierSuffix(bytes: [UInt8], from index: Int, end: Int) -> Int {
   guard index + 5 <= end,
         bytes[index] == 40,
-        swiftMutagenASCIIHasExactPrefix(bytes, start: index, prefix: "(set)") else {
+        swiftmutASCIIHasExactPrefix(bytes, start: index, prefix: "(set)") else {
     return index
   }
   return index + 5
 }
 
-private func swiftMutagenIsPropertyDeclarationModifier(_ token: String) -> Bool {
+private func swiftmutIsPropertyDeclarationModifier(_ token: String) -> Bool {
   switch token {
   case "public", "private", "internal", "fileprivate", "open", "package",
        "static", "class", "final", "lazy", "weak", "unowned", "nonisolated",
@@ -4598,19 +4598,19 @@ private func swiftMutagenIsPropertyDeclarationModifier(_ token: String) -> Bool 
   }
 }
 
-private func swiftMutagenScalarValueSourceLocation(
+private func swiftmutScalarValueSourceLocation(
   for value: StructInst,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  let functionSourceLocation = swiftMutagenFunctionSourceLocation(
+  let functionSourceLocation = swiftmutFunctionSourceLocation(
     for: value.parentFunction,
     config: config
   )
   if let fileNameAndPosition = value.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
-    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
-      if let assignment = swiftMutagenFindAssignmentValueSourceLocation(
+    if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
+      if let assignment = swiftmutFindAssignmentValueSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -4619,7 +4619,7 @@ private func swiftMutagenScalarValueSourceLocation(
       ) {
         return assignment
       }
-      if let returned = swiftMutagenFindReturnedScalarValueSourceLocation(
+      if let returned = swiftmutFindReturnedScalarValueSourceLocation(
         for: value,
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
@@ -4630,7 +4630,7 @@ private func swiftMutagenScalarValueSourceLocation(
       }
       if let functionSourceLocation,
          functionSourceLocation.path == matchedPath,
-         let anchored = swiftMutagenFindOrdinalScalarValueSourceLocation(
+         let anchored = swiftmutFindOrdinalScalarValueSourceLocation(
            for: value,
            path: matchedPath,
            preferredLine: functionSourceLocation.line,
@@ -4643,7 +4643,7 @@ private func swiftMutagenScalarValueSourceLocation(
   }
 
   if let functionSourceLocation {
-    if let anchored = swiftMutagenFindAssignmentValueSourceLocation(
+    if let anchored = swiftmutFindAssignmentValueSourceLocation(
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,
       mutation: mutation,
@@ -4652,7 +4652,7 @@ private func swiftMutagenScalarValueSourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindReturnedScalarValueSourceLocation(
+    if let anchored = swiftmutFindReturnedScalarValueSourceLocation(
       for: value,
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,
@@ -4661,7 +4661,7 @@ private func swiftMutagenScalarValueSourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindOrdinalScalarValueSourceLocation(
+    if let anchored = swiftmutFindOrdinalScalarValueSourceLocation(
       for: value,
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,
@@ -4674,21 +4674,21 @@ private func swiftMutagenScalarValueSourceLocation(
   return nil
 }
 
-private func swiftMutagenFindOrdinalScalarValueSourceLocation(
+private func swiftmutFindOrdinalScalarValueSourceLocation(
   for value: StructInst,
   path: String,
   preferredLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  guard let ordinal = swiftMutagenScalarValueOrdinalAndCount(
+  guard let ordinal = swiftmutScalarValueOrdinalAndCount(
     for: value,
     mutation: mutation,
     config: config
   ), ordinal.count <= 200 else {
     return nil
   }
-  return swiftMutagenFindOrdinalValueExpressionSourceLocation(
+  return swiftmutFindOrdinalValueExpressionSourceLocation(
     path: path,
     preferredLine: preferredLine,
     ordinal: ordinal.ordinal,
@@ -4698,10 +4698,10 @@ private func swiftMutagenFindOrdinalScalarValueSourceLocation(
   )
 }
 
-private func swiftMutagenScalarValueOrdinalAndCount(
+private func swiftmutScalarValueOrdinalAndCount(
   for value: StructInst,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (ordinal: Int, count: Int)? {
   var ordinal = 0
   var count = 0
@@ -4712,7 +4712,7 @@ private func swiftMutagenScalarValueOrdinalAndCount(
       guard let candidate = instruction as? StructInst else {
         continue
       }
-      let mutations = swiftMutagenScalarValueMutations(for: candidate, config: config)
+      let mutations = swiftmutScalarValueMutations(for: candidate, config: config)
       guard mutations.contains(where: { $0.mutatedBuiltinName == mutation.mutatedBuiltinName }) else {
         continue
       }
@@ -4730,22 +4730,22 @@ private func swiftMutagenScalarValueOrdinalAndCount(
   return (ordinal, count)
 }
 
-private func swiftMutagenFindReturnedScalarValueSourceLocation(
+private func swiftmutFindReturnedScalarValueSourceLocation(
   for value: StructInst,
   path: String,
   preferredLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  guard swiftMutagenScalarValueIsDirectReturnBranchValue(value),
-        let ordinal = swiftMutagenReturnedScalarValueOrdinalAndCount(
+  guard swiftmutScalarValueIsDirectReturnBranchValue(value),
+        let ordinal = swiftmutReturnedScalarValueOrdinalAndCount(
           for: value,
           mutation: mutation,
           config: config
         ), ordinal.count <= 20 else {
     return nil
   }
-  return swiftMutagenFindOrdinalExplicitReturnSourceLocation(
+  return swiftmutFindOrdinalExplicitReturnSourceLocation(
     path: path,
     preferredLine: preferredLine,
     ordinal: ordinal.ordinal,
@@ -4755,7 +4755,7 @@ private func swiftMutagenFindReturnedScalarValueSourceLocation(
   )
 }
 
-private func swiftMutagenScalarValueIsDirectReturnBranchValue(_ value: StructInst) -> Bool {
+private func swiftmutScalarValueIsDirectReturnBranchValue(_ value: StructInst) -> Bool {
   for use in value.uses.ignoreDebugUses {
     guard let branch = use.instruction as? BranchInst,
           branch.targetBlock.terminator is ReturnInst else {
@@ -4766,10 +4766,10 @@ private func swiftMutagenScalarValueIsDirectReturnBranchValue(_ value: StructIns
   return false
 }
 
-private func swiftMutagenReturnedScalarValueOrdinalAndCount(
+private func swiftmutReturnedScalarValueOrdinalAndCount(
   for value: StructInst,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (ordinal: Int, count: Int)? {
   var ordinal = 0
   var count = 0
@@ -4778,10 +4778,10 @@ private func swiftMutagenReturnedScalarValueOrdinalAndCount(
   for block in value.parentFunction.blocks {
     for instruction in block.instructions {
       guard let candidate = instruction as? StructInst,
-            swiftMutagenScalarValueIsDirectReturnBranchValue(candidate) else {
+            swiftmutScalarValueIsDirectReturnBranchValue(candidate) else {
         continue
       }
-      let mutations = swiftMutagenScalarValueMutations(for: candidate, config: config)
+      let mutations = swiftmutScalarValueMutations(for: candidate, config: config)
       guard mutations.contains(where: { $0.mutatedBuiltinName == mutation.mutatedBuiltinName }) else {
         continue
       }
@@ -4799,19 +4799,19 @@ private func swiftMutagenReturnedScalarValueOrdinalAndCount(
   return (ordinal, count)
 }
 
-private func swiftMutagenReturnBranchSourceLocation(
+private func swiftmutReturnBranchSourceLocation(
   for branch: BranchInst,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  let functionSourceLocation = swiftMutagenFunctionSourceLocation(
+  let functionSourceLocation = swiftmutFunctionSourceLocation(
     for: branch.parentFunction,
     config: config
   )
   if let fileNameAndPosition = branch.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
-    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config),
-       let anchored = swiftMutagenFindReturnBranchSourceLocation(
+    if let matchedPath = swiftmutIncludedSourcePath(path, config: config),
+       let anchored = swiftmutFindReturnBranchSourceLocation(
         for: branch,
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
@@ -4825,8 +4825,8 @@ private func swiftMutagenReturnBranchSourceLocation(
   if let definingInstruction = branch.operands.first?.value.definingInstruction,
      let fileNameAndPosition = definingInstruction.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
-    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config),
-       let anchored = swiftMutagenFindReturnBranchSourceLocation(
+    if let matchedPath = swiftmutIncludedSourcePath(path, config: config),
+       let anchored = swiftmutFindReturnBranchSourceLocation(
         for: branch,
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
@@ -4838,7 +4838,7 @@ private func swiftMutagenReturnBranchSourceLocation(
   }
 
   if let functionSourceLocation {
-    return swiftMutagenFindReturnBranchSourceLocation(
+    return swiftmutFindReturnBranchSourceLocation(
       for: branch,
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,
@@ -4849,14 +4849,14 @@ private func swiftMutagenReturnBranchSourceLocation(
   return nil
 }
 
-private func swiftMutagenFindReturnBranchSourceLocation(
+private func swiftmutFindReturnBranchSourceLocation(
   for branch: BranchInst,
   path: String,
   preferredLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  if let exact = swiftMutagenFindUniqueExplicitReturnSourceLocation(
+  if let exact = swiftmutFindUniqueExplicitReturnSourceLocation(
     path: path,
     preferredLine: preferredLine,
     mutation: mutation,
@@ -4864,14 +4864,14 @@ private func swiftMutagenFindReturnBranchSourceLocation(
   ) {
     return exact
   }
-  guard let ordinal = swiftMutagenReturnBranchOrdinalAndCount(
+  guard let ordinal = swiftmutReturnBranchOrdinalAndCount(
     for: branch,
     mutation: mutation,
     config: config
   ), ordinal.count <= 40 else {
     return nil
   }
-  return swiftMutagenFindOrdinalExplicitReturnSourceLocation(
+  return swiftmutFindOrdinalExplicitReturnSourceLocation(
     path: path,
     preferredLine: preferredLine,
     ordinal: ordinal.ordinal,
@@ -4881,10 +4881,10 @@ private func swiftMutagenFindReturnBranchSourceLocation(
   )
 }
 
-private func swiftMutagenReturnBranchOrdinalAndCount(
+private func swiftmutReturnBranchOrdinalAndCount(
   for branch: BranchInst,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (ordinal: Int, count: Int)? {
   var ordinal = 0
   var count = 0
@@ -4894,7 +4894,7 @@ private func swiftMutagenReturnBranchOrdinalAndCount(
     guard let candidate = block.terminator as? BranchInst else {
       continue
     }
-    let mutations = swiftMutagenReturnBranchMutations(for: candidate, config: config)
+    let mutations = swiftmutReturnBranchMutations(for: candidate, config: config)
     guard mutations.contains(where: { $0.mutatedBuiltinName == mutation.mutatedBuiltinName }) else {
       continue
     }
@@ -4911,19 +4911,19 @@ private func swiftMutagenReturnBranchOrdinalAndCount(
   return (ordinal, count)
 }
 
-private func swiftMutagenFindAssignmentValueSourceLocation(
+private func swiftmutFindAssignmentValueSourceLocation(
   path: String,
   preferredLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig,
   targetNames: [String] = [],
   requiresDirectValueExpression: Bool = false
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
-  if let exact = swiftMutagenAssignmentValueSourceLocation(
+  if let exact = swiftmutAssignmentValueSourceLocation(
     in: text,
     path: path,
     lineRange: preferredLine...preferredLine,
@@ -4937,7 +4937,7 @@ private func swiftMutagenFindAssignmentValueSourceLocation(
 
   let firstLine = preferredLine > 2 ? preferredLine - 2 : 1
   let lastLine = preferredLine + (targetNames.isEmpty ? 8 : 240)
-  return swiftMutagenAssignmentValueSourceLocation(
+  return swiftmutAssignmentValueSourceLocation(
     in: text,
     path: path,
     lineRange: firstLine...lastLine,
@@ -4948,17 +4948,17 @@ private func swiftMutagenFindAssignmentValueSourceLocation(
   )
 }
 
-private func swiftMutagenFindScopedAssignmentValueSourceLocation(
+private func swiftmutFindScopedAssignmentValueSourceLocation(
   path: String,
   functionLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig,
   targetNames: [String],
   requiresDirectValueExpression: Bool
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard functionLine > 0,
         !targetNames.isEmpty,
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -4972,7 +4972,7 @@ private func swiftMutagenFindScopedAssignmentValueSourceLocation(
   func inspectLine(_ lineText: String, line: Int) {
     guard line >= functionLine,
           matches.count < 2,
-          let expression = swiftMutagenAssignmentValueExpression(
+          let expression = swiftmutAssignmentValueExpression(
             lineText,
             mutation: mutation,
             targetNames: targetNames,
@@ -5024,23 +5024,23 @@ private func swiftMutagenFindScopedAssignmentValueSourceLocation(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
 }
 
-private func swiftMutagenFindScopedLocalBindingValueSourceLocation(
+private func swiftmutFindScopedLocalBindingValueSourceLocation(
   path: String,
   functionLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig,
   targetNames: [String]
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard functionLine > 0,
         !targetNames.isEmpty,
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -5054,7 +5054,7 @@ private func swiftMutagenFindScopedLocalBindingValueSourceLocation(
   func inspectLine(_ lineText: String, line: Int) {
     guard line >= functionLine,
           matches.count < 2,
-          let expression = swiftMutagenLocalBindingValueExpression(
+          let expression = swiftmutLocalBindingValueExpression(
             lineText,
             mutation: mutation,
             targetNames: targetNames
@@ -5105,23 +5105,23 @@ private func swiftMutagenFindScopedLocalBindingValueSourceLocation(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
 }
 
-private func swiftMutagenFindScopedLabeledAssignmentValueSourceLocation(
+private func swiftmutFindScopedLabeledAssignmentValueSourceLocation(
   path: String,
   functionLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig,
   targetNames: [String]
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard functionLine > 0,
         !targetNames.isEmpty,
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -5135,8 +5135,8 @@ private func swiftMutagenFindScopedLabeledAssignmentValueSourceLocation(
   func inspectLine(_ lineText: String, line: Int) {
     guard line >= functionLine,
           matches.count < 2,
-          swiftMutagenLineContainsAnyIdentifier(lineText, identifiers: targetNames),
-          let expression = swiftMutagenStandaloneLabeledValueExpression(
+          swiftmutLineContainsAnyIdentifier(lineText, identifiers: targetNames),
+          let expression = swiftmutStandaloneLabeledValueExpression(
             lineText,
             mutation: mutation,
             requiresCallExpression: false
@@ -5187,19 +5187,19 @@ private func swiftMutagenFindScopedLabeledAssignmentValueSourceLocation(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
 }
 
-private func swiftMutagenAssignmentValueSourceLocation(
+private func swiftmutAssignmentValueSourceLocation(
   in text: String,
   path: String,
   lineRange: ClosedRange<Int>,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig,
   targetNames: [String] = [],
   requiresDirectValueExpression: Bool = false
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
@@ -5211,7 +5211,7 @@ private func swiftMutagenAssignmentValueSourceLocation(
   func inspectLine(_ lineText: String, line: Int) {
     guard lineRange.contains(line),
           matches.count < 2,
-          let expression = swiftMutagenAssignmentValueExpression(
+          let expression = swiftmutAssignmentValueExpression(
             lineText,
             mutation: mutation,
             targetNames: targetNames,
@@ -5243,28 +5243,28 @@ private func swiftMutagenAssignmentValueSourceLocation(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
 }
 
-private func swiftMutagenFindOrdinalAssignmentValueSourceLocation(
+private func swiftmutFindOrdinalAssignmentValueSourceLocation(
   for store: StoreInst,
   path: String,
   preferredLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  guard let ordinal = swiftMutagenAssignmentValueOrdinalAndCount(
+  guard let ordinal = swiftmutAssignmentValueOrdinalAndCount(
     for: store,
     mutation: mutation,
     config: config
   ), ordinal.count <= 200 else {
     return nil
   }
-  return swiftMutagenFindOrdinalAssignmentValueSourceLocation(
+  return swiftmutFindOrdinalAssignmentValueSourceLocation(
     path: path,
     preferredLine: preferredLine,
     ordinal: ordinal.ordinal,
@@ -5274,10 +5274,10 @@ private func swiftMutagenFindOrdinalAssignmentValueSourceLocation(
   )
 }
 
-private func swiftMutagenAssignmentValueOrdinalAndCount(
+private func swiftmutAssignmentValueOrdinalAndCount(
   for store: StoreInst,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (ordinal: Int, count: Int)? {
   var ordinal = 0
   var count = 0
@@ -5286,10 +5286,10 @@ private func swiftMutagenAssignmentValueOrdinalAndCount(
   for block in store.parentFunction.blocks {
     for instruction in block.instructions {
       guard let candidate = instruction as? StoreInst,
-            swiftMutagenAssignmentStoreIsEligible(candidate) else {
+            swiftmutAssignmentStoreIsEligible(candidate) else {
         continue
       }
-      let mutations = swiftMutagenAssignmentValueMutations(for: candidate, config: config)
+      let mutations = swiftmutAssignmentValueMutations(for: candidate, config: config)
       guard mutations.contains(where: { $0.mutatedBuiltinName == mutation.mutatedBuiltinName }) else {
         continue
       }
@@ -5307,19 +5307,19 @@ private func swiftMutagenAssignmentValueOrdinalAndCount(
   return (ordinal, count)
 }
 
-private func swiftMutagenFindOrdinalAssignmentValueSourceLocation(
+private func swiftmutFindOrdinalAssignmentValueSourceLocation(
   path: String,
   preferredLine: Int,
   ordinal: Int,
   expectedCount: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
         ordinal > 0,
         ordinal <= expectedCount,
         expectedCount > 1,
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -5333,7 +5333,7 @@ private func swiftMutagenFindOrdinalAssignmentValueSourceLocation(
   func inspectLine(_ lineText: String, line: Int) {
     guard line >= preferredLine,
           matches.count <= expectedCount,
-          let expression = swiftMutagenAssignmentValueExpression(
+          let expression = swiftmutAssignmentValueExpression(
             lineText,
             mutation: mutation,
             requiresDirectValueExpression: true
@@ -5384,26 +5384,26 @@ private func swiftMutagenFindOrdinalAssignmentValueSourceLocation(
   }
   let match = matches[ordinal - 1]
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
 }
 
-private func swiftMutagenValueApplySourceLocation(
+private func swiftmutValueApplySourceLocation(
   for apply: ApplyInst,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  let functionSourceLocation = swiftMutagenFunctionSourceLocation(
+  let functionSourceLocation = swiftmutFunctionSourceLocation(
     for: apply.parentFunction,
     config: config
   )
   if let fileNameAndPosition = apply.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
-    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
-      if let anchored = swiftMutagenFindValueExpressionSourceLocation(
+    if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
+      if let anchored = swiftmutFindValueExpressionSourceLocation(
         for: apply,
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
@@ -5414,7 +5414,7 @@ private func swiftMutagenValueApplySourceLocation(
       }
       if let functionSourceLocation,
          functionSourceLocation.path == matchedPath,
-        let anchored = swiftMutagenFindDescribedValueExpressionSourceLocation(
+        let anchored = swiftmutFindDescribedValueExpressionSourceLocation(
            for: apply,
            path: matchedPath,
            functionLine: functionSourceLocation.line,
@@ -5426,7 +5426,7 @@ private func swiftMutagenValueApplySourceLocation(
       }
       if let functionSourceLocation,
          functionSourceLocation.path == matchedPath,
-         let anchored = swiftMutagenFindOrdinalValueExpressionSourceLocation(
+         let anchored = swiftmutFindOrdinalValueExpressionSourceLocation(
            for: apply,
            path: matchedPath,
            preferredLine: functionSourceLocation.line,
@@ -5439,7 +5439,7 @@ private func swiftMutagenValueApplySourceLocation(
   }
 
   if let functionSourceLocation {
-    if let anchored = swiftMutagenFindValueExpressionSourceLocation(
+    if let anchored = swiftmutFindValueExpressionSourceLocation(
       for: apply,
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,
@@ -5448,7 +5448,7 @@ private func swiftMutagenValueApplySourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindDescribedValueExpressionSourceLocation(
+    if let anchored = swiftmutFindDescribedValueExpressionSourceLocation(
       for: apply,
       path: functionSourceLocation.path,
       functionLine: functionSourceLocation.line,
@@ -5458,7 +5458,7 @@ private func swiftMutagenValueApplySourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindOrdinalValueExpressionSourceLocation(
+    if let anchored = swiftmutFindOrdinalValueExpressionSourceLocation(
       for: apply,
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,
@@ -5471,23 +5471,23 @@ private func swiftMutagenValueApplySourceLocation(
   return nil
 }
 
-private func swiftMutagenAssignmentValueSourceLocation(
+private func swiftmutAssignmentValueSourceLocation(
   for store: StoreInst,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  let targetNames = swiftMutagenUniqueAssignmentNames(
-    swiftMutagenAssignmentDestinationNames(for: store) +
-    swiftMutagenAssignmentSourceNames(for: store)
+  let targetNames = swiftmutUniqueAssignmentNames(
+    swiftmutAssignmentDestinationNames(for: store) +
+    swiftmutAssignmentSourceNames(for: store)
   )
-  let functionSourceLocation = swiftMutagenFunctionSourceLocation(
+  let functionSourceLocation = swiftmutFunctionSourceLocation(
     for: store.parentFunction,
     config: config
   )
   if let fileNameAndPosition = store.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
-    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
-      if let anchored = swiftMutagenFindAssignmentValueSourceLocation(
+    if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
+      if let anchored = swiftmutFindAssignmentValueSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -5498,7 +5498,7 @@ private func swiftMutagenAssignmentValueSourceLocation(
         return anchored
       }
       if !targetNames.isEmpty,
-         let anchored = swiftMutagenFindAssignmentValueSourceLocation(
+         let anchored = swiftmutFindAssignmentValueSourceLocation(
            path: matchedPath,
            preferredLine: fileNameAndPosition.line,
            mutation: mutation,
@@ -5510,7 +5510,7 @@ private func swiftMutagenAssignmentValueSourceLocation(
       }
       if let functionSourceLocation,
          functionSourceLocation.path == matchedPath,
-         let anchored = swiftMutagenFindOrdinalAssignmentValueSourceLocation(
+         let anchored = swiftmutFindOrdinalAssignmentValueSourceLocation(
            for: store,
            path: matchedPath,
            preferredLine: functionSourceLocation.line,
@@ -5525,8 +5525,8 @@ private func swiftMutagenAssignmentValueSourceLocation(
   if let definingInstruction = store.source.definingInstruction,
      let fileNameAndPosition = definingInstruction.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
-    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
-      if let anchored = swiftMutagenFindAssignmentValueSourceLocation(
+    if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
+      if let anchored = swiftmutFindAssignmentValueSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -5537,7 +5537,7 @@ private func swiftMutagenAssignmentValueSourceLocation(
         return anchored
       }
       if !targetNames.isEmpty,
-         let anchored = swiftMutagenFindAssignmentValueSourceLocation(
+         let anchored = swiftmutFindAssignmentValueSourceLocation(
            path: matchedPath,
            preferredLine: fileNameAndPosition.line,
            mutation: mutation,
@@ -5551,7 +5551,7 @@ private func swiftMutagenAssignmentValueSourceLocation(
   }
 
   if let functionSourceLocation {
-    if let anchored = swiftMutagenFindScopedAssignmentValueSourceLocation(
+    if let anchored = swiftmutFindScopedAssignmentValueSourceLocation(
       path: functionSourceLocation.path,
       functionLine: functionSourceLocation.line,
       mutation: mutation,
@@ -5562,7 +5562,7 @@ private func swiftMutagenAssignmentValueSourceLocation(
       return anchored
     }
     if !targetNames.isEmpty,
-       let anchored = swiftMutagenFindScopedAssignmentValueSourceLocation(
+       let anchored = swiftmutFindScopedAssignmentValueSourceLocation(
          path: functionSourceLocation.path,
          functionLine: functionSourceLocation.line,
          mutation: mutation,
@@ -5572,7 +5572,7 @@ private func swiftMutagenAssignmentValueSourceLocation(
        ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindStoreSnippetAssignmentValueSourceLocation(
+    if let anchored = swiftmutFindStoreSnippetAssignmentValueSourceLocation(
       for: store,
       path: functionSourceLocation.path,
       functionLine: functionSourceLocation.line,
@@ -5582,7 +5582,7 @@ private func swiftMutagenAssignmentValueSourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindStoreUsageSnippetAssignmentValueSourceLocation(
+    if let anchored = swiftmutFindStoreUsageSnippetAssignmentValueSourceLocation(
       for: store,
       path: functionSourceLocation.path,
       functionLine: functionSourceLocation.line,
@@ -5592,7 +5592,7 @@ private func swiftMutagenAssignmentValueSourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindAssignmentValueSourceLocation(
+    if let anchored = swiftmutFindAssignmentValueSourceLocation(
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,
       mutation: mutation,
@@ -5603,7 +5603,7 @@ private func swiftMutagenAssignmentValueSourceLocation(
       return anchored
     }
     if !targetNames.isEmpty,
-       let anchored = swiftMutagenFindAssignmentValueSourceLocation(
+       let anchored = swiftmutFindAssignmentValueSourceLocation(
          path: functionSourceLocation.path,
          preferredLine: functionSourceLocation.line,
          mutation: mutation,
@@ -5613,7 +5613,7 @@ private func swiftMutagenAssignmentValueSourceLocation(
        ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindOrdinalAssignmentValueSourceLocation(
+    if let anchored = swiftmutFindOrdinalAssignmentValueSourceLocation(
       for: store,
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,
@@ -5622,7 +5622,7 @@ private func swiftMutagenAssignmentValueSourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindScopedLocalBindingValueSourceLocation(
+    if let anchored = swiftmutFindScopedLocalBindingValueSourceLocation(
       path: functionSourceLocation.path,
       functionLine: functionSourceLocation.line,
       mutation: mutation,
@@ -5631,7 +5631,7 @@ private func swiftMutagenAssignmentValueSourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftMutagenFindScopedLabeledAssignmentValueSourceLocation(
+    if let anchored = swiftmutFindScopedLabeledAssignmentValueSourceLocation(
       path: functionSourceLocation.path,
       functionLine: functionSourceLocation.line,
       mutation: mutation,
@@ -5641,7 +5641,7 @@ private func swiftMutagenAssignmentValueSourceLocation(
       return anchored
     }
     if let definingInstruction = store.source.definingInstruction,
-       let anchored = swiftMutagenFindSourceSnippetAssignmentValueSourceLocation(
+       let anchored = swiftmutFindSourceSnippetAssignmentValueSourceLocation(
          path: functionSourceLocation.path,
          locationDescription: definingInstruction.location.description,
          mutation: mutation,
@@ -5654,16 +5654,16 @@ private func swiftMutagenAssignmentValueSourceLocation(
   return nil
 }
 
-private func swiftMutagenFindSourceSnippetAssignmentValueSourceLocation(
+private func swiftmutFindSourceSnippetAssignmentValueSourceLocation(
   path: String,
   locationDescription: String,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig,
   targetNames: [String]
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard !targetNames.isEmpty,
-        let expectedExpression = swiftMutagenSourceSnippetValueExpression(locationDescription),
-        let text = swiftMutagenRead(path) else {
+        let expectedExpression = swiftmutSourceSnippetValueExpression(locationDescription),
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -5674,12 +5674,12 @@ private func swiftMutagenFindSourceSnippetAssignmentValueSourceLocation(
 
   func inspectLine(_ lineText: String, line: Int) {
     guard matches.count < 2,
-          let expression = swiftMutagenAssignmentOrLocalBindingValueExpression(
+          let expression = swiftmutAssignmentOrLocalBindingValueExpression(
             lineText,
             mutation: mutation,
             targetNames: targetNames
           ),
-          swiftMutagenStoreLocationExpressionMatches(
+          swiftmutStoreLocationExpressionMatches(
             expression.sourceOriginal,
             expected: expectedExpression
           ) else {
@@ -5709,19 +5709,19 @@ private func swiftMutagenFindSourceSnippetAssignmentValueSourceLocation(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
 }
 
-private func swiftMutagenAssignmentOrLocalBindingValueExpression(
+private func swiftmutAssignmentOrLocalBindingValueExpression(
   _ line: String,
-  mutation: SwiftMutagenMutation,
+  mutation: SwiftmutMutation,
   targetNames: [String]
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
-  if let assignment = swiftMutagenAssignmentValueExpression(
+  if let assignment = swiftmutAssignmentValueExpression(
     line,
     mutation: mutation,
     targetNames: targetNames,
@@ -5729,25 +5729,25 @@ private func swiftMutagenAssignmentOrLocalBindingValueExpression(
   ) {
     return assignment
   }
-  return swiftMutagenLocalBindingValueExpression(
+  return swiftmutLocalBindingValueExpression(
     line,
     mutation: mutation,
     targetNames: targetNames
   )
 }
 
-private func swiftMutagenFindStoreSnippetAssignmentValueSourceLocation(
+private func swiftmutFindStoreSnippetAssignmentValueSourceLocation(
   for store: StoreInst,
   path: String,
   functionLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig,
   targetNames: [String]
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard functionLine > 0,
         !targetNames.isEmpty,
-        let expectedExpression = swiftMutagenStoreLocationAssignedExpression(store.location.description),
-        let text = swiftMutagenRead(path) else {
+        let expectedExpression = swiftmutStoreLocationAssignedExpression(store.location.description),
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -5761,13 +5761,13 @@ private func swiftMutagenFindStoreSnippetAssignmentValueSourceLocation(
   func inspectLine(_ lineText: String, line: Int) {
     guard line >= functionLine,
           matches.count < 2,
-          let expression = swiftMutagenAssignmentValueExpression(
+          let expression = swiftmutAssignmentValueExpression(
             lineText,
             mutation: mutation,
             targetNames: targetNames,
             requiresDirectValueExpression: false
           ),
-          swiftMutagenStoreLocationExpressionMatches(
+          swiftmutStoreLocationExpressionMatches(
             expression.sourceOriginal,
             expected: expectedExpression
           ) else {
@@ -5817,26 +5817,26 @@ private func swiftMutagenFindStoreSnippetAssignmentValueSourceLocation(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
 }
 
-private func swiftMutagenFindStoreUsageSnippetAssignmentValueSourceLocation(
+private func swiftmutFindStoreUsageSnippetAssignmentValueSourceLocation(
   for store: StoreInst,
   path: String,
   functionLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig,
   targetNames: [String]
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard functionLine > 0,
         !targetNames.isEmpty,
-        let snippet = swiftMutagenQuotedSourceSnippetPrefix(store.location.description),
-        let comparison = swiftMutagenStoreUsageComparisonSnippet(snippet),
-        let text = swiftMutagenRead(path) else {
+        let snippet = swiftmutQuotedSourceSnippetPrefix(store.location.description),
+        let comparison = swiftmutStoreUsageComparisonSnippet(snippet),
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -5853,7 +5853,7 @@ private func swiftMutagenFindStoreUsageSnippetAssignmentValueSourceLocation(
       return
     }
     for targetName in targetNames {
-      guard let column = swiftMutagenLineColumn(
+      guard let column = swiftmutLineColumn(
         ofTarget: targetName,
         followedBy: comparison,
         in: lineText
@@ -5864,7 +5864,7 @@ private func swiftMutagenFindStoreUsageSnippetAssignmentValueSourceLocation(
         line,
         column,
         targetName,
-        swiftMutagenImplicitReturnSourceMutation(for: mutation)))
+        swiftmutImplicitReturnSourceMutation(for: mutation)))
       if matches.count >= 2 {
         return
       }
@@ -5912,15 +5912,15 @@ private func swiftMutagenFindStoreUsageSnippetAssignmentValueSourceLocation(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
 }
 
-private func swiftMutagenStoreLocationAssignedExpression(_ description: String) -> String? {
-  guard let snippet = swiftMutagenQuotedSourceSnippetPrefix(description) else {
+private func swiftmutStoreLocationAssignedExpression(_ description: String) -> String? {
+  guard let snippet = swiftmutQuotedSourceSnippetPrefix(description) else {
     return nil
   }
 
@@ -5929,24 +5929,24 @@ private func swiftMutagenStoreLocationAssignedExpression(_ description: String) 
         bytes[0] == 61 else {
     return nil
   }
-  let expressionStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 2)
-  let trimmedEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  let expressionStart = swiftmutSkipHorizontalWhitespace(bytes, from: 2)
+  let trimmedEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard expressionStart < trimmedEnd else {
     return nil
   }
   return String(decoding: bytes[expressionStart..<trimmedEnd], as: UTF8.self)
 }
 
-private func swiftMutagenSourceSnippetValueExpression(_ description: String) -> String? {
-  guard let snippet = swiftMutagenQuotedSourceSnippetPrefix(description) else {
+private func swiftmutSourceSnippetValueExpression(_ description: String) -> String? {
+  guard let snippet = swiftmutQuotedSourceSnippetPrefix(description) else {
     return nil
   }
 
   let bytes = Array(snippet.utf8)
-  let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-  var end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  var end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   if end > start && bytes[end - 1] == 44 {
-    end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: end - 1)
+    end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: end - 1)
   }
   guard start < end else {
     return nil
@@ -5955,13 +5955,13 @@ private func swiftMutagenSourceSnippetValueExpression(_ description: String) -> 
   if bytes[start] == 40 {
     var index = start + 1
     while index + 4 <= end {
-      if swiftMutagenASCIIHasExactPrefix(bytes, start: index, prefix: "let ") {
-        let nameStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: index + 3)
-        guard nameStart < end && swiftMutagenIsIdentifierStartByte(bytes[nameStart]) else {
+      if swiftmutASCIIHasExactPrefix(bytes, start: index, prefix: "let ") {
+        let nameStart = swiftmutSkipHorizontalWhitespace(bytes, from: index + 3)
+        guard nameStart < end && swiftmutIsIdentifierStartByte(bytes[nameStart]) else {
           return nil
         }
         var nameEnd = nameStart + 1
-        while nameEnd < end && swiftMutagenIsIdentifierByte(bytes[nameEnd]) {
+        while nameEnd < end && swiftmutIsIdentifierByte(bytes[nameEnd]) {
           nameEnd += 1
         }
         return String(decoding: bytes[nameStart..<nameEnd], as: UTF8.self)
@@ -5973,7 +5973,7 @@ private func swiftMutagenSourceSnippetValueExpression(_ description: String) -> 
   while end > start {
     let byte = bytes[end - 1]
     if byte == 41 || byte == 93 || byte == 125 {
-      end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: end - 1)
+      end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: end - 1)
       continue
     }
     break
@@ -5984,7 +5984,7 @@ private func swiftMutagenSourceSnippetValueExpression(_ description: String) -> 
   return String(decoding: bytes[start..<end], as: UTF8.self)
 }
 
-private func swiftMutagenStoreLocationExpressionMatches(
+private func swiftmutStoreLocationExpressionMatches(
   _ expression: String,
   expected: String
 ) -> Bool {
@@ -5997,9 +5997,9 @@ private func swiftMutagenStoreLocationExpressionMatches(
   return expression.hasPrefix(expected)
 }
 
-private func swiftMutagenStoreUsageComparisonSnippet(_ snippet: String) -> (operatorText: String, rhsText: String)? {
+private func swiftmutStoreUsageComparisonSnippet(_ snippet: String) -> (operatorText: String, rhsText: String)? {
   let bytes = Array(snippet.utf8)
-  var index = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  var index = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
   guard index < bytes.count else {
     return nil
   }
@@ -6007,7 +6007,7 @@ private func swiftMutagenStoreUsageComparisonSnippet(_ snippet: String) -> (oper
   let operators = ["!=", "==", ">=", "<=", ">", "<"]
   var matchedOperator: String?
   for operatorText in operators {
-    if swiftMutagenASCIIHasExactPrefix(bytes, start: index, prefix: operatorText) {
+    if swiftmutASCIIHasExactPrefix(bytes, start: index, prefix: operatorText) {
       matchedOperator = operatorText
       index += operatorText.utf8.count
       break
@@ -6017,9 +6017,9 @@ private func swiftMutagenStoreUsageComparisonSnippet(_ snippet: String) -> (oper
     return nil
   }
 
-  index = swiftMutagenSkipHorizontalWhitespace(bytes, from: index)
+  index = swiftmutSkipHorizontalWhitespace(bytes, from: index)
   let rhsStart = index
-  while index < bytes.count && !swiftMutagenIsHorizontalWhitespace(bytes[index]) {
+  while index < bytes.count && !swiftmutIsHorizontalWhitespace(bytes[index]) {
     index += 1
   }
   guard rhsStart < index else {
@@ -6029,7 +6029,7 @@ private func swiftMutagenStoreUsageComparisonSnippet(_ snippet: String) -> (oper
   return (operatorText, rhsText)
 }
 
-private func swiftMutagenLineColumn(
+private func swiftmutLineColumn(
   ofTarget targetName: String,
   followedBy comparison: (operatorText: String, rhsText: String),
   in line: String
@@ -6047,11 +6047,11 @@ private func swiftMutagenLineColumn(
 
   var index = 0
   while index + targetBytes.count <= bytes.count {
-    if swiftMutagenIdentifierTokenMatches(bytes, index: index, end: bytes.count, tokenBytes: targetBytes) {
-      var cursor = swiftMutagenSkipHorizontalWhitespace(bytes, from: index + targetBytes.count)
-      if swiftMutagenBytesMatch(bytes, start: cursor, pattern: operatorBytes) {
-        cursor = swiftMutagenSkipHorizontalWhitespace(bytes, from: cursor + operatorBytes.count)
-        if swiftMutagenBytesMatch(bytes, start: cursor, pattern: rhsBytes) {
+    if swiftmutIdentifierTokenMatches(bytes, index: index, end: bytes.count, tokenBytes: targetBytes) {
+      var cursor = swiftmutSkipHorizontalWhitespace(bytes, from: index + targetBytes.count)
+      if swiftmutBytesMatch(bytes, start: cursor, pattern: operatorBytes) {
+        cursor = swiftmutSkipHorizontalWhitespace(bytes, from: cursor + operatorBytes.count)
+        if swiftmutBytesMatch(bytes, start: cursor, pattern: rhsBytes) {
           return index + 1
         }
       }
@@ -6061,7 +6061,7 @@ private func swiftMutagenLineColumn(
   return nil
 }
 
-private func swiftMutagenIdentifierTokenMatches(
+private func swiftmutIdentifierTokenMatches(
   _ bytes: [UInt8],
   index: Int,
   end: Int,
@@ -6070,17 +6070,17 @@ private func swiftMutagenIdentifierTokenMatches(
   guard index + tokenBytes.count <= end else {
     return false
   }
-  if index > 0 && swiftMutagenIsIdentifierByte(bytes[index - 1]) {
+  if index > 0 && swiftmutIsIdentifierByte(bytes[index - 1]) {
     return false
   }
   let after = index + tokenBytes.count
-  if after < end && swiftMutagenIsIdentifierByte(bytes[after]) {
+  if after < end && swiftmutIsIdentifierByte(bytes[after]) {
     return false
   }
-  return swiftMutagenBytesMatch(bytes, start: index, pattern: tokenBytes)
+  return swiftmutBytesMatch(bytes, start: index, pattern: tokenBytes)
 }
 
-private func swiftMutagenBytesMatch(_ bytes: [UInt8], start: Int, pattern: [UInt8]) -> Bool {
+private func swiftmutBytesMatch(_ bytes: [UInt8], start: Int, pattern: [UInt8]) -> Bool {
   guard start >= 0,
         start + pattern.count <= bytes.count else {
     return false
@@ -6091,7 +6091,7 @@ private func swiftMutagenBytesMatch(_ bytes: [UInt8], start: Int, pattern: [UInt
   return true
 }
 
-private func swiftMutagenQuotedSourceSnippetPrefix(_ description: String) -> String? {
+private func swiftmutQuotedSourceSnippetPrefix(_ description: String) -> String? {
   let bytes = Array(description.utf8)
   guard bytes.count > 1,
         bytes[0] == 34 else {
@@ -6125,21 +6125,21 @@ private func swiftMutagenQuotedSourceSnippetPrefix(_ description: String) -> Str
     end += 1
   }
 
-  let trimmedEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: end)
+  let trimmedEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: end)
   guard trimmedEnd > 1 else {
     return nil
   }
   return String(decoding: bytes[1..<trimmedEnd], as: UTF8.self)
 }
 
-private func swiftMutagenFunctionSourceLocation(
+private func swiftmutFunctionSourceLocation(
   for function: Function,
-  config: SwiftMutagenConfig
+  config: SwiftmutConfig
 ) -> (path: String, line: Int)? {
   let location = function.location.description
-  for path in swiftMutagenSwiftSourcePaths(config: config) {
+  for path in swiftmutSwiftSourcePaths(config: config) {
     guard location.contains(path),
-          let line = swiftMutagenPreferredLine(in: location, path: path) else {
+          let line = swiftmutPreferredLine(in: location, path: path) else {
       continue
     }
     return (path, line)
@@ -6147,14 +6147,14 @@ private func swiftMutagenFunctionSourceLocation(
   return nil
 }
 
-private func swiftMutagenFindValueExpressionSourceLocation(
+private func swiftmutFindValueExpressionSourceLocation(
   for apply: ApplyInst,
   path: String,
   preferredLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  if let anchored = swiftMutagenFindAssignmentValueSourceLocation(
+  if let anchored = swiftmutFindAssignmentValueSourceLocation(
     path: path,
     preferredLine: preferredLine,
     mutation: mutation,
@@ -6162,7 +6162,7 @@ private func swiftMutagenFindValueExpressionSourceLocation(
   ) {
     return anchored
   }
-  if let anchored = swiftMutagenFindLabeledValueExpressionSourceLocation(
+  if let anchored = swiftmutFindLabeledValueExpressionSourceLocation(
     path: path,
     preferredLine: preferredLine,
     mutation: mutation,
@@ -6170,7 +6170,7 @@ private func swiftMutagenFindValueExpressionSourceLocation(
   ) {
     return anchored
   }
-  if let anchored = swiftMutagenFindStandaloneValueExpressionSourceLocation(
+  if let anchored = swiftmutFindStandaloneValueExpressionSourceLocation(
     path: path,
     preferredLine: preferredLine,
     mutation: mutation,
@@ -6178,7 +6178,7 @@ private func swiftMutagenFindValueExpressionSourceLocation(
   ) {
     return anchored
   }
-  if let anchored = swiftMutagenFindUniqueExplicitReturnSourceLocation(
+  if let anchored = swiftmutFindUniqueExplicitReturnSourceLocation(
     path: path,
     preferredLine: preferredLine,
     mutation: mutation,
@@ -6186,7 +6186,7 @@ private func swiftMutagenFindValueExpressionSourceLocation(
   ) {
     return anchored
   }
-  if let anchored = swiftMutagenFindUniqueImplicitReturnSourceLocation(
+  if let anchored = swiftmutFindUniqueImplicitReturnSourceLocation(
     path: path,
     preferredLine: preferredLine,
     mutation: mutation,
@@ -6194,7 +6194,7 @@ private func swiftMutagenFindValueExpressionSourceLocation(
   ) {
     return anchored
   }
-  if let anchored = swiftMutagenFindCalleeOrdinalValueExpressionSourceLocation(
+  if let anchored = swiftmutFindCalleeOrdinalValueExpressionSourceLocation(
     for: apply,
     path: path,
     preferredLine: preferredLine,
@@ -6206,21 +6206,21 @@ private func swiftMutagenFindValueExpressionSourceLocation(
   return nil
 }
 
-private func swiftMutagenFindOrdinalValueExpressionSourceLocation(
+private func swiftmutFindOrdinalValueExpressionSourceLocation(
   for apply: ApplyInst,
   path: String,
   preferredLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  guard let ordinal = swiftMutagenValueApplyOrdinalAndCount(
+  guard let ordinal = swiftmutValueApplyOrdinalAndCount(
     for: apply,
     mutation: mutation,
     config: config
   ), ordinal.count <= 200 else {
     return nil
   }
-  return swiftMutagenFindOrdinalValueExpressionSourceLocation(
+  return swiftmutFindOrdinalValueExpressionSourceLocation(
     path: path,
     preferredLine: preferredLine,
     ordinal: ordinal.ordinal,
@@ -6230,10 +6230,10 @@ private func swiftMutagenFindOrdinalValueExpressionSourceLocation(
   )
 }
 
-private func swiftMutagenValueApplyOrdinalAndCount(
+private func swiftmutValueApplyOrdinalAndCount(
   for apply: ApplyInst,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (ordinal: Int, count: Int)? {
   var ordinal = 0
   var count = 0
@@ -6245,7 +6245,7 @@ private func swiftMutagenValueApplyOrdinalAndCount(
             !candidate.type.isVoid else {
         continue
       }
-      let mutations = swiftMutagenValueReplacementMutations(
+      let mutations = swiftmutValueReplacementMutations(
         for: candidate,
         valueType: candidate.type,
         config: config
@@ -6267,19 +6267,19 @@ private func swiftMutagenValueApplyOrdinalAndCount(
   return (ordinal, count)
 }
 
-private func swiftMutagenFindOrdinalValueExpressionSourceLocation(
+private func swiftmutFindOrdinalValueExpressionSourceLocation(
   path: String,
   preferredLine: Int,
   ordinal: Int,
   expectedCount: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
         ordinal > 0,
         ordinal <= expectedCount,
         expectedCount > 1,
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -6293,7 +6293,7 @@ private func swiftMutagenFindOrdinalValueExpressionSourceLocation(
   func inspectLine(_ lineText: String, line: Int) {
     guard line >= preferredLine,
           matches.count <= expectedCount,
-          let expression = swiftMutagenOrdinalValueExpression(lineText, mutation: mutation) else {
+          let expression = swiftmutOrdinalValueExpression(lineText, mutation: mutation) else {
       return
     }
     matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
@@ -6340,28 +6340,28 @@ private func swiftMutagenFindOrdinalValueExpressionSourceLocation(
   }
   let match = matches[ordinal - 1]
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
 }
 
-private func swiftMutagenFindCalleeOrdinalValueExpressionSourceLocation(
+private func swiftmutFindCalleeOrdinalValueExpressionSourceLocation(
   for apply: ApplyInst,
   path: String,
   preferredLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  let identifiers = swiftMutagenSourceExpressionIdentifiers(for: apply)
+  let identifiers = swiftmutSourceExpressionIdentifiers(for: apply)
   guard !identifiers.isEmpty,
-        let ordinal = swiftMutagenValueApplyOrdinal(for: apply, matchingAnyOf: identifiers, config: config),
-        let text = swiftMutagenRead(path) else {
+        let ordinal = swiftmutValueApplyOrdinal(for: apply, matchingAnyOf: identifiers, config: config),
+        let text = swiftmutRead(path) else {
     return nil
   }
 
-  let candidates = swiftMutagenCalleeExpressionSourceCandidates(
+  let candidates = swiftmutCalleeExpressionSourceCandidates(
     in: text,
     path: path,
     preferredLine: preferredLine,
@@ -6376,41 +6376,41 @@ private func swiftMutagenFindCalleeOrdinalValueExpressionSourceLocation(
   return candidates[ordinal - 1]
 }
 
-private func swiftMutagenFindStandaloneValueExpressionSourceLocation(
+private func swiftmutFindStandaloneValueExpressionSourceLocation(
   path: String,
   preferredLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
-        let sourceLine = swiftMutagenAbsoluteSourceLine(path: path, line: preferredLine),
-        let expression = swiftMutagenStandaloneValueExpression(sourceLine, mutation: mutation) else {
+        let sourceLine = swiftmutAbsoluteSourceLine(path: path, line: preferredLine),
+        let expression = swiftmutStandaloneValueExpression(sourceLine, mutation: mutation) else {
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     preferredLine,
     expression.column,
     expression.sourceOriginal,
     expression.sourceMutated)
 }
 
-private func swiftMutagenValueApplyOrdinal(
+private func swiftmutValueApplyOrdinal(
   for apply: ApplyInst,
   matchingAnyOf identifiers: [String],
-  config: SwiftMutagenConfig
+  config: SwiftmutConfig
 ) -> Int? {
   var ordinal = 0
   for block in apply.parentFunction.blocks {
     for instruction in block.instructions {
       guard let candidate = instruction as? ApplyInst,
             !candidate.type.isVoid,
-            !swiftMutagenValueReplacementMutations(
+            !swiftmutValueReplacementMutations(
               for: candidate,
               valueType: candidate.type,
               config: config
             ).isEmpty,
-            swiftMutagenSourceCalleeIdentifiers(for: candidate).contains(where: { identifiers.contains($0) }) else {
+            swiftmutSourceCalleeIdentifiers(for: candidate).contains(where: { identifiers.contains($0) }) else {
         continue
       }
       ordinal += 1
@@ -6422,13 +6422,13 @@ private func swiftMutagenValueApplyOrdinal(
   return nil
 }
 
-private func swiftMutagenCalleeExpressionSourceCandidates(
+private func swiftmutCalleeExpressionSourceCandidates(
   in text: String,
   path: String,
   preferredLine: Int,
   identifiers: [String],
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> [(file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] {
   guard preferredLine > 0 else {
     return []
@@ -6442,8 +6442,8 @@ private func swiftMutagenCalleeExpressionSourceCandidates(
   func inspectLine(_ lineText: String, line: Int) {
     guard line >= preferredLine,
           line <= lastLine,
-          swiftMutagenSourceLineContainsExpressionIdentifier(lineText, identifiers: identifiers),
-          let expression = swiftMutagenValueExpressionOnLine(
+          swiftmutSourceLineContainsExpressionIdentifier(lineText, identifiers: identifiers),
+          let expression = swiftmutValueExpressionOnLine(
             lineText,
             identifiers: identifiers,
             mutation: mutation
@@ -6451,7 +6451,7 @@ private func swiftMutagenCalleeExpressionSourceCandidates(
       return
     }
     candidates.append((
-      swiftMutagenTrimPackageRoot(path, config: config),
+      swiftmutTrimPackageRoot(path, config: config),
       line,
       expression.column,
       expression.sourceOriginal,
@@ -6477,27 +6477,27 @@ private func swiftMutagenCalleeExpressionSourceCandidates(
   return candidates
 }
 
-private func swiftMutagenFindDescribedValueExpressionSourceLocation(
+private func swiftmutFindDescribedValueExpressionSourceLocation(
   for apply: ApplyInst,
   path: String,
   functionLine: Int,
   locationDescription: String,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard functionLine > 0,
-        let snippet = swiftMutagenQuotedSourceSnippetPrefix(locationDescription),
-        swiftMutagenDescribedValueSnippetLooksMappable(snippet),
-        let text = swiftMutagenRead(path) else {
+        let snippet = swiftmutQuotedSourceSnippetPrefix(locationDescription),
+        swiftmutDescribedValueSnippetLooksMappable(snippet),
+        let text = swiftmutRead(path) else {
     return nil
   }
 
-  let prefixes = swiftMutagenDescribedValueSnippetPrefixes(snippet)
+  let prefixes = swiftmutDescribedValueSnippetPrefixes(snippet)
   guard !prefixes.isEmpty else {
     return nil
   }
 
-  let identifiers = swiftMutagenSourceExpressionIdentifiers(for: apply)
+  let identifiers = swiftmutSourceExpressionIdentifiers(for: apply)
   var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
   var currentLine = 1
   var lineStart = text.startIndex
@@ -6511,15 +6511,15 @@ private func swiftMutagenFindDescribedValueExpressionSourceLocation(
       return
     }
     let bytes = Array(lineText.utf8)
-    let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-    let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+    let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+    let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
     guard start < end else {
       return
     }
 
     for prefix in prefixes {
-      guard let matchStart = swiftMutagenASCIIIndex(bytes, start: start, end: end, pattern: prefix),
-            let expression = swiftMutagenDescribedValueExpression(
+      guard let matchStart = swiftmutASCIIIndex(bytes, start: start, end: end, pattern: prefix),
+            let expression = swiftmutDescribedValueExpression(
               bytes: bytes,
               matchStart: matchStart,
               lineEnd: end,
@@ -6574,46 +6574,46 @@ private func swiftMutagenFindDescribedValueExpressionSourceLocation(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
 }
 
-private func swiftMutagenDescribedValueSnippetLooksMappable(_ snippet: String) -> Bool {
+private func swiftmutDescribedValueSnippetLooksMappable(_ snippet: String) -> Bool {
   let bytes = Array(snippet.utf8)
-  var start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  var start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
   guard start < bytes.count else {
     return false
   }
   if start + 1 < bytes.count
       && (bytes[start] == 38 || bytes[start] == 124)
       && bytes[start + 1] == bytes[start] {
-    start = swiftMutagenSkipHorizontalWhitespace(bytes, from: start + 2)
+    start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 2)
   }
   if start < bytes.count && bytes[start] == 33 {
-    start = swiftMutagenSkipHorizontalWhitespace(bytes, from: start + 1)
+    start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 1)
   }
   guard start < bytes.count,
-        !swiftMutagenASCIIHasExactPrefix(bytes, start: start, prefix: "()") else {
+        !swiftmutASCIIHasExactPrefix(bytes, start: start, prefix: "()") else {
     return false
   }
   let first = bytes[start]
   return (first >= 65 && first <= 90) || (first >= 97 && first <= 122) || first == 95
 }
 
-private func swiftMutagenDescribedValueSnippetPrefixes(_ snippet: String) -> [String] {
+private func swiftmutDescribedValueSnippetPrefixes(_ snippet: String) -> [String] {
   let bytes = Array(snippet.utf8)
-  let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-  let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard start < end else {
     return []
   }
 
   var prefixes: [String] = []
   func appendPrefix(start: Int) {
-    let trimmedStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: start)
+    let trimmedStart = swiftmutSkipHorizontalWhitespace(bytes, from: start)
     guard trimmedStart < end,
           end - trimmedStart >= 5 else {
       return
@@ -6636,107 +6636,107 @@ private func swiftMutagenDescribedValueSnippetPrefixes(_ snippet: String) -> [St
   return prefixes
 }
 
-private func swiftMutagenDescribedValueExpression(
+private func swiftmutDescribedValueExpression(
   bytes: [UInt8],
   matchStart: Int,
   lineEnd: Int,
   identifiers: [String],
-  mutation: SwiftMutagenMutation
+  mutation: SwiftmutMutation
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
-  let expressionSearchStart = swiftMutagenDescribedValueExpressionSearchStart(
+  let expressionSearchStart = swiftmutDescribedValueExpressionSearchStart(
     bytes: bytes,
     matchStart: matchStart,
     lineEnd: lineEnd
   )
 
   for identifier in identifiers {
-    guard let tokenRange = swiftMutagenFindSourceIdentifier(
+    guard let tokenRange = swiftmutFindSourceIdentifier(
       identifier,
       in: bytes,
       start: expressionSearchStart,
       end: lineEnd
     ),
-    let expressionRange = swiftMutagenSourceExpressionRange(
+    let expressionRange = swiftmutSourceExpressionRange(
       around: tokenRange,
       in: bytes,
       lineEnd: lineEnd
     ),
-    swiftMutagenReturnValueIsEligible(bytes: bytes, start: expressionRange.start, mutation: mutation) else {
+    swiftmutReturnValueIsEligible(bytes: bytes, start: expressionRange.start, mutation: mutation) else {
       continue
     }
-    return swiftMutagenDescribedValueExpressionResult(
+    return swiftmutDescribedValueExpressionResult(
       bytes: bytes,
       expressionRange: expressionRange,
       mutation: mutation
     )
   }
 
-  guard let tokenRange = swiftMutagenFirstCallLikeSourceIdentifier(
+  guard let tokenRange = swiftmutFirstCallLikeSourceIdentifier(
     bytes: bytes,
     start: expressionSearchStart,
     end: lineEnd
   ),
-  let expressionRange = swiftMutagenSourceExpressionRange(
+  let expressionRange = swiftmutSourceExpressionRange(
     around: tokenRange,
     in: bytes,
     lineEnd: lineEnd
   ),
-  swiftMutagenReturnValueIsEligible(bytes: bytes, start: expressionRange.start, mutation: mutation) else {
+  swiftmutReturnValueIsEligible(bytes: bytes, start: expressionRange.start, mutation: mutation) else {
     return nil
   }
-  return swiftMutagenDescribedValueExpressionResult(
+  return swiftmutDescribedValueExpressionResult(
     bytes: bytes,
     expressionRange: expressionRange,
     mutation: mutation
   )
 }
 
-private func swiftMutagenDescribedValueExpressionSearchStart(
+private func swiftmutDescribedValueExpressionSearchStart(
   bytes: [UInt8],
   matchStart: Int,
   lineEnd: Int
 ) -> Int {
-  var start = swiftMutagenSkipHorizontalWhitespace(bytes, from: matchStart)
+  var start = swiftmutSkipHorizontalWhitespace(bytes, from: matchStart)
   if start + 1 < lineEnd
       && (bytes[start] == 38 || bytes[start] == 124)
       && bytes[start + 1] == bytes[start] {
-    start = swiftMutagenSkipHorizontalWhitespace(bytes, from: start + 2)
+    start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 2)
   }
   if start < lineEnd && bytes[start] == 33 {
-    start = swiftMutagenSkipHorizontalWhitespace(bytes, from: start + 1)
+    start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 1)
   }
   return start
 }
 
-private func swiftMutagenDescribedValueExpressionResult(
+private func swiftmutDescribedValueExpressionResult(
   bytes: [UInt8],
   expressionRange: (start: Int, end: Int),
-  mutation: SwiftMutagenMutation
+  mutation: SwiftmutMutation
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String) {
   let sourceOriginal = String(decoding: bytes[expressionRange.start..<expressionRange.end], as: UTF8.self)
   return (
     expressionRange.start + 1,
     sourceOriginal,
-    swiftMutagenImplicitReturnSourceMutation(for: mutation))
+    swiftmutImplicitReturnSourceMutation(for: mutation))
 }
 
-private func swiftMutagenFirstCallLikeSourceIdentifier(
+private func swiftmutFirstCallLikeSourceIdentifier(
   bytes: [UInt8],
   start: Int,
   end: Int
 ) -> (start: Int, end: Int)? {
   var index = start
   while index < end {
-    guard swiftMutagenIsASCIIIdentifierStart(bytes[index]) else {
+    guard swiftmutIsASCIIIdentifierStart(bytes[index]) else {
       index += 1
       continue
     }
     let tokenStart = index
     index += 1
-    while index < end && swiftMutagenIsASCIILetterNumberOrUnderscore(bytes[index]) {
+    while index < end && swiftmutIsASCIILetterNumberOrUnderscore(bytes[index]) {
       index += 1
     }
-    let suffixStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: index)
+    let suffixStart = swiftmutSkipHorizontalWhitespace(bytes, from: index)
     if suffixStart < end && (bytes[suffixStart] == 40 || bytes[suffixStart] == 123) {
       return (tokenStart, index)
     }
@@ -6744,54 +6744,54 @@ private func swiftMutagenFirstCallLikeSourceIdentifier(
   return nil
 }
 
-private func swiftMutagenValueExpressionOnLine(
+private func swiftmutValueExpressionOnLine(
   _ line: String,
   identifiers: [String],
-  mutation: SwiftMutagenMutation
+  mutation: SwiftmutMutation
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
-  if let expression = swiftMutagenOrdinalValueExpression(line, mutation: mutation) {
+  if let expression = swiftmutOrdinalValueExpression(line, mutation: mutation) {
     return expression
   }
-  if let expression = swiftMutagenIdentifierValueExpression(line, identifiers: identifiers, mutation: mutation) {
+  if let expression = swiftmutIdentifierValueExpression(line, identifiers: identifiers, mutation: mutation) {
     return expression
   }
   return nil
 }
 
-private func swiftMutagenOrdinalValueExpression(
+private func swiftmutOrdinalValueExpression(
   _ line: String,
-  mutation: SwiftMutagenMutation
+  mutation: SwiftmutMutation
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
-  if let expression = swiftMutagenAssignmentValueExpression(line, mutation: mutation) {
+  if let expression = swiftmutAssignmentValueExpression(line, mutation: mutation) {
     return expression
   }
-  if let expression = swiftMutagenStandaloneLabeledValueExpression(line, mutation: mutation) {
+  if let expression = swiftmutStandaloneLabeledValueExpression(line, mutation: mutation) {
     return expression
   }
-  if let expression = swiftMutagenStandaloneValueExpression(line, mutation: mutation) {
+  if let expression = swiftmutStandaloneValueExpression(line, mutation: mutation) {
     return expression
   }
-  if let expression = swiftMutagenExplicitReturnValueExpression(line, mutation: mutation) {
+  if let expression = swiftmutExplicitReturnValueExpression(line, mutation: mutation) {
     return expression
   }
   return nil
 }
 
-private func swiftMutagenExplicitReturnValueExpression(
+private func swiftmutExplicitReturnValueExpression(
   _ line: String,
-  mutation: SwiftMutagenMutation
+  mutation: SwiftmutMutation
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
   let bytes = Array(line.utf8)
-  let lineStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-  let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  let lineStart = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard lineStart < lineEnd,
-        swiftMutagenASCIIHasExactPrefix(bytes, start: lineStart, prefix: "return ") else {
+        swiftmutASCIIHasExactPrefix(bytes, start: lineStart, prefix: "return ") else {
     return nil
   }
 
-  let valueStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: lineStart + 7)
+  let valueStart = swiftmutSkipHorizontalWhitespace(bytes, from: lineStart + 7)
   guard valueStart < lineEnd,
-        swiftMutagenReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
+        swiftmutReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
     return nil
   }
 
@@ -6799,23 +6799,23 @@ private func swiftMutagenExplicitReturnValueExpression(
   return (
     valueStart + 1,
     sourceOriginal,
-    swiftMutagenImplicitReturnSourceMutation(for: mutation))
+    swiftmutImplicitReturnSourceMutation(for: mutation))
 }
 
-private func swiftMutagenSourceExpressionIdentifiers(for apply: ApplyInst) -> [String] {
-  swiftMutagenSourceCalleeIdentifiers(for: apply).filter(swiftMutagenIdentifierLooksLikeSourceExpression)
+private func swiftmutSourceExpressionIdentifiers(for apply: ApplyInst) -> [String] {
+  swiftmutSourceCalleeIdentifiers(for: apply).filter(swiftmutIdentifierLooksLikeSourceExpression)
 }
 
-private func swiftMutagenSourceCalleeIdentifiers(for apply: ApplyInst) -> [String] {
+private func swiftmutSourceCalleeIdentifiers(for apply: ApplyInst) -> [String] {
   guard let name = apply.referencedFunction?.name.string else {
     return []
   }
-  return swiftMutagenMangledIdentifiers(in: name).filter { identifier in
+  return swiftmutMangledIdentifiers(in: name).filter { identifier in
     identifier.count >= 3 && !identifier.hasPrefix("__")
   }
 }
 
-private func swiftMutagenMangledIdentifiers(in name: String) -> [String] {
+private func swiftmutMangledIdentifiers(in name: String) -> [String] {
   let bytes = Array(name.utf8)
   var identifiers: [String] = []
   var index = 0
@@ -6832,7 +6832,7 @@ private func swiftMutagenMangledIdentifiers(in name: String) -> [String] {
     }
     guard length > 0,
           cursor + length <= bytes.count,
-          swiftMutagenBytesAreIdentifier(bytes, start: cursor, end: cursor + length) else {
+          swiftmutBytesAreIdentifier(bytes, start: cursor, end: cursor + length) else {
       index += 1
       continue
     }
@@ -6845,33 +6845,33 @@ private func swiftMutagenMangledIdentifiers(in name: String) -> [String] {
   return identifiers
 }
 
-private func swiftMutagenIdentifierLooksLikeSourceExpression(_ identifier: String) -> Bool {
+private func swiftmutIdentifierLooksLikeSourceExpression(_ identifier: String) -> Bool {
   guard let first = identifier.utf8.first else {
     return false
   }
   return (first >= 97 && first <= 122) || first == 95
 }
 
-private func swiftMutagenBytesAreIdentifier(_ bytes: [UInt8], start: Int, end: Int) -> Bool {
+private func swiftmutBytesAreIdentifier(_ bytes: [UInt8], start: Int, end: Int) -> Bool {
   guard start < end else {
     return false
   }
   for index in start..<end {
-    if !swiftMutagenIsASCIILetterNumberOrUnderscore(bytes[index]) {
+    if !swiftmutIsASCIILetterNumberOrUnderscore(bytes[index]) {
       return false
     }
   }
   return true
 }
 
-private func swiftMutagenSourceLineContainsExpressionIdentifier(_ line: String, identifiers: [String]) -> Bool {
+private func swiftmutSourceLineContainsExpressionIdentifier(_ line: String, identifiers: [String]) -> Bool {
   let bytes = Array(line.utf8)
-  let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-  let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard start < end else {
     return false
   }
-  for identifier in identifiers where swiftMutagenSourceLineContainsExpressionIdentifier(
+  for identifier in identifiers where swiftmutSourceLineContainsExpressionIdentifier(
     bytes,
     start: start,
     end: end,
@@ -6882,7 +6882,7 @@ private func swiftMutagenSourceLineContainsExpressionIdentifier(_ line: String, 
   return false
 }
 
-private func swiftMutagenSourceLineContainsExpressionIdentifier(
+private func swiftmutSourceLineContainsExpressionIdentifier(
   _ bytes: [UInt8],
   start: Int,
   end: Int,
@@ -6905,9 +6905,9 @@ private func swiftMutagenSourceLineContainsExpressionIdentifier(
       let before = index > start ? bytes[index - 1] : 0
       let tokenEnd = index + token.count
       let after = tokenEnd < end ? bytes[tokenEnd] : 0
-      if !swiftMutagenIsASCIILetterNumberOrUnderscore(before)
-          && !swiftMutagenIsASCIILetterNumberOrUnderscore(after) {
-        let callStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: tokenEnd)
+      if !swiftmutIsASCIILetterNumberOrUnderscore(before)
+          && !swiftmutIsASCIILetterNumberOrUnderscore(after) {
+        let callStart = swiftmutSkipHorizontalWhitespace(bytes, from: tokenEnd)
         if callStart < end && bytes[callStart] == 123 {
           return true
         }
@@ -6924,56 +6924,56 @@ private func swiftMutagenSourceLineContainsExpressionIdentifier(
   return false
 }
 
-private func swiftMutagenIdentifierValueExpression(
+private func swiftmutIdentifierValueExpression(
   _ line: String,
   identifiers: [String],
-  mutation: SwiftMutagenMutation
+  mutation: SwiftmutMutation
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
   let bytes = Array(line.utf8)
-  let lineStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-  let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  let lineStart = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard lineStart < lineEnd else {
     return nil
   }
 
   for identifier in identifiers {
-    guard let tokenRange = swiftMutagenFindSourceIdentifier(
+    guard let tokenRange = swiftmutFindSourceIdentifier(
       identifier,
       in: bytes,
       start: lineStart,
       end: lineEnd
     ),
-    let expressionRange = swiftMutagenSourceExpressionRange(
+    let expressionRange = swiftmutSourceExpressionRange(
       around: tokenRange,
       in: bytes,
       lineEnd: lineEnd
     ),
-    swiftMutagenReturnValueIsEligible(bytes: bytes, start: expressionRange.start, mutation: mutation) else {
+    swiftmutReturnValueIsEligible(bytes: bytes, start: expressionRange.start, mutation: mutation) else {
       continue
     }
     let sourceOriginal = String(decoding: bytes[expressionRange.start..<expressionRange.end], as: UTF8.self)
     return (
       expressionRange.start + 1,
       sourceOriginal,
-      swiftMutagenImplicitReturnSourceMutation(for: mutation))
+      swiftmutImplicitReturnSourceMutation(for: mutation))
   }
   return nil
 }
 
-private func swiftMutagenLineContainsAnyIdentifier(_ line: String, identifiers: [String]) -> Bool {
+private func swiftmutLineContainsAnyIdentifier(_ line: String, identifiers: [String]) -> Bool {
   let bytes = Array(line.utf8)
-  let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-  let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard start < end else {
     return false
   }
-  for identifier in identifiers where swiftMutagenFindSourceIdentifier(identifier, in: bytes, start: start, end: end) != nil {
+  for identifier in identifiers where swiftmutFindSourceIdentifier(identifier, in: bytes, start: start, end: end) != nil {
     return true
   }
   return false
 }
 
-private func swiftMutagenFindSourceIdentifier(
+private func swiftmutFindSourceIdentifier(
   _ identifier: String,
   in bytes: [UInt8],
   start: Int,
@@ -6996,8 +6996,8 @@ private func swiftMutagenFindSourceIdentifier(
       let before = index > start ? bytes[index - 1] : 0
       let tokenEnd = index + token.count
       let after = tokenEnd < end ? bytes[tokenEnd] : 0
-      if !swiftMutagenIsASCIILetterNumberOrUnderscore(before)
-          && !swiftMutagenIsASCIILetterNumberOrUnderscore(after) {
+      if !swiftmutIsASCIILetterNumberOrUnderscore(before)
+          && !swiftmutIsASCIILetterNumberOrUnderscore(after) {
         return (index, tokenEnd)
       }
     }
@@ -7006,19 +7006,19 @@ private func swiftMutagenFindSourceIdentifier(
   return nil
 }
 
-private func swiftMutagenSourceExpressionRange(
+private func swiftmutSourceExpressionRange(
   around tokenRange: (start: Int, end: Int),
   in bytes: [UInt8],
   lineEnd: Int
 ) -> (start: Int, end: Int)? {
   var expressionStart = tokenRange.start
-  while expressionStart > 0 && swiftMutagenIsSourceExpressionPrefixByte(bytes[expressionStart - 1]) {
+  while expressionStart > 0 && swiftmutIsSourceExpressionPrefixByte(bytes[expressionStart - 1]) {
     expressionStart -= 1
   }
 
-  let suffixStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: tokenRange.end)
+  let suffixStart = swiftmutSkipHorizontalWhitespace(bytes, from: tokenRange.end)
   if suffixStart < lineEnd && bytes[suffixStart] == 40 {
-    guard let callEnd = swiftMutagenBalancedExpressionEnd(
+    guard let callEnd = swiftmutBalancedExpressionEnd(
       in: bytes,
       openIndex: suffixStart,
       close: 41,
@@ -7029,7 +7029,7 @@ private func swiftMutagenSourceExpressionRange(
     return (expressionStart, callEnd)
   }
   if suffixStart < lineEnd && bytes[suffixStart] == 123 {
-    guard let closureEnd = swiftMutagenBalancedExpressionEnd(
+    guard let closureEnd = swiftmutBalancedExpressionEnd(
       in: bytes,
       openIndex: suffixStart,
       close: 125,
@@ -7043,11 +7043,11 @@ private func swiftMutagenSourceExpressionRange(
   return (expressionStart, tokenRange.end)
 }
 
-private func swiftMutagenIsSourceExpressionPrefixByte(_ byte: UInt8) -> Bool {
-  swiftMutagenIsASCIILetterNumberOrUnderscore(byte) || byte == 46 || byte == 63 || byte == 33
+private func swiftmutIsSourceExpressionPrefixByte(_ byte: UInt8) -> Bool {
+  swiftmutIsASCIILetterNumberOrUnderscore(byte) || byte == 46 || byte == 63 || byte == 33
 }
 
-private func swiftMutagenBalancedExpressionEnd(
+private func swiftmutBalancedExpressionEnd(
   in bytes: [UInt8],
   openIndex: Int,
   close: UInt8,
@@ -7089,18 +7089,18 @@ private func swiftMutagenBalancedExpressionEnd(
   return nil
 }
 
-private func swiftMutagenFindLabeledValueExpressionSourceLocation(
+private func swiftmutFindLabeledValueExpressionSourceLocation(
   path: String,
   preferredLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
-  if let exact = swiftMutagenLabeledValueExpressionSourceLocation(
+  if let exact = swiftmutLabeledValueExpressionSourceLocation(
     in: text,
     path: path,
     lineRange: preferredLine...preferredLine,
@@ -7111,7 +7111,7 @@ private func swiftMutagenFindLabeledValueExpressionSourceLocation(
   }
 
   let firstLine = preferredLine > 2 ? preferredLine - 2 : 1
-  return swiftMutagenLabeledValueExpressionSourceLocation(
+  return swiftmutLabeledValueExpressionSourceLocation(
     in: text,
     path: path,
     lineRange: firstLine...(preferredLine + 24),
@@ -7120,12 +7120,12 @@ private func swiftMutagenFindLabeledValueExpressionSourceLocation(
   )
 }
 
-private func swiftMutagenLabeledValueExpressionSourceLocation(
+private func swiftmutLabeledValueExpressionSourceLocation(
   in text: String,
   path: String,
   lineRange: ClosedRange<Int>,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
   var currentLine = 1
@@ -7135,7 +7135,7 @@ private func swiftMutagenLabeledValueExpressionSourceLocation(
   func inspectLine(_ lineText: String, line: Int) {
     guard lineRange.contains(line),
           matches.count < 2,
-          let expression = swiftMutagenStandaloneLabeledValueExpression(lineText, mutation: mutation) else {
+          let expression = swiftmutStandaloneLabeledValueExpression(lineText, mutation: mutation) else {
       return
     }
     matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
@@ -7162,37 +7162,37 @@ private func swiftMutagenLabeledValueExpressionSourceLocation(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
 }
 
-private func swiftMutagenStandaloneLabeledValueExpression(
+private func swiftmutStandaloneLabeledValueExpression(
   _ line: String,
-  mutation: SwiftMutagenMutation,
+  mutation: SwiftmutMutation,
   requiresCallExpression: Bool = true
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
   let bytes = Array(line.utf8)
-  let lineStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-  let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  let lineStart = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard lineStart < lineEnd,
-        !swiftMutagenLineStartsWithAssignmentReturnBlockedPrefix(bytes: bytes, start: lineStart),
-        swiftMutagenSourceLineLooksLikeArgumentLabel(bytes: bytes, start: lineStart, end: lineEnd),
-        let colon = swiftMutagenFirstLabeledArgumentSeparator(bytes: bytes, start: lineStart, end: lineEnd) else {
+        !swiftmutLineStartsWithAssignmentReturnBlockedPrefix(bytes: bytes, start: lineStart),
+        swiftmutSourceLineLooksLikeArgumentLabel(bytes: bytes, start: lineStart, end: lineEnd),
+        let colon = swiftmutFirstLabeledArgumentSeparator(bytes: bytes, start: lineStart, end: lineEnd) else {
     return nil
   }
 
-  let valueStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: colon + 1)
+  let valueStart = swiftmutSkipHorizontalWhitespace(bytes, from: colon + 1)
   var valueEnd = lineEnd
   if valueEnd > valueStart && bytes[valueEnd - 1] == 44 {
-    valueEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: valueEnd - 1)
+    valueEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: valueEnd - 1)
   }
   guard valueStart < valueEnd,
-        swiftMutagenLabeledArgumentRHSLooksLikeValueExpression(bytes: bytes, start: valueStart, end: valueEnd),
-        (!requiresCallExpression || swiftMutagenLabeledArgumentRHSLooksLikeCallExpression(bytes: bytes, start: valueStart, end: valueEnd)),
-        swiftMutagenReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
+        swiftmutLabeledArgumentRHSLooksLikeValueExpression(bytes: bytes, start: valueStart, end: valueEnd),
+        (!requiresCallExpression || swiftmutLabeledArgumentRHSLooksLikeCallExpression(bytes: bytes, start: valueStart, end: valueEnd)),
+        swiftmutReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
     return nil
   }
 
@@ -7200,20 +7200,20 @@ private func swiftMutagenStandaloneLabeledValueExpression(
   return (
     valueStart + 1,
     sourceOriginal,
-    swiftMutagenImplicitReturnSourceMutation(for: mutation))
+    swiftmutImplicitReturnSourceMutation(for: mutation))
 }
 
-private func swiftMutagenStandaloneValueExpression(
+private func swiftmutStandaloneValueExpression(
   _ line: String,
-  mutation: SwiftMutagenMutation
+  mutation: SwiftmutMutation
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
   let bytes = Array(line.utf8)
-  let lineStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-  let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  let lineStart = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard lineStart < lineEnd,
-        swiftMutagenLineLooksLikeImplicitReturnExpression(bytes: bytes, start: lineStart, end: lineEnd),
-        !swiftMutagenLineLooksLikeImplicitReturnContinuation(bytes: bytes, start: lineStart),
-        swiftMutagenReturnValueIsEligible(bytes: bytes, start: lineStart, mutation: mutation) else {
+        swiftmutLineLooksLikeImplicitReturnExpression(bytes: bytes, start: lineStart, end: lineEnd),
+        !swiftmutLineLooksLikeImplicitReturnContinuation(bytes: bytes, start: lineStart),
+        swiftmutReturnValueIsEligible(bytes: bytes, start: lineStart, mutation: mutation) else {
     return nil
   }
 
@@ -7221,25 +7221,25 @@ private func swiftMutagenStandaloneValueExpression(
   return (
     lineStart + 1,
     sourceOriginal,
-    swiftMutagenImplicitReturnSourceMutation(for: mutation))
+    swiftmutImplicitReturnSourceMutation(for: mutation))
 }
 
-private func swiftMutagenAssignmentValueExpression(
+private func swiftmutAssignmentValueExpression(
   _ line: String,
-  mutation: SwiftMutagenMutation,
+  mutation: SwiftmutMutation,
   targetNames: [String] = [],
   requiresDirectValueExpression: Bool = false
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
   let bytes = Array(line.utf8)
-  let lineStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-  let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  let lineStart = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard lineStart < lineEnd,
-        !swiftMutagenLineStartsWithAssignmentReturnBlockedPrefix(bytes: bytes, start: lineStart) else {
+        !swiftmutLineStartsWithAssignmentReturnBlockedPrefix(bytes: bytes, start: lineStart) else {
     return nil
   }
 
-  guard let equals = swiftMutagenFirstAssignmentOperator(bytes: bytes, start: lineStart, end: lineEnd) else {
-    return swiftMutagenLabeledArgumentValueExpression(
+  guard let equals = swiftmutFirstAssignmentOperator(bytes: bytes, start: lineStart, end: lineEnd) else {
+    return swiftmutLabeledArgumentValueExpression(
       bytes: bytes,
       lineStart: lineStart,
       lineEnd: lineEnd,
@@ -7249,7 +7249,7 @@ private func swiftMutagenAssignmentValueExpression(
     )
   }
 
-  guard swiftMutagenAssignmentLeftHandSideMatchesTargetNames(
+  guard swiftmutAssignmentLeftHandSideMatchesTargetNames(
     bytes: bytes,
     start: lineStart,
     end: equals,
@@ -7258,19 +7258,19 @@ private func swiftMutagenAssignmentValueExpression(
     return nil
   }
 
-  let valueStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: equals + 1)
+  let valueStart = swiftmutSkipHorizontalWhitespace(bytes, from: equals + 1)
   var valueEnd = lineEnd
   if valueEnd > valueStart && bytes[valueEnd - 1] == 44 {
-    valueEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: valueEnd - 1)
+    valueEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: valueEnd - 1)
   }
   guard valueStart < valueEnd,
-        swiftMutagenAssignmentValueRHSIsDirectValueExpression(
+        swiftmutAssignmentValueRHSIsDirectValueExpression(
           bytes: bytes,
           start: valueStart,
           end: valueEnd,
           isRequired: requiresDirectValueExpression
         ),
-        swiftMutagenReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
+        swiftmutReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
     return nil
   }
 
@@ -7278,20 +7278,20 @@ private func swiftMutagenAssignmentValueExpression(
   return (
     valueStart + 1,
     sourceOriginal,
-    swiftMutagenImplicitReturnSourceMutation(for: mutation))
+    swiftmutImplicitReturnSourceMutation(for: mutation))
 }
 
-private func swiftMutagenLabeledArgumentValueExpression(
+private func swiftmutLabeledArgumentValueExpression(
   bytes: [UInt8],
   lineStart: Int,
   lineEnd: Int,
-  mutation: SwiftMutagenMutation,
+  mutation: SwiftmutMutation,
   targetNames: [String],
   requiresDirectValueExpression: Bool
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard !targetNames.isEmpty,
-        let colon = swiftMutagenFirstLabeledArgumentSeparator(bytes: bytes, start: lineStart, end: lineEnd),
-        swiftMutagenAssignmentLeftHandSideMatchesTargetNames(
+        let colon = swiftmutFirstLabeledArgumentSeparator(bytes: bytes, start: lineStart, end: lineEnd),
+        swiftmutAssignmentLeftHandSideMatchesTargetNames(
           bytes: bytes,
           start: lineStart,
           end: colon,
@@ -7300,20 +7300,20 @@ private func swiftMutagenLabeledArgumentValueExpression(
     return nil
   }
 
-  let valueStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: colon + 1)
+  let valueStart = swiftmutSkipHorizontalWhitespace(bytes, from: colon + 1)
   var valueEnd = lineEnd
   if valueEnd > valueStart && bytes[valueEnd - 1] == 44 {
-    valueEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: valueEnd - 1)
+    valueEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: valueEnd - 1)
   }
   guard valueStart < valueEnd,
-        swiftMutagenLabeledArgumentRHSLooksLikeValueExpression(bytes: bytes, start: valueStart, end: valueEnd),
-        swiftMutagenAssignmentValueRHSIsDirectValueExpression(
+        swiftmutLabeledArgumentRHSLooksLikeValueExpression(bytes: bytes, start: valueStart, end: valueEnd),
+        swiftmutAssignmentValueRHSIsDirectValueExpression(
           bytes: bytes,
           start: valueStart,
           end: valueEnd,
           isRequired: requiresDirectValueExpression
         ),
-        swiftMutagenReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
+        swiftmutReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
     return nil
   }
 
@@ -7321,39 +7321,39 @@ private func swiftMutagenLabeledArgumentValueExpression(
   return (
     valueStart + 1,
     sourceOriginal,
-    swiftMutagenImplicitReturnSourceMutation(for: mutation))
+    swiftmutImplicitReturnSourceMutation(for: mutation))
 }
 
-private func swiftMutagenLocalBindingValueExpression(
+private func swiftmutLocalBindingValueExpression(
   _ line: String,
-  mutation: SwiftMutagenMutation,
+  mutation: SwiftmutMutation,
   targetNames: [String]
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard !targetNames.isEmpty else {
     return nil
   }
   let bytes = Array(line.utf8)
-  let lineStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-  let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  let lineStart = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard lineStart < lineEnd,
-        !swiftMutagenASCIIHasPrefix(bytes, start: lineStart, prefix: "//") else {
+        !swiftmutASCIIHasPrefix(bytes, start: lineStart, prefix: "//") else {
     return nil
   }
 
   var matches: [(column: Int, name: String)] = []
   var index = lineStart
   while index < lineEnd {
-    if swiftMutagenLocalBindingTokenMatches(bytes: bytes, index: index, end: lineEnd, token: "let")
-        || swiftMutagenLocalBindingTokenMatches(bytes: bytes, index: index, end: lineEnd, token: "var") {
-      let nameStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: index + 3)
-      if nameStart < lineEnd && swiftMutagenIsIdentifierStartByte(bytes[nameStart]) {
+    if swiftmutLocalBindingTokenMatches(bytes: bytes, index: index, end: lineEnd, token: "let")
+        || swiftmutLocalBindingTokenMatches(bytes: bytes, index: index, end: lineEnd, token: "var") {
+      let nameStart = swiftmutSkipHorizontalWhitespace(bytes, from: index + 3)
+      if nameStart < lineEnd && swiftmutIsIdentifierStartByte(bytes[nameStart]) {
         var nameEnd = nameStart + 1
-        while nameEnd < lineEnd && swiftMutagenIsIdentifierByte(bytes[nameEnd]) {
+        while nameEnd < lineEnd && swiftmutIsIdentifierByte(bytes[nameEnd]) {
           nameEnd += 1
         }
         let name = String(decoding: bytes[nameStart..<nameEnd], as: UTF8.self)
         if targetNames.contains(name),
-           swiftMutagenReturnValueIsEligible(bytes: bytes, start: nameStart, mutation: mutation) {
+           swiftmutReturnValueIsEligible(bytes: bytes, start: nameStart, mutation: mutation) {
           matches.append((nameStart + 1, name))
           if matches.count >= 2 {
             return nil
@@ -7373,10 +7373,10 @@ private func swiftMutagenLocalBindingValueExpression(
   return (
     match.column,
     match.name,
-    swiftMutagenImplicitReturnSourceMutation(for: mutation))
+    swiftmutImplicitReturnSourceMutation(for: mutation))
 }
 
-private func swiftMutagenLocalBindingTokenMatches(
+private func swiftmutLocalBindingTokenMatches(
   bytes: [UInt8],
   index: Int,
   end: Int,
@@ -7387,17 +7387,17 @@ private func swiftMutagenLocalBindingTokenMatches(
         index + tokenBytes.count < end else {
     return false
   }
-  if index > 0 && swiftMutagenIsIdentifierByte(bytes[index - 1]) {
+  if index > 0 && swiftmutIsIdentifierByte(bytes[index - 1]) {
     return false
   }
   for offset in 0..<tokenBytes.count where bytes[index + offset] != tokenBytes[offset] {
     return false
   }
   let after = index + tokenBytes.count
-  return after < end && swiftMutagenIsHorizontalWhitespace(bytes[after])
+  return after < end && swiftmutIsHorizontalWhitespace(bytes[after])
 }
 
-private func swiftMutagenFirstLabeledArgumentSeparator(bytes: [UInt8], start: Int, end: Int) -> Int? {
+private func swiftmutFirstLabeledArgumentSeparator(bytes: [UInt8], start: Int, end: Int) -> Int? {
   guard start < end else {
     return nil
   }
@@ -7412,7 +7412,7 @@ private func swiftMutagenFirstLabeledArgumentSeparator(bytes: [UInt8], start: In
   return nil
 }
 
-private func swiftMutagenLabeledArgumentRHSLooksLikeValueExpression(
+private func swiftmutLabeledArgumentRHSLooksLikeValueExpression(
   bytes: [UInt8],
   start: Int,
   end: Int
@@ -7420,23 +7420,23 @@ private func swiftMutagenLabeledArgumentRHSLooksLikeValueExpression(
   guard start < end else {
     return false
   }
-  if bytes[start] >= 65 && bytes[start] <= 90 && !swiftMutagenASCIIContains(bytes, start: start, end: end, pattern: ".") {
+  if bytes[start] >= 65 && bytes[start] <= 90 && !swiftmutASCIIContains(bytes, start: start, end: end, pattern: ".") {
     return false
   }
-  if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "some ")
-      || swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "any ") {
+  if swiftmutASCIIHasPrefix(bytes, start: start, prefix: "some ")
+      || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "any ") {
     return false
   }
   return true
 }
 
-private func swiftMutagenLabeledArgumentRHSLooksLikeCallExpression(
+private func swiftmutLabeledArgumentRHSLooksLikeCallExpression(
   bytes: [UInt8],
   start: Int,
   end: Int
 ) -> Bool {
   guard start < end,
-        swiftMutagenASCIIContains(bytes, start: start, end: end, pattern: "(") else {
+        swiftmutASCIIContains(bytes, start: start, end: end, pattern: "(") else {
     return false
   }
   for index in start..<end {
@@ -7450,7 +7450,7 @@ private func swiftMutagenLabeledArgumentRHSLooksLikeCallExpression(
   return true
 }
 
-private func swiftMutagenAssignmentValueRHSIsDirectValueExpression(
+private func swiftmutAssignmentValueRHSIsDirectValueExpression(
   bytes: [UInt8],
   start: Int,
   end: Int,
@@ -7470,38 +7470,38 @@ private func swiftMutagenAssignmentValueRHSIsDirectValueExpression(
   return true
 }
 
-private func swiftMutagenAssignmentDestinationNames(for store: StoreInst) -> [String] {
+private func swiftmutAssignmentDestinationNames(for store: StoreInst) -> [String] {
   var names: [String] = []
-  swiftMutagenCollectAssignmentDestinationNames(
+  swiftmutCollectAssignmentDestinationNames(
     from: store.destination,
     in: store.parentFunction,
     names: &names,
     depth: 0
   )
-  return swiftMutagenUniqueAssignmentNames(names)
+  return swiftmutUniqueAssignmentNames(names)
 }
 
-private func swiftMutagenAssignmentSourceNames(for store: StoreInst) -> [String] {
+private func swiftmutAssignmentSourceNames(for store: StoreInst) -> [String] {
   var names: [String] = []
-  swiftMutagenCollectAssignmentSourceNames(
+  swiftmutCollectAssignmentSourceNames(
     from: store.source,
     names: &names,
     depth: 0
   )
-  return swiftMutagenUniqueAssignmentNames(names)
+  return swiftmutUniqueAssignmentNames(names)
 }
 
-private func swiftMutagenUniqueAssignmentNames(_ names: [String]) -> [String] {
+private func swiftmutUniqueAssignmentNames(_ names: [String]) -> [String] {
   var seen = Set<String>()
   var uniqueNames: [String] = []
-  for name in names where swiftMutagenIdentifierIsUsable(name) && !seen.contains(name) {
+  for name in names where swiftmutIdentifierIsUsable(name) && !seen.contains(name) {
     seen.insert(name)
     uniqueNames.append(name)
   }
   return uniqueNames
 }
 
-private func swiftMutagenCollectAssignmentSourceNames(
+private func swiftmutCollectAssignmentSourceNames(
   from value: Value,
   names: inout [String],
   depth: Int
@@ -7524,19 +7524,19 @@ private func swiftMutagenCollectAssignmentSourceNames(
 
   switch instruction {
   case let copyValue as CopyValueInst:
-    swiftMutagenCollectAssignmentSourceNames(
+    swiftmutCollectAssignmentSourceNames(
       from: copyValue.fromValue,
       names: &names,
       depth: depth + 1
     )
   case let explicitCopyValue as ExplicitCopyValueInst:
-    swiftMutagenCollectAssignmentSourceNames(
+    swiftmutCollectAssignmentSourceNames(
       from: explicitCopyValue.fromValue,
       names: &names,
       depth: depth + 1
     )
   case let moveValue as MoveValueInst:
-    swiftMutagenCollectAssignmentSourceNames(
+    swiftmutCollectAssignmentSourceNames(
       from: moveValue.fromValue,
       names: &names,
       depth: depth + 1
@@ -7546,7 +7546,7 @@ private func swiftMutagenCollectAssignmentSourceNames(
   }
 }
 
-private func swiftMutagenCollectAssignmentDestinationNames(
+private func swiftmutCollectAssignmentDestinationNames(
   from value: Value,
   in function: Function,
   names: inout [String],
@@ -7566,14 +7566,14 @@ private func swiftMutagenCollectAssignmentDestinationNames(
 
   switch instruction {
   case let beginAccess as BeginAccessInst:
-    swiftMutagenCollectAssignmentDestinationNames(
+    swiftmutCollectAssignmentDestinationNames(
       from: beginAccess.address,
       in: function,
       names: &names,
       depth: depth + 1
     )
   case let markUninitialized as MarkUninitializedInst:
-    swiftMutagenCollectAssignmentDestinationNames(
+    swiftmutCollectAssignmentDestinationNames(
       from: markUninitialized.operand.value,
       in: function,
       names: &names,
@@ -7584,7 +7584,7 @@ private func swiftMutagenCollectAssignmentDestinationNames(
     if let fields = structType.getNominalFields(in: function) {
       names.append(fields.getNameOfField(withIndex: structElementAddr.fieldIndex).string)
     }
-    swiftMutagenCollectAssignmentDestinationNames(
+    swiftmutCollectAssignmentDestinationNames(
       from: structElementAddr.struct,
       in: function,
       names: &names,
@@ -7594,14 +7594,14 @@ private func swiftMutagenCollectAssignmentDestinationNames(
     if let declaration = refElementAddr.varDecl {
       names.append(declaration.userFacingName.string)
     }
-    swiftMutagenCollectAssignmentDestinationNames(
+    swiftmutCollectAssignmentDestinationNames(
       from: refElementAddr.instance,
       in: function,
       names: &names,
       depth: depth + 1
     )
   case let projectBox as ProjectBoxInst:
-    swiftMutagenCollectAssignmentDestinationNames(
+    swiftmutCollectAssignmentDestinationNames(
       from: projectBox.box,
       in: function,
       names: &names,
@@ -7612,21 +7612,21 @@ private func swiftMutagenCollectAssignmentDestinationNames(
   }
 }
 
-private func swiftMutagenIdentifierIsUsable(_ name: String) -> Bool {
+private func swiftmutIdentifierIsUsable(_ name: String) -> Bool {
   guard !name.isEmpty,
         name != "_",
         name != "self" else {
     return false
   }
   for byte in name.utf8 {
-    guard swiftMutagenIsIdentifierByte(byte) else {
+    guard swiftmutIsIdentifierByte(byte) else {
       return false
     }
   }
   return true
 }
 
-private func swiftMutagenAssignmentLeftHandSideMatchesTargetNames(
+private func swiftmutAssignmentLeftHandSideMatchesTargetNames(
   bytes: [UInt8],
   start: Int,
   end: Int,
@@ -7636,10 +7636,10 @@ private func swiftMutagenAssignmentLeftHandSideMatchesTargetNames(
     return true
   }
   for targetName in targetNames {
-    guard swiftMutagenIdentifierIsUsable(targetName) else {
+    guard swiftmutIdentifierIsUsable(targetName) else {
       continue
     }
-    if swiftMutagenLeftHandSideContainsIdentifier(
+    if swiftmutLeftHandSideContainsIdentifier(
       bytes: bytes,
       start: start,
       end: end,
@@ -7651,7 +7651,7 @@ private func swiftMutagenAssignmentLeftHandSideMatchesTargetNames(
   return false
 }
 
-private func swiftMutagenLeftHandSideContainsIdentifier(
+private func swiftmutLeftHandSideContainsIdentifier(
   bytes: [UInt8],
   start: Int,
   end: Int,
@@ -7664,10 +7664,10 @@ private func swiftMutagenLeftHandSideContainsIdentifier(
 
   var index = start
   while index < end {
-    if swiftMutagenIsIdentifierStartByte(bytes[index]) {
+    if swiftmutIsIdentifierStartByte(bytes[index]) {
       let identifierStart = index
       index += 1
-      while index < end && swiftMutagenIsIdentifierByte(bytes[index]) {
+      while index < end && swiftmutIsIdentifierByte(bytes[index]) {
         index += 1
       }
       if bytes[identifierStart..<index].elementsEqual(identifier) {
@@ -7680,27 +7680,27 @@ private func swiftMutagenLeftHandSideContainsIdentifier(
   return false
 }
 
-private func swiftMutagenIsIdentifierStartByte(_ byte: UInt8) -> Bool {
+private func swiftmutIsIdentifierStartByte(_ byte: UInt8) -> Bool {
   byte == 95 || (byte >= 65 && byte <= 90) || (byte >= 97 && byte <= 122)
 }
 
-private func swiftMutagenIsIdentifierByte(_ byte: UInt8) -> Bool {
-  swiftMutagenIsIdentifierStartByte(byte) || (byte >= 48 && byte <= 57)
+private func swiftmutIsIdentifierByte(_ byte: UInt8) -> Bool {
+  swiftmutIsIdentifierStartByte(byte) || (byte >= 48 && byte <= 57)
 }
 
-private func swiftMutagenFindAssignmentReturnSourceLocation(
+private func swiftmutFindAssignmentReturnSourceLocation(
   path: String,
   preferredLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
         mutation.sourceOriginal == "return",
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
-  if let exact = swiftMutagenAssignmentReturnSourceLocation(
+  if let exact = swiftmutAssignmentReturnSourceLocation(
     in: text,
     path: path,
     lineRange: preferredLine...preferredLine,
@@ -7711,7 +7711,7 @@ private func swiftMutagenFindAssignmentReturnSourceLocation(
   }
 
   let firstLine = preferredLine > 2 ? preferredLine - 2 : 1
-  return swiftMutagenAssignmentReturnSourceLocation(
+  return swiftmutAssignmentReturnSourceLocation(
     in: text,
     path: path,
     lineRange: firstLine...(preferredLine + 8),
@@ -7720,12 +7720,12 @@ private func swiftMutagenFindAssignmentReturnSourceLocation(
   )
 }
 
-private func swiftMutagenAssignmentReturnSourceLocation(
+private func swiftmutAssignmentReturnSourceLocation(
   in text: String,
   path: String,
   lineRange: ClosedRange<Int>,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
   var currentLine = 1
@@ -7735,7 +7735,7 @@ private func swiftMutagenAssignmentReturnSourceLocation(
   func inspectLine(_ lineText: String, line: Int) {
     guard lineRange.contains(line),
           matches.count < 2,
-          let expression = swiftMutagenAssignmentReturnExpression(lineText, mutation: mutation) else {
+          let expression = swiftmutAssignmentReturnExpression(lineText, mutation: mutation) else {
       return
     }
     matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
@@ -7762,33 +7762,33 @@ private func swiftMutagenAssignmentReturnSourceLocation(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
 }
 
-private func swiftMutagenAssignmentReturnExpression(
+private func swiftmutAssignmentReturnExpression(
   _ line: String,
-  mutation: SwiftMutagenMutation
+  mutation: SwiftmutMutation
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
   let bytes = Array(line.utf8)
-  let lineStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-  let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  let lineStart = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard lineStart < lineEnd,
-        !swiftMutagenLineStartsWithAssignmentReturnBlockedPrefix(bytes: bytes, start: lineStart),
-        let equals = swiftMutagenFirstAssignmentOperator(bytes: bytes, start: lineStart, end: lineEnd) else {
+        !swiftmutLineStartsWithAssignmentReturnBlockedPrefix(bytes: bytes, start: lineStart),
+        let equals = swiftmutFirstAssignmentOperator(bytes: bytes, start: lineStart, end: lineEnd) else {
     return nil
   }
 
-  let valueStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: equals + 1)
+  let valueStart = swiftmutSkipHorizontalWhitespace(bytes, from: equals + 1)
   var valueEnd = lineEnd
   if valueEnd > valueStart && bytes[valueEnd - 1] == 44 {
-    valueEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: valueEnd - 1)
+    valueEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: valueEnd - 1)
   }
   guard valueStart < valueEnd,
-        swiftMutagenReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
+        swiftmutReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
     return nil
   }
 
@@ -7796,24 +7796,24 @@ private func swiftMutagenAssignmentReturnExpression(
   return (
     valueStart + 1,
     sourceOriginal,
-    swiftMutagenImplicitReturnSourceMutation(for: mutation))
+    swiftmutImplicitReturnSourceMutation(for: mutation))
 }
 
-private func swiftMutagenLineStartsWithAssignmentReturnBlockedPrefix(bytes: [UInt8], start: Int) -> Bool {
+private func swiftmutLineStartsWithAssignmentReturnBlockedPrefix(bytes: [UInt8], start: Int) -> Bool {
   [
     "if ", "if(", "guard ", "guard(", "while ", "while(", "for ", "for(",
     "switch ", "switch(", "return ", "throw ", "import ", "//", "/*"
-  ].contains { swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: $0) }
+  ].contains { swiftmutASCIIHasPrefix(bytes, start: start, prefix: $0) }
 }
 
-private func swiftMutagenFirstAssignmentOperator(bytes: [UInt8], start: Int, end: Int) -> Int? {
+private func swiftmutFirstAssignmentOperator(bytes: [UInt8], start: Int, end: Int) -> Int? {
   guard start < end else {
     return nil
   }
   for index in start..<end where bytes[index] == 61 {
     let before = index > start ? bytes[index - 1] : 0
     let after = index + 1 < end ? bytes[index + 1] : 0
-    if swiftMutagenIsAssignmentOperatorNeighbor(before) || swiftMutagenIsAssignmentOperatorNeighbor(after) {
+    if swiftmutIsAssignmentOperatorNeighbor(before) || swiftmutIsAssignmentOperatorNeighbor(after) {
       continue
     }
     return index
@@ -7821,7 +7821,7 @@ private func swiftMutagenFirstAssignmentOperator(bytes: [UInt8], start: Int, end
   return nil
 }
 
-private func swiftMutagenIsAssignmentOperatorNeighbor(_ byte: UInt8) -> Bool {
+private func swiftmutIsAssignmentOperatorNeighbor(_ byte: UInt8) -> Bool {
   switch byte {
   case 33, 37, 38, 42, 43, 45, 47, 60, 61, 62, 63, 94, 124, 126:
     return true
@@ -7830,34 +7830,34 @@ private func swiftMutagenIsAssignmentOperatorNeighbor(_ byte: UInt8) -> Bool {
   }
 }
 
-private func swiftMutagenReturnSourceLocationIsUsable(
+private func swiftmutReturnSourceLocationIsUsable(
   _ location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String),
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> Bool {
   if mutation.sourceOriginal == "return" {
-    return swiftMutagenReturnSourceLooksLikeStatement(file: location.file, line: location.line, config: config)
+    return swiftmutReturnSourceLooksLikeStatement(file: location.file, line: location.line, config: config)
   }
   return true
 }
 
-private func swiftMutagenFindUniqueExplicitReturnSourceLocation(
+private func swiftmutFindUniqueExplicitReturnSourceLocation(
   path: String,
   preferredLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
-  if let exactLine = swiftMutagenAbsoluteSourceLine(path: path, line: preferredLine) {
+  if let exactLine = swiftmutAbsoluteSourceLine(path: path, line: preferredLine) {
     let bytes = Array(exactLine.utf8)
-    let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-    if swiftMutagenReturnLineIsEligible(bytes: bytes, start: start, mutation: mutation) {
+    let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+    if swiftmutReturnLineIsEligible(bytes: bytes, start: start, mutation: mutation) {
       return (
-        swiftMutagenTrimPackageRoot(path, config: config),
+        swiftmutTrimPackageRoot(path, config: config),
         preferredLine,
         start + 1,
         mutation.sourceOriginal,
@@ -7879,8 +7879,8 @@ private func swiftMutagenFindUniqueExplicitReturnSourceLocation(
       return
     }
     let bytes = Array(lineText.utf8)
-    let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-    if swiftMutagenReturnLineIsEligible(bytes: bytes, start: start, mutation: mutation) {
+    let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+    if swiftmutReturnLineIsEligible(bytes: bytes, start: start, mutation: mutation) {
       matches.append((line, start + 1))
     }
   }
@@ -7925,21 +7925,21 @@ private func swiftMutagenFindUniqueExplicitReturnSourceLocation(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     mutation.sourceOriginal,
     mutation.sourceMutated)
 }
 
-private func swiftMutagenFindNearestPriorExplicitReturnSourceLocation(
+private func swiftmutFindNearestPriorExplicitReturnSourceLocation(
   path: String,
   preferredLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 1,
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -7955,8 +7955,8 @@ private func swiftMutagenFindNearestPriorExplicitReturnSourceLocation(
       return
     }
     let bytes = Array(lineText.utf8)
-    let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-    if swiftMutagenReturnLineIsEligible(bytes: bytes, start: start, mutation: mutation) {
+    let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+    if swiftmutReturnLineIsEligible(bytes: bytes, start: start, mutation: mutation) {
       nearest = (line, start + 1)
     }
   }
@@ -7977,24 +7977,24 @@ private func swiftMutagenFindNearestPriorExplicitReturnSourceLocation(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     nearest.line,
     nearest.column,
     mutation.sourceOriginal,
     mutation.sourceMutated)
 }
 
-private func swiftMutagenFindDescribedExplicitReturnSourceLocation(
+private func swiftmutFindDescribedExplicitReturnSourceLocation(
   path: String,
   preferredLine: Int,
   locationDescription: String,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
-        let snippet = swiftMutagenQuotedSourceSnippetPrefix(locationDescription),
+        let snippet = swiftmutQuotedSourceSnippetPrefix(locationDescription),
         snippet.hasPrefix("return "),
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -8012,11 +8012,11 @@ private func swiftMutagenFindDescribedExplicitReturnSourceLocation(
       return
     }
     let bytes = Array(lineText.utf8)
-    let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-    guard swiftMutagenReturnLineIsEligible(bytes: bytes, start: start, mutation: mutation) else {
+    let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+    guard swiftmutReturnLineIsEligible(bytes: bytes, start: start, mutation: mutation) else {
       return
     }
-    let trimmed = String(decoding: bytes[start..<swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)], as: UTF8.self)
+    let trimmed = String(decoding: bytes[start..<swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)], as: UTF8.self)
     if trimmed.hasPrefix(snippet) {
       matches.append((line, start + 1))
     }
@@ -8064,38 +8064,38 @@ private func swiftMutagenFindDescribedExplicitReturnSourceLocation(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     mutation.sourceOriginal,
     mutation.sourceMutated)
 }
 
-private func swiftMutagenFindDescribedDefaultArgumentReturnSourceLocation(
+private func swiftmutFindDescribedDefaultArgumentReturnSourceLocation(
   functionName: String,
   locationDescription: String,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  guard let rawSnippet = swiftMutagenQuotedSourceSearchSnippet(locationDescription),
+  guard let rawSnippet = swiftmutQuotedSourceSearchSnippet(locationDescription),
         rawSnippet.count >= 4 else {
     return nil
   }
 
-  let snippet = swiftMutagenDecodedSourceSnippet(rawSnippet)
-  guard swiftMutagenDefaultArgumentSnippetLooksMappable(snippet, functionName: functionName),
-        let expression = swiftMutagenDefaultArgumentSnippetExpression(snippet, mutation: mutation) else {
+  let snippet = swiftmutDecodedSourceSnippet(rawSnippet)
+  guard swiftmutDefaultArgumentSnippetLooksMappable(snippet, functionName: functionName),
+        let expression = swiftmutDefaultArgumentSnippetExpression(snippet, mutation: mutation) else {
     return nil
   }
 
   var matches: [(path: String, line: Int, column: Int, score: Int)] = []
-  for path in swiftMutagenSwiftSourcePaths(config: config) {
-    guard let text = swiftMutagenRead(path) else {
+  for path in swiftmutSwiftSourcePaths(config: config) {
+    guard let text = swiftmutRead(path) else {
       continue
     }
-    let fileMatches = swiftMutagenSourceSnippetMatches(snippet, in: text)
+    let fileMatches = swiftmutSourceSnippetMatches(snippet, in: text)
     for match in fileMatches {
-      let score = swiftMutagenDefaultArgumentDeclarationScore(
+      let score = swiftmutDefaultArgumentDeclarationScore(
         functionName: functionName,
         sourceText: text,
         line: match.line
@@ -8115,14 +8115,14 @@ private func swiftMutagenFindDescribedDefaultArgumentReturnSourceLocation(
   }
 
   return (
-    swiftMutagenTrimPackageRoot(match.path, config: config),
+    swiftmutTrimPackageRoot(match.path, config: config),
     match.line,
     match.column,
     expression,
-    swiftMutagenImplicitReturnSourceMutation(for: mutation))
+    swiftmutImplicitReturnSourceMutation(for: mutation))
 }
 
-private func swiftMutagenQuotedSourceSearchSnippet(_ description: String) -> String? {
+private func swiftmutQuotedSourceSearchSnippet(_ description: String) -> String? {
   let bytes = Array(description.utf8)
   guard bytes.count > 1,
         bytes[0] == 34 else {
@@ -8153,14 +8153,14 @@ private func swiftMutagenQuotedSourceSearchSnippet(_ description: String) -> Str
     end += 1
   }
 
-  let trimmedEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: end)
+  let trimmedEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: end)
   guard trimmedEnd > 1 else {
     return nil
   }
   return String(decoding: bytes[1..<trimmedEnd], as: UTF8.self)
 }
 
-private func swiftMutagenDecodedSourceSnippet(_ snippet: String) -> String {
+private func swiftmutDecodedSourceSnippet(_ snippet: String) -> String {
   let bytes = Array(snippet.utf8)
   var decoded: [UInt8] = []
   var index = 0
@@ -8191,7 +8191,7 @@ private func swiftMutagenDecodedSourceSnippet(_ snippet: String) -> String {
   return String(decoding: decoded, as: UTF8.self)
 }
 
-private func swiftMutagenDefaultArgumentSnippetLooksMappable(
+private func swiftmutDefaultArgumentSnippetLooksMappable(
   _ snippet: String,
   functionName: String
 ) -> Bool {
@@ -8202,7 +8202,7 @@ private func swiftMutagenDefaultArgumentSnippetLooksMappable(
   for byte in bytes where byte == 10 || byte == 13 {
     return true
   }
-  guard swiftMutagenFunctionNameLooksDefaultArgumentThunk(functionName) else {
+  guard swiftmutFunctionNameLooksDefaultArgumentThunk(functionName) else {
     return false
   }
   for byte in bytes where byte == 41 || byte == 44 {
@@ -8211,7 +8211,7 @@ private func swiftMutagenDefaultArgumentSnippetLooksMappable(
   return false
 }
 
-private func swiftMutagenFunctionNameLooksDefaultArgumentThunk(_ functionName: String) -> Bool {
+private func swiftmutFunctionNameLooksDefaultArgumentThunk(_ functionName: String) -> Bool {
   let bytes = Array(functionName.utf8)
   guard bytes.count >= 3 else {
     return false
@@ -8219,19 +8219,19 @@ private func swiftMutagenFunctionNameLooksDefaultArgumentThunk(_ functionName: S
   for index in 0..<(bytes.count - 2) {
     if bytes[index] == 102,
        bytes[index + 1] == 65,
-       swiftMutagenIsASCIILetterNumberOrUnderscore(bytes[index + 2]) {
+       swiftmutIsASCIILetterNumberOrUnderscore(bytes[index + 2]) {
       return true
     }
   }
   return false
 }
 
-private func swiftMutagenDefaultArgumentSnippetExpression(
+private func swiftmutDefaultArgumentSnippetExpression(
   _ snippet: String,
-  mutation: SwiftMutagenMutation
+  mutation: SwiftmutMutation
 ) -> String? {
   let bytes = Array(snippet.utf8)
-  var index = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  var index = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
   guard index < bytes.count else {
     return nil
   }
@@ -8274,15 +8274,15 @@ private func swiftMutagenDefaultArgumentSnippetExpression(
     index += 1
   }
 
-  let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: index)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: index)
   guard end > start else {
     return nil
   }
   let expression = String(decoding: bytes[start..<end], as: UTF8.self)
   let expressionBytes = Array(expression.utf8)
-  guard swiftMutagenImplicitReturnExpressionIsEligible(
+  guard swiftmutImplicitReturnExpressionIsEligible(
     bytes: expressionBytes,
-    start: swiftMutagenSkipHorizontalWhitespace(expressionBytes, from: 0),
+    start: swiftmutSkipHorizontalWhitespace(expressionBytes, from: 0),
     mutation: mutation,
     allowsInlineBraces: true
   ) else {
@@ -8291,7 +8291,7 @@ private func swiftMutagenDefaultArgumentSnippetExpression(
   return expression
 }
 
-private func swiftMutagenSourceSnippetMatches(
+private func swiftmutSourceSnippetMatches(
   _ snippet: String,
   in text: String
 ) -> [(line: Int, column: Int)] {
@@ -8311,7 +8311,7 @@ private func swiftMutagenSourceSnippetMatches(
       break
     }
     if matched {
-      matches.append(swiftMutagenSourceLineAndColumn(source, offset: index))
+      matches.append(swiftmutSourceLineAndColumn(source, offset: index))
       if matches.count > 8 {
         return matches
       }
@@ -8323,7 +8323,7 @@ private func swiftMutagenSourceSnippetMatches(
   return matches
 }
 
-private func swiftMutagenSourceLineAndColumn(
+private func swiftmutSourceLineAndColumn(
   _ bytes: [UInt8],
   offset: Int
 ) -> (line: Int, column: Int) {
@@ -8342,7 +8342,7 @@ private func swiftMutagenSourceLineAndColumn(
   return (line, column)
 }
 
-private func swiftMutagenDefaultArgumentDeclarationScore(
+private func swiftmutDefaultArgumentDeclarationScore(
   functionName: String,
   sourceText: String,
   line: Int
@@ -8362,79 +8362,79 @@ private func swiftMutagenDefaultArgumentDeclarationScore(
   }
 
   var score = 0
-  if let functionIdentifier = swiftMutagenNearestFunctionIdentifier(in: signature),
-     swiftMutagenMangledNameContainsIdentifier(functionName, identifier: functionIdentifier) {
+  if let functionIdentifier = swiftmutNearestFunctionIdentifier(in: signature),
+     swiftmutMangledNameContainsIdentifier(functionName, identifier: functionIdentifier) {
     score += 2
   }
-  if let typeIdentifier = swiftMutagenNearestTypeIdentifier(in: signature),
-     swiftMutagenMangledNameContainsIdentifier(functionName, identifier: typeIdentifier) {
+  if let typeIdentifier = swiftmutNearestTypeIdentifier(in: signature),
+     swiftmutMangledNameContainsIdentifier(functionName, identifier: typeIdentifier) {
     score += 1
   }
   let signatureBytes = Array(signature.utf8)
-  if swiftMutagenASCIIContains(signatureBytes, start: 0, end: signatureBytes.count, pattern: "init("),
+  if swiftmutASCIIContains(signatureBytes, start: 0, end: signatureBytes.count, pattern: "init("),
      functionName.contains("cf") {
     score += 1
   }
   return score
 }
 
-private func swiftMutagenNearestFunctionIdentifier(in signature: String) -> String? {
+private func swiftmutNearestFunctionIdentifier(in signature: String) -> String? {
   let lines = signature.split(separator: "\n", omittingEmptySubsequences: false)
   var index = lines.count
   while index > 0 {
     index -= 1
     let line = String(lines[index])
-    if let identifier = swiftMutagenDeclarationIdentifier(after: "public static func ", in: line) {
+    if let identifier = swiftmutDeclarationIdentifier(after: "public static func ", in: line) {
       return identifier
     }
-    if let identifier = swiftMutagenDeclarationIdentifier(after: "static func ", in: line) {
+    if let identifier = swiftmutDeclarationIdentifier(after: "static func ", in: line) {
       return identifier
     }
-    if let identifier = swiftMutagenDeclarationIdentifier(after: "public func ", in: line) {
+    if let identifier = swiftmutDeclarationIdentifier(after: "public func ", in: line) {
       return identifier
     }
-    if let identifier = swiftMutagenDeclarationIdentifier(after: "private func ", in: line) {
+    if let identifier = swiftmutDeclarationIdentifier(after: "private func ", in: line) {
       return identifier
     }
-    if let identifier = swiftMutagenDeclarationIdentifier(after: "func ", in: line) {
+    if let identifier = swiftmutDeclarationIdentifier(after: "func ", in: line) {
       return identifier
     }
     let bytes = Array(line.utf8)
-    if swiftMutagenASCIIContains(bytes, start: 0, end: bytes.count, pattern: "init(") {
+    if swiftmutASCIIContains(bytes, start: 0, end: bytes.count, pattern: "init(") {
       return "init"
     }
   }
   return nil
 }
 
-private func swiftMutagenNearestTypeIdentifier(in signature: String) -> String? {
+private func swiftmutNearestTypeIdentifier(in signature: String) -> String? {
   let lines = signature.split(separator: "\n", omittingEmptySubsequences: false)
   var index = lines.count
   while index > 0 {
     index -= 1
     let line = String(lines[index])
-    if let identifier = swiftMutagenDeclarationIdentifier(after: "struct ", in: line) {
+    if let identifier = swiftmutDeclarationIdentifier(after: "struct ", in: line) {
       return identifier
     }
-    if let identifier = swiftMutagenDeclarationIdentifier(after: "enum ", in: line) {
+    if let identifier = swiftmutDeclarationIdentifier(after: "enum ", in: line) {
       return identifier
     }
-    if let identifier = swiftMutagenDeclarationIdentifier(after: "class ", in: line) {
+    if let identifier = swiftmutDeclarationIdentifier(after: "class ", in: line) {
       return identifier
     }
   }
   return nil
 }
 
-private func swiftMutagenDeclarationIdentifier(after marker: String, in line: String) -> String? {
+private func swiftmutDeclarationIdentifier(after marker: String, in line: String) -> String? {
   let bytes = Array(line.utf8)
-  guard let markerStart = swiftMutagenASCIIIndex(bytes, start: 0, end: bytes.count, pattern: marker) else {
+  guard let markerStart = swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: marker) else {
     return nil
   }
   var index = markerStart + marker.utf8.count
-  index = swiftMutagenSkipHorizontalWhitespace(bytes, from: index)
+  index = swiftmutSkipHorizontalWhitespace(bytes, from: index)
   let start = index
-  while index < bytes.count && swiftMutagenIsIdentifierByte(bytes[index]) {
+  while index < bytes.count && swiftmutIsIdentifierByte(bytes[index]) {
     index += 1
   }
   guard index > start else {
@@ -8443,7 +8443,7 @@ private func swiftMutagenDeclarationIdentifier(after marker: String, in line: St
   return String(decoding: bytes[start..<index], as: UTF8.self)
 }
 
-private func swiftMutagenMangledNameContainsIdentifier(
+private func swiftmutMangledNameContainsIdentifier(
   _ functionName: String,
   identifier: String
 ) -> Bool {
@@ -8461,15 +8461,15 @@ private func swiftMutagenMangledNameContainsIdentifier(
   return prefix.count >= 4 && functionName.contains(prefix)
 }
 
-private func swiftMutagenFindNearestPriorImplicitReturnSourceLocation(
+private func swiftmutFindNearestPriorImplicitReturnSourceLocation(
   path: String,
   preferredLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard mutation.sourceOriginal == "return",
         preferredLine > 1,
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -8485,11 +8485,11 @@ private func swiftMutagenFindNearestPriorImplicitReturnSourceLocation(
       return
     }
     let bytes = Array(lineText.utf8)
-    let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-    let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+    let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+    let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
     guard start < end,
-          !swiftMutagenLineLooksLikeImplicitReturnContinuation(bytes: bytes, start: start),
-          swiftMutagenImplicitReturnExpressionIsEligible(
+          !swiftmutLineLooksLikeImplicitReturnContinuation(bytes: bytes, start: start),
+          swiftmutImplicitReturnExpressionIsEligible(
             bytes: bytes,
             start: start,
             mutation: mutation,
@@ -8501,7 +8501,7 @@ private func swiftMutagenFindNearestPriorImplicitReturnSourceLocation(
       line,
       start + 1,
       String(decoding: bytes[start..<end], as: UTF8.self),
-      swiftMutagenImplicitReturnSourceMutation(for: mutation))
+      swiftmutImplicitReturnSourceMutation(for: mutation))
   }
 
   while index < text.endIndex {
@@ -8520,26 +8520,26 @@ private func swiftMutagenFindNearestPriorImplicitReturnSourceLocation(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     nearest.line,
     nearest.column,
     nearest.sourceOriginal,
     nearest.sourceMutated)
 }
 
-private func swiftMutagenFindOrdinalExplicitReturnSourceLocation(
+private func swiftmutFindOrdinalExplicitReturnSourceLocation(
   path: String,
   preferredLine: Int,
   ordinal: Int,
   expectedCount: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
         ordinal > 0,
         ordinal <= expectedCount,
         expectedCount > 1,
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -8557,8 +8557,8 @@ private func swiftMutagenFindOrdinalExplicitReturnSourceLocation(
       return
     }
     let bytes = Array(lineText.utf8)
-    let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-    if swiftMutagenReturnLineIsEligible(bytes: bytes, start: start, mutation: mutation) {
+    let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+    if swiftmutReturnLineIsEligible(bytes: bytes, start: start, mutation: mutation) {
       matches.append((line, start + 1))
     }
   }
@@ -8606,22 +8606,22 @@ private func swiftMutagenFindOrdinalExplicitReturnSourceLocation(
   }
   let match = matches[ordinal - 1]
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     mutation.sourceOriginal,
     mutation.sourceMutated)
 }
 
-private func swiftMutagenFindUniqueImplicitReturnSourceLocation(
+private func swiftmutFindUniqueImplicitReturnSourceLocation(
   path: String,
   preferredLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard mutation.sourceOriginal == "return",
         preferredLine > 0,
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -8638,8 +8638,8 @@ private func swiftMutagenFindUniqueImplicitReturnSourceLocation(
       return
     }
     let bytes = Array(expression.utf8)
-    let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-    guard swiftMutagenImplicitReturnExpressionIsEligible(
+    let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+    guard swiftmutImplicitReturnExpressionIsEligible(
       bytes: bytes,
       start: start,
       mutation: mutation,
@@ -8653,7 +8653,7 @@ private func swiftMutagenFindUniqueImplicitReturnSourceLocation(
       line,
       column + start,
       sourceOriginal,
-      swiftMutagenImplicitReturnSourceMutation(for: mutation)
+      swiftmutImplicitReturnSourceMutation(for: mutation)
     ))
   }
 
@@ -8665,17 +8665,17 @@ private func swiftMutagenFindUniqueImplicitReturnSourceLocation(
     }
 
     let bytes = Array(lineText.utf8)
-    let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-    let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+    let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+    let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
     guard start < end else {
       return
     }
-    if swiftMutagenLineLooksLikeImplicitReturnContinuation(bytes: bytes, start: start) {
+    if swiftmutLineLooksLikeImplicitReturnContinuation(bytes: bytes, start: start) {
       return
     }
 
     if line == preferredLine,
-       let expression = swiftMutagenInlineImplicitReturnExpression(lineText) {
+       let expression = swiftmutInlineImplicitReturnExpression(lineText) {
       recordExpression(expression.text, line: line, column: expression.column)
       return
     }
@@ -8687,7 +8687,7 @@ private func swiftMutagenFindUniqueImplicitReturnSourceLocation(
     if bytes[start] == 125 {
       return
     }
-    guard swiftMutagenLineLooksLikeImplicitReturnExpression(
+    guard swiftmutLineLooksLikeImplicitReturnExpression(
       bytes: bytes,
       start: start,
       end: end,
@@ -8740,14 +8740,14 @@ private func swiftMutagenFindUniqueImplicitReturnSourceLocation(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
 }
 
-private func swiftMutagenInlineImplicitReturnExpression(_ line: String) -> (text: String, column: Int)? {
+private func swiftmutInlineImplicitReturnExpression(_ line: String) -> (text: String, column: Int)? {
   guard let openBrace = line.firstIndex(of: "{"),
         let closeBrace = line.lastIndex(of: "}"),
         openBrace < closeBrace else {
@@ -8756,15 +8756,15 @@ private func swiftMutagenInlineImplicitReturnExpression(_ line: String) -> (text
   let expressionStart = line.index(after: openBrace)
   let text = String(line[expressionStart..<closeBrace])
   let bytes = Array(text.utf8)
-  let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-  let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard start < end else {
     return nil
   }
   return (String(text), line.distance(from: line.startIndex, to: expressionStart) + 1)
 }
 
-private func swiftMutagenLineLooksLikeImplicitReturnExpression(
+private func swiftmutLineLooksLikeImplicitReturnExpression(
   bytes: [UInt8],
   start: Int,
   end: Int,
@@ -8780,7 +8780,7 @@ private func swiftMutagenLineLooksLikeImplicitReturnExpression(
     "self.", "_ = "
   ]
   for prefix in blockedPrefixes {
-    if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: prefix) {
+    if swiftmutASCIIHasPrefix(bytes, start: start, prefix: prefix) {
       return false
     }
   }
@@ -8792,16 +8792,16 @@ private func swiftMutagenLineLooksLikeImplicitReturnExpression(
       return false
     }
   }
-  if allowsInlineBraces && !swiftMutagenLineHasBalancedInlineBraces(bytes: bytes, start: start, end: end) {
+  if allowsInlineBraces && !swiftmutLineHasBalancedInlineBraces(bytes: bytes, start: start, end: end) {
     return false
   }
-  if !allowsInlineBraces && swiftMutagenASCIIContains(bytes, start: start, end: end, pattern: " in ") {
+  if !allowsInlineBraces && swiftmutASCIIContains(bytes, start: start, end: end, pattern: " in ") {
     return false
   }
   return true
 }
 
-private func swiftMutagenLineHasBalancedInlineBraces(bytes: [UInt8], start: Int, end: Int) -> Bool {
+private func swiftmutLineHasBalancedInlineBraces(bytes: [UInt8], start: Int, end: Int) -> Bool {
   var depth = 0
   var sawBrace = false
   for index in start..<end {
@@ -8822,7 +8822,7 @@ private func swiftMutagenLineHasBalancedInlineBraces(bytes: [UInt8], start: Int,
   return !sawBrace || depth == 0
 }
 
-private func swiftMutagenLineLooksLikeImplicitReturnContinuation(bytes: [UInt8], start: Int) -> Bool {
+private func swiftmutLineLooksLikeImplicitReturnContinuation(bytes: [UInt8], start: Int) -> Bool {
   guard start < bytes.count else {
     return false
   }
@@ -8834,23 +8834,23 @@ private func swiftMutagenLineLooksLikeImplicitReturnContinuation(bytes: [UInt8],
   }
 }
 
-private func swiftMutagenImplicitReturnExpressionIsEligible(
+private func swiftmutImplicitReturnExpressionIsEligible(
   bytes: [UInt8],
   start: Int,
-  mutation: SwiftMutagenMutation,
+  mutation: SwiftmutMutation,
   allowsInlineBraces: Bool = false
 ) -> Bool {
   start < bytes.count
-    && swiftMutagenLineLooksLikeImplicitReturnExpression(
+    && swiftmutLineLooksLikeImplicitReturnExpression(
       bytes: bytes,
       start: start,
-      end: swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count),
+      end: swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count),
       allowsInlineBraces: allowsInlineBraces
     )
-    && swiftMutagenReturnValueIsEligible(bytes: bytes, start: start, mutation: mutation)
+    && swiftmutReturnValueIsEligible(bytes: bytes, start: start, mutation: mutation)
 }
 
-private func swiftMutagenImplicitReturnSourceMutation(for mutation: SwiftMutagenMutation) -> String {
+private func swiftmutImplicitReturnSourceMutation(for mutation: SwiftmutMutation) -> String {
   switch mutation.mutatedBuiltinName {
   case "return_false":
     return "false"
@@ -8871,54 +8871,54 @@ private func swiftMutagenImplicitReturnSourceMutation(for mutation: SwiftMutagen
   }
 }
 
-private func swiftMutagenReturnLineIsEligible(
+private func swiftmutReturnLineIsEligible(
   bytes: [UInt8],
   start: Int,
-  mutation: SwiftMutagenMutation
+  mutation: SwiftmutMutation
 ) -> Bool {
-  guard swiftMutagenASCIIHasExactPrefix(bytes, start: start, prefix: "return ") else {
+  guard swiftmutASCIIHasExactPrefix(bytes, start: start, prefix: "return ") else {
     return false
   }
-  let valueStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: start + 7)
-  return swiftMutagenReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation)
+  let valueStart = swiftmutSkipHorizontalWhitespace(bytes, from: start + 7)
+  return swiftmutReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation)
 }
 
-private func swiftMutagenReturnValueIsEligible(
+private func swiftmutReturnValueIsEligible(
   bytes: [UInt8],
   start: Int,
-  mutation: SwiftMutagenMutation
+  mutation: SwiftmutMutation
 ) -> Bool {
   switch mutation.mutatedBuiltinName {
   case "return_false":
-    return !swiftMutagenASCIIHasToken(bytes, start: start, token: "false")
+    return !swiftmutASCIIHasToken(bytes, start: start, token: "false")
   case "return_true":
-    return !swiftMutagenASCIIHasToken(bytes, start: start, token: "true")
+    return !swiftmutASCIIHasToken(bytes, start: start, token: "true")
   case "return_nil":
-    return !swiftMutagenASCIIHasToken(bytes, start: start, token: "nil")
+    return !swiftmutASCIIHasToken(bytes, start: start, token: "nil")
   case "return_zero":
-    return !swiftMutagenASCIIHasNumericZeroToken(bytes, start: start)
+    return !swiftmutASCIIHasNumericZeroToken(bytes, start: start)
   case "return_empty_string":
-    return !swiftMutagenASCIIHasEmptyStringLiteral(bytes, start: start)
+    return !swiftmutASCIIHasEmptyStringLiteral(bytes, start: start)
   case "return_empty_array", "return_empty_set":
-    return !swiftMutagenASCIIHasEmptyArrayLiteral(bytes, start: start)
+    return !swiftmutASCIIHasEmptyArrayLiteral(bytes, start: start)
   case "return_empty_dictionary":
-    return !swiftMutagenASCIIHasEmptyDictionaryLiteral(bytes, start: start)
+    return !swiftmutASCIIHasEmptyDictionaryLiteral(bytes, start: start)
   default:
     return true
   }
 }
 
-private func swiftMutagenASCIIHasEmptyArrayLiteral(_ bytes: [UInt8], start: Int) -> Bool {
+private func swiftmutASCIIHasEmptyArrayLiteral(_ bytes: [UInt8], start: Int) -> Bool {
   guard start >= 0 && start + 2 <= bytes.count,
         bytes[start] == 91,
         bytes[start + 1] == 93 else {
     return false
   }
   let end = start + 2
-  return end == bytes.count || !swiftMutagenIsASCIILetterNumberOrUnderscore(bytes[end])
+  return end == bytes.count || !swiftmutIsASCIILetterNumberOrUnderscore(bytes[end])
 }
 
-private func swiftMutagenASCIIHasEmptyDictionaryLiteral(_ bytes: [UInt8], start: Int) -> Bool {
+private func swiftmutASCIIHasEmptyDictionaryLiteral(_ bytes: [UInt8], start: Int) -> Bool {
   guard start >= 0 && start + 3 <= bytes.count,
         bytes[start] == 91,
         bytes[start + 1] == 58,
@@ -8926,20 +8926,20 @@ private func swiftMutagenASCIIHasEmptyDictionaryLiteral(_ bytes: [UInt8], start:
     return false
   }
   let end = start + 3
-  return end == bytes.count || !swiftMutagenIsASCIILetterNumberOrUnderscore(bytes[end])
+  return end == bytes.count || !swiftmutIsASCIILetterNumberOrUnderscore(bytes[end])
 }
 
-private func swiftMutagenASCIIHasEmptyStringLiteral(_ bytes: [UInt8], start: Int) -> Bool {
+private func swiftmutASCIIHasEmptyStringLiteral(_ bytes: [UInt8], start: Int) -> Bool {
   guard start >= 0 && start + 2 <= bytes.count,
         bytes[start] == 34,
         bytes[start + 1] == 34 else {
     return false
   }
   let end = start + 2
-  return end == bytes.count || !swiftMutagenIsASCIILetterNumberOrUnderscore(bytes[end])
+  return end == bytes.count || !swiftmutIsASCIILetterNumberOrUnderscore(bytes[end])
 }
 
-private func swiftMutagenASCIIHasToken(_ bytes: [UInt8], start: Int, token: String) -> Bool {
+private func swiftmutASCIIHasToken(_ bytes: [UInt8], start: Int, token: String) -> Bool {
   let tokenBytes = Array(token.utf8)
   guard start >= 0 && start + tokenBytes.count <= bytes.count else {
     return false
@@ -8950,10 +8950,10 @@ private func swiftMutagenASCIIHasToken(_ bytes: [UInt8], start: Int, token: Stri
     }
   }
   let end = start + tokenBytes.count
-  return end == bytes.count || !swiftMutagenIsASCIILetterNumberOrUnderscore(bytes[end])
+  return end == bytes.count || !swiftmutIsASCIILetterNumberOrUnderscore(bytes[end])
 }
 
-private func swiftMutagenASCIIHasNumericZeroToken(_ bytes: [UInt8], start: Int) -> Bool {
+private func swiftmutASCIIHasNumericZeroToken(_ bytes: [UInt8], start: Int) -> Bool {
   guard start >= 0 && start < bytes.count && bytes[start] == 48 else {
     return false
   }
@@ -8961,16 +8961,16 @@ private func swiftMutagenASCIIHasNumericZeroToken(_ bytes: [UInt8], start: Int) 
   return end == bytes.count || bytes[end] < 48 || bytes[end] > 57
 }
 
-private func swiftMutagenInstructionSourceLocation(
+private func swiftmutInstructionSourceLocation(
   for instruction: Instruction,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   if let fileNameAndPosition = instruction.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
-    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
+    if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
       return (
-        swiftMutagenTrimPackageRoot(matchedPath, config: config),
+        swiftmutTrimPackageRoot(matchedPath, config: config),
         fileNameAndPosition.line,
         fileNameAndPosition.column,
         mutation.sourceOriginal,
@@ -8979,13 +8979,13 @@ private func swiftMutagenInstructionSourceLocation(
   }
 
   let location = instruction.parentFunction.location.description
-  for path in swiftMutagenSwiftSourcePaths(config: config) {
+  for path in swiftmutSwiftSourcePaths(config: config) {
     guard location.contains(path),
-          let line = swiftMutagenPreferredLine(in: location, path: path) else {
+          let line = swiftmutPreferredLine(in: location, path: path) else {
       continue
     }
     return (
-      swiftMutagenTrimPackageRoot(path, config: config),
+      swiftmutTrimPackageRoot(path, config: config),
       line,
       1,
       mutation.sourceOriginal,
@@ -8994,21 +8994,21 @@ private func swiftMutagenInstructionSourceLocation(
   return nil
 }
 
-private func swiftMutagenVoidCallSourceLocation(
+private func swiftmutVoidCallSourceLocation(
   for apply: ApplyInst,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
-) -> SwiftMutagenVoidCallSourceLocationResult {
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> SwiftmutVoidCallSourceLocationResult {
   if let fileNameAndPosition = apply.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
-    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
+    if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
       let candidate = (
-        swiftMutagenTrimPackageRoot(matchedPath, config: config),
+        swiftmutTrimPackageRoot(matchedPath, config: config),
         fileNameAndPosition.line,
         fileNameAndPosition.column,
         mutation.sourceOriginal,
         mutation.sourceMutated)
-      if swiftMutagenVoidCallSourceLooksLikeStatement(file: candidate.0, line: candidate.1, config: config) {
+      if swiftmutVoidCallSourceLooksLikeStatement(file: candidate.0, line: candidate.1, config: config) {
         return .found(
           file: candidate.0,
           line: candidate.1,
@@ -9017,7 +9017,7 @@ private func swiftMutagenVoidCallSourceLocation(
           sourceMutated: candidate.4
         )
       }
-      if let anchored = swiftMutagenFindUniqueVoidCallSourceLocation(
+      if let anchored = swiftmutFindUniqueVoidCallSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -9034,12 +9034,12 @@ private func swiftMutagenVoidCallSourceLocation(
     }
   }
 
-  if let fallback = swiftMutagenInstructionSourceLocation(
+  if let fallback = swiftmutInstructionSourceLocation(
     for: apply,
     mutation: mutation,
     config: config
   ) {
-    if swiftMutagenVoidCallSourceLooksLikeStatement(file: fallback.file, line: fallback.line, config: config) {
+    if swiftmutVoidCallSourceLooksLikeStatement(file: fallback.file, line: fallback.line, config: config) {
       return .found(
         file: fallback.file,
         line: fallback.line,
@@ -9051,7 +9051,7 @@ private func swiftMutagenVoidCallSourceLocation(
     let fallbackPath = fallback.file.hasPrefix("/") || config.packageRoot.isEmpty
       ? fallback.file
       : config.packageRoot + "/" + fallback.file
-    if let anchored = swiftMutagenFindUniqueVoidCallSourceLocation(
+    if let anchored = swiftmutFindUniqueVoidCallSourceLocation(
       path: fallbackPath,
       preferredLine: fallback.line,
       mutation: mutation,
@@ -9071,14 +9071,14 @@ private func swiftMutagenVoidCallSourceLocation(
   return .missing
 }
 
-private func swiftMutagenFindUniqueVoidCallSourceLocation(
+private func swiftmutFindUniqueVoidCallSourceLocation(
   path: String,
   preferredLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -9093,11 +9093,11 @@ private func swiftMutagenFindUniqueVoidCallSourceLocation(
     guard line >= firstLine,
           line <= lastLine,
           matches.count < 2,
-          swiftMutagenSourceLineLooksLikeVoidCallStatement(lineText) else {
+          swiftmutSourceLineLooksLikeVoidCallStatement(lineText) else {
       return
     }
     let bytes = Array(lineText.utf8)
-    let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+    let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
     matches.append((line, start + 1))
   }
 
@@ -9124,22 +9124,22 @@ private func swiftMutagenFindUniqueVoidCallSourceLocation(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     mutation.sourceOriginal,
     mutation.sourceMutated)
 }
 
-private func swiftMutagenBranchSourceLocation(
+private func swiftmutBranchSourceLocation(
   for branch: CondBranchInst,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   if let fileNameAndPosition = branch.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
-    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
-      if let sourceLocation = swiftMutagenGenericConditionSourceLocation(
+    if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
+      if let sourceLocation = swiftmutGenericConditionSourceLocation(
         path: matchedPath,
         line: fileNameAndPosition.line,
         fallbackColumn: fileNameAndPosition.column,
@@ -9149,7 +9149,7 @@ private func swiftMutagenBranchSourceLocation(
         return sourceLocation
       }
       return (
-        swiftMutagenTrimPackageRoot(matchedPath, config: config),
+        swiftmutTrimPackageRoot(matchedPath, config: config),
         fileNameAndPosition.line,
         fileNameAndPosition.column,
         mutation.sourceOriginal,
@@ -9158,12 +9158,12 @@ private func swiftMutagenBranchSourceLocation(
   }
 
   let location = branch.parentFunction.location.description
-  for path in swiftMutagenSwiftSourcePaths(config: config) {
+  for path in swiftmutSwiftSourcePaths(config: config) {
     guard location.contains(path),
-          let line = swiftMutagenPreferredLine(in: location, path: path) else {
+          let line = swiftmutPreferredLine(in: location, path: path) else {
       continue
     }
-    if let anchored = swiftMutagenFindUniqueExplicitConditionSourceLocation(
+    if let anchored = swiftmutFindUniqueExplicitConditionSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
@@ -9172,7 +9172,7 @@ private func swiftMutagenBranchSourceLocation(
       return anchored
     }
     return (
-      swiftMutagenTrimPackageRoot(path, config: config),
+      swiftmutTrimPackageRoot(path, config: config),
       line,
       1,
       mutation.sourceOriginal,
@@ -9181,14 +9181,14 @@ private func swiftMutagenBranchSourceLocation(
   return nil
 }
 
-private func swiftMutagenFindUniqueExplicitConditionSourceLocation(
+private func swiftmutFindUniqueExplicitConditionSourceLocation(
   path: String,
   preferredLine: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -9203,7 +9203,7 @@ private func swiftMutagenFindUniqueExplicitConditionSourceLocation(
     guard line >= preferredLine,
           line <= preferredLine + 120,
           matches.count < 2,
-          let expression = swiftMutagenGenericConditionExpression(lineText) else {
+          let expression = swiftmutGenericConditionExpression(lineText) else {
       return
     }
     matches.append((line, expression.column, expression.sourceOriginal))
@@ -9249,53 +9249,53 @@ private func swiftMutagenFindUniqueExplicitConditionSourceLocation(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     match.sourceOriginal,
     mutation.sourceMutated)
 }
 
-private func swiftMutagenGenericConditionSourceLocation(
+private func swiftmutGenericConditionSourceLocation(
   path: String,
   line: Int,
   fallbackColumn: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  guard let sourceLine = swiftMutagenAbsoluteSourceLine(path: path, line: line),
-        let expression = swiftMutagenGenericConditionExpression(sourceLine) else {
+  guard let sourceLine = swiftmutAbsoluteSourceLine(path: path, line: line),
+        let expression = swiftmutGenericConditionExpression(sourceLine) else {
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     line,
     expression.column > 0 ? expression.column : fallbackColumn,
     expression.sourceOriginal,
     mutation.sourceMutated)
 }
 
-private func swiftMutagenSourceLocation(
+private func swiftmutSourceLocation(
   for instruction: Instruction,
   function: Function,
   moduleName: String,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   if let fileNameAndPosition = instruction.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
-    guard let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) else {
+    guard let matchedPath = swiftmutIncludedSourcePath(path, config: config) else {
       return nil
     }
     return (
-      swiftMutagenTrimPackageRoot(matchedPath, config: config),
+      swiftmutTrimPackageRoot(matchedPath, config: config),
       fileNameAndPosition.line,
       fileNameAndPosition.column,
       "",
       "")
   }
 
-  if let located = swiftMutagenFindSourceOperator(
+  if let located = swiftmutFindSourceOperator(
     moduleName: moduleName,
     functionLocation: function.location.description,
     mutation: mutation,
@@ -9303,7 +9303,7 @@ private func swiftMutagenSourceLocation(
     return located
   }
 
-  if let located = swiftMutagenFindDescribedSourceOperator(
+  if let located = swiftmutFindDescribedSourceOperator(
     moduleName: moduleName,
     functionLocation: function.location.description,
     locationDescription: instruction.location.description,
@@ -9313,10 +9313,10 @@ private func swiftMutagenSourceLocation(
   }
 
   if let comparison = instruction as? BuiltinInst,
-     swiftMutagenIsComparisonBuiltin(comparison),
-     let ordinal = swiftMutagenComparisonOrdinalAndCount(for: comparison, in: function),
+     swiftmutIsComparisonBuiltin(comparison),
+     let ordinal = swiftmutComparisonOrdinalAndCount(for: comparison, in: function),
      ordinal.count <= 12 {
-    return swiftMutagenFindOrdinalSourceOperator(
+    return swiftmutFindOrdinalSourceOperator(
       moduleName: moduleName,
       functionLocation: function.location.description,
       ordinal: ordinal.ordinal,
@@ -9328,21 +9328,21 @@ private func swiftMutagenSourceLocation(
   return nil
 }
 
-private func swiftMutagenGenericConditionSourceIsExplicit(
+private func swiftmutGenericConditionSourceIsExplicit(
   file: String,
   line: Int,
-  config: SwiftMutagenConfig
+  config: SwiftmutConfig
 ) -> Bool {
-  guard let sourceLine = swiftMutagenSourceLine(file: file, line: line, config: config) else {
+  guard let sourceLine = swiftmutSourceLine(file: file, line: line, config: config) else {
     return true
   }
-  return swiftMutagenSourceLineLooksLikeExplicitCondition(sourceLine)
+  return swiftmutSourceLineLooksLikeExplicitCondition(sourceLine)
 }
 
-private func swiftMutagenSourceLine(
+private func swiftmutSourceLine(
   file: String,
   line: Int,
-  config: SwiftMutagenConfig
+  config: SwiftmutConfig
 ) -> String? {
   guard line > 0 else {
     return nil
@@ -9354,8 +9354,8 @@ private func swiftMutagenSourceLine(
   } else {
     path = config.packageRoot + "/" + file
   }
-  guard let matchedPath = swiftMutagenIncludedSourcePath(path, config: config),
-        let text = swiftMutagenRead(matchedPath) else {
+  guard let matchedPath = swiftmutIncludedSourcePath(path, config: config),
+        let text = swiftmutRead(matchedPath) else {
     return nil
   }
 
@@ -9379,9 +9379,9 @@ private func swiftMutagenSourceLine(
   return nil
 }
 
-private func swiftMutagenAbsoluteSourceLine(path: String, line: Int) -> String? {
+private func swiftmutAbsoluteSourceLine(path: String, line: Int) -> String? {
   guard line > 0,
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -9405,45 +9405,45 @@ private func swiftMutagenAbsoluteSourceLine(path: String, line: Int) -> String? 
   return nil
 }
 
-private func swiftMutagenGenericConditionExpression(
+private func swiftmutGenericConditionExpression(
   _ line: String
 ) -> (column: Int, sourceOriginal: String)? {
   let bytes = Array(line.utf8)
-  let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
-  var start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  let lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  var start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
   guard start < lineEnd else {
     return nil
   }
 
   if bytes[start] == 125 {
-    start = swiftMutagenSkipHorizontalWhitespace(bytes, from: start + 1)
-    if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "else ") {
-      start = swiftMutagenSkipHorizontalWhitespace(bytes, from: start + 5)
+    start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 1)
+    if swiftmutASCIIHasPrefix(bytes, start: start, prefix: "else ") {
+      start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 5)
     }
   }
 
-  guard !swiftMutagenSourceLineLooksLikeOptionalBindingCondition(bytes: bytes, start: start),
-        !swiftMutagenTopLevelASCIIContains(bytes, start: start, end: lineEnd, pattern: ", let "),
-        !swiftMutagenTopLevelASCIIContains(bytes, start: start, end: lineEnd, pattern: ", var ") else {
+  guard !swiftmutSourceLineLooksLikeOptionalBindingCondition(bytes: bytes, start: start),
+        !swiftmutTopLevelASCIIContains(bytes, start: start, end: lineEnd, pattern: ", let "),
+        !swiftmutTopLevelASCIIContains(bytes, start: start, end: lineEnd, pattern: ", var ") else {
     return nil
   }
 
   let expressionRange: (start: Int, end: Int)?
-  if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "if ") {
-    expressionRange = swiftMutagenControlConditionRange(bytes: bytes, start: start + 3, end: lineEnd)
-  } else if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "if(") {
-    expressionRange = swiftMutagenParenthesizedControlConditionRange(bytes: bytes, open: start + 2, end: lineEnd)
-  } else if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "guard ") {
-    expressionRange = swiftMutagenGuardConditionRange(bytes: bytes, start: start + 6, end: lineEnd)
-  } else if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "guard(") {
-    expressionRange = swiftMutagenParenthesizedControlConditionRange(bytes: bytes, open: start + 5, end: lineEnd)
-  } else if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "while ") {
-    expressionRange = swiftMutagenControlConditionRange(bytes: bytes, start: start + 6, end: lineEnd)
-  } else if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "while(") {
-    expressionRange = swiftMutagenParenthesizedControlConditionRange(bytes: bytes, open: start + 5, end: lineEnd)
-  } else if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "for ")
-      || swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "for(") {
-    expressionRange = swiftMutagenForWhereConditionRange(bytes: bytes, start: start, end: lineEnd)
+  if swiftmutASCIIHasPrefix(bytes, start: start, prefix: "if ") {
+    expressionRange = swiftmutControlConditionRange(bytes: bytes, start: start + 3, end: lineEnd)
+  } else if swiftmutASCIIHasPrefix(bytes, start: start, prefix: "if(") {
+    expressionRange = swiftmutParenthesizedControlConditionRange(bytes: bytes, open: start + 2, end: lineEnd)
+  } else if swiftmutASCIIHasPrefix(bytes, start: start, prefix: "guard ") {
+    expressionRange = swiftmutGuardConditionRange(bytes: bytes, start: start + 6, end: lineEnd)
+  } else if swiftmutASCIIHasPrefix(bytes, start: start, prefix: "guard(") {
+    expressionRange = swiftmutParenthesizedControlConditionRange(bytes: bytes, open: start + 5, end: lineEnd)
+  } else if swiftmutASCIIHasPrefix(bytes, start: start, prefix: "while ") {
+    expressionRange = swiftmutControlConditionRange(bytes: bytes, start: start + 6, end: lineEnd)
+  } else if swiftmutASCIIHasPrefix(bytes, start: start, prefix: "while(") {
+    expressionRange = swiftmutParenthesizedControlConditionRange(bytes: bytes, open: start + 5, end: lineEnd)
+  } else if swiftmutASCIIHasPrefix(bytes, start: start, prefix: "for ")
+      || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "for(") {
+    expressionRange = swiftmutForWhereConditionRange(bytes: bytes, start: start, end: lineEnd)
   } else {
     expressionRange = nil
   }
@@ -9451,8 +9451,8 @@ private func swiftMutagenGenericConditionExpression(
   guard var range = expressionRange else {
     return nil
   }
-  range.start = swiftMutagenSkipHorizontalWhitespace(bytes, from: range.start)
-  range.end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: range.end)
+  range.start = swiftmutSkipHorizontalWhitespace(bytes, from: range.start)
+  range.end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: range.end)
   guard range.start < range.end else {
     return nil
   }
@@ -9461,47 +9461,47 @@ private func swiftMutagenGenericConditionExpression(
     String(decoding: bytes[range.start..<range.end], as: UTF8.self))
 }
 
-private func swiftMutagenControlConditionRange(
+private func swiftmutControlConditionRange(
   bytes: [UInt8],
   start: Int,
   end: Int
 ) -> (start: Int, end: Int)? {
-  let conditionEnd = swiftMutagenTopLevelByteIndex(bytes, start: start, end: end, byte: 123) ?? end
+  let conditionEnd = swiftmutTopLevelByteIndex(bytes, start: start, end: end, byte: 123) ?? end
   return (start, conditionEnd)
 }
 
-private func swiftMutagenGuardConditionRange(
+private func swiftmutGuardConditionRange(
   bytes: [UInt8],
   start: Int,
   end: Int
 ) -> (start: Int, end: Int)? {
-  let elseIndex = swiftMutagenTopLevelASCIIIndex(bytes, start: start, end: end, pattern: " else ")
-  let braceIndex = swiftMutagenTopLevelByteIndex(bytes, start: start, end: end, byte: 123)
+  let elseIndex = swiftmutTopLevelASCIIIndex(bytes, start: start, end: end, pattern: " else ")
+  let braceIndex = swiftmutTopLevelByteIndex(bytes, start: start, end: end, byte: 123)
   let conditionEnd = elseIndex ?? braceIndex ?? end
   return (start, conditionEnd)
 }
 
-private func swiftMutagenForWhereConditionRange(
+private func swiftmutForWhereConditionRange(
   bytes: [UInt8],
   start: Int,
   end: Int
 ) -> (start: Int, end: Int)? {
-  guard let whereIndex = swiftMutagenTopLevelASCIIIndex(bytes, start: start, end: end, pattern: " where ") else {
+  guard let whereIndex = swiftmutTopLevelASCIIIndex(bytes, start: start, end: end, pattern: " where ") else {
     return nil
   }
   let valueStart = whereIndex + 7
-  let valueEnd = swiftMutagenTopLevelByteIndex(bytes, start: valueStart, end: end, byte: 123) ?? end
+  let valueEnd = swiftmutTopLevelByteIndex(bytes, start: valueStart, end: end, byte: 123) ?? end
   return (valueStart, valueEnd)
 }
 
-private func swiftMutagenParenthesizedControlConditionRange(
+private func swiftmutParenthesizedControlConditionRange(
   bytes: [UInt8],
   open: Int,
   end: Int
 ) -> (start: Int, end: Int)? {
   guard open < end,
         bytes[open] == 40,
-        let close = swiftMutagenBalancedExpressionEnd(
+        let close = swiftmutBalancedExpressionEnd(
           in: bytes,
           openIndex: open,
           close: 41,
@@ -9512,16 +9512,16 @@ private func swiftMutagenParenthesizedControlConditionRange(
   return (open + 1, close - 1)
 }
 
-private func swiftMutagenTopLevelASCIIContains(
+private func swiftmutTopLevelASCIIContains(
   _ bytes: [UInt8],
   start: Int,
   end: Int,
   pattern: String
 ) -> Bool {
-  swiftMutagenTopLevelASCIIIndex(bytes, start: start, end: end, pattern: pattern) != nil
+  swiftmutTopLevelASCIIIndex(bytes, start: start, end: end, pattern: pattern) != nil
 }
 
-private func swiftMutagenTopLevelASCIIIndex(
+private func swiftmutTopLevelASCIIIndex(
   _ bytes: [UInt8],
   start: Int,
   end: Int,
@@ -9533,7 +9533,7 @@ private func swiftMutagenTopLevelASCIIIndex(
         patternBytes.count <= end - start else {
     return nil
   }
-  return swiftMutagenFirstTopLevelIndex(bytes, start: start, end: end) { index in
+  return swiftmutFirstTopLevelIndex(bytes, start: start, end: end) { index in
     guard index + patternBytes.count <= end else {
       return false
     }
@@ -9544,18 +9544,18 @@ private func swiftMutagenTopLevelASCIIIndex(
   }
 }
 
-private func swiftMutagenTopLevelByteIndex(
+private func swiftmutTopLevelByteIndex(
   _ bytes: [UInt8],
   start: Int,
   end: Int,
   byte: UInt8
 ) -> Int? {
-  swiftMutagenFirstTopLevelIndex(bytes, start: start, end: end) { index in
+  swiftmutFirstTopLevelIndex(bytes, start: start, end: end) { index in
     bytes[index] == byte
   }
 }
 
-private func swiftMutagenFirstTopLevelIndex(
+private func swiftmutFirstTopLevelIndex(
   _ bytes: [UInt8],
   start: Int,
   end: Int,
@@ -9609,69 +9609,69 @@ private func swiftMutagenFirstTopLevelIndex(
   return nil
 }
 
-private func swiftMutagenSourceLineLooksLikeExplicitCondition(_ line: String) -> Bool {
+private func swiftmutSourceLineLooksLikeExplicitCondition(_ line: String) -> Bool {
   let bytes = Array(line.utf8)
-  var start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  var start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
   guard start < bytes.count else {
     return false
   }
 
   if bytes[start] == 125 {
-    start = swiftMutagenSkipHorizontalWhitespace(bytes, from: start + 1)
-    if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "else ") {
-      start = swiftMutagenSkipHorizontalWhitespace(bytes, from: start + 5)
+    start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 1)
+    if swiftmutASCIIHasPrefix(bytes, start: start, prefix: "else ") {
+      start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 5)
     }
   }
 
-  if swiftMutagenSourceLineLooksLikeOptionalBindingCondition(bytes: bytes, start: start) {
+  if swiftmutSourceLineLooksLikeOptionalBindingCondition(bytes: bytes, start: start) {
     return false
   }
 
-  return swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "if ")
-    || swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "if(")
-    || swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "guard ")
-    || swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "guard(")
-    || swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "while ")
-    || swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "while(")
-    || swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "for ")
-    || swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "for(")
+  return swiftmutASCIIHasPrefix(bytes, start: start, prefix: "if ")
+    || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "if(")
+    || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "guard ")
+    || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "guard(")
+    || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "while ")
+    || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "while(")
+    || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "for ")
+    || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "for(")
 }
 
-private func swiftMutagenSourceLineLooksLikeOptionalBindingCondition(bytes: [UInt8], start: Int) -> Bool {
-  swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "if let ")
-    || swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "if var ")
-    || swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "guard let ")
-    || swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: "guard var ")
+private func swiftmutSourceLineLooksLikeOptionalBindingCondition(bytes: [UInt8], start: Int) -> Bool {
+  swiftmutASCIIHasPrefix(bytes, start: start, prefix: "if let ")
+    || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "if var ")
+    || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "guard let ")
+    || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "guard var ")
 }
 
-private func swiftMutagenReturnSourceLooksLikeStatement(
+private func swiftmutReturnSourceLooksLikeStatement(
   file: String,
   line: Int,
-  config: SwiftMutagenConfig
+  config: SwiftmutConfig
 ) -> Bool {
-  guard let sourceLine = swiftMutagenSourceLine(file: file, line: line, config: config) else {
+  guard let sourceLine = swiftmutSourceLine(file: file, line: line, config: config) else {
     return true
   }
   let bytes = Array(sourceLine.utf8)
-  let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-  return swiftMutagenASCIIHasExactPrefix(bytes, start: start, prefix: "return ")
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  return swiftmutASCIIHasExactPrefix(bytes, start: start, prefix: "return ")
 }
 
-private func swiftMutagenVoidCallSourceLooksLikeStatement(
+private func swiftmutVoidCallSourceLooksLikeStatement(
   file: String,
   line: Int,
-  config: SwiftMutagenConfig
+  config: SwiftmutConfig
 ) -> Bool {
-  guard let sourceLine = swiftMutagenSourceLine(file: file, line: line, config: config) else {
+  guard let sourceLine = swiftmutSourceLine(file: file, line: line, config: config) else {
     return true
   }
-  return swiftMutagenSourceLineLooksLikeVoidCallStatement(sourceLine)
+  return swiftmutSourceLineLooksLikeVoidCallStatement(sourceLine)
 }
 
-private func swiftMutagenSourceLineLooksLikeVoidCallStatement(_ line: String) -> Bool {
+private func swiftmutSourceLineLooksLikeVoidCallStatement(_ line: String) -> Bool {
   let bytes = Array(line.utf8)
-  let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-  let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard start < end else {
     return false
   }
@@ -9683,32 +9683,32 @@ private func swiftMutagenSourceLineLooksLikeVoidCallStatement(_ line: String) ->
     "static ", "func ", "init(", "deinit", ".", "}", ")", "]"
   ]
   for prefix in nonStatementPrefixes {
-    if swiftMutagenASCIIHasPrefix(bytes, start: start, prefix: prefix) {
+    if swiftmutASCIIHasPrefix(bytes, start: start, prefix: prefix) {
       return false
     }
   }
-  if swiftMutagenASCIIContains(bytes, start: start, end: end, pattern: " = ") {
+  if swiftmutASCIIContains(bytes, start: start, end: end, pattern: " = ") {
     return false
   }
-  if swiftMutagenSourceLineLooksLikeArgumentLabel(bytes: bytes, start: start, end: end) {
+  if swiftmutSourceLineLooksLikeArgumentLabel(bytes: bytes, start: start, end: end) {
     return false
   }
-  if swiftMutagenASCIIContains(bytes, start: start, end: end, pattern: ":")
-      && !swiftMutagenASCIIContains(bytes, start: start, end: end, pattern: "(") {
+  if swiftmutASCIIContains(bytes, start: start, end: end, pattern: ":")
+      && !swiftmutASCIIContains(bytes, start: start, end: end, pattern: "(") {
     return false
   }
-  return swiftMutagenASCIIContains(bytes, start: start, end: end, pattern: "(")
+  return swiftmutASCIIContains(bytes, start: start, end: end, pattern: "(")
 }
 
-private func swiftMutagenTrimTrailingHorizontalWhitespace(_ bytes: [UInt8], end: Int) -> Int {
+private func swiftmutTrimTrailingHorizontalWhitespace(_ bytes: [UInt8], end: Int) -> Int {
   var index = end
-  while index > 0 && swiftMutagenIsHorizontalWhitespace(bytes[index - 1]) {
+  while index > 0 && swiftmutIsHorizontalWhitespace(bytes[index - 1]) {
     index -= 1
   }
   return index
 }
 
-private func swiftMutagenSourceLineLooksLikeArgumentLabel(bytes: [UInt8], start: Int, end: Int) -> Bool {
+private func swiftmutSourceLineLooksLikeArgumentLabel(bytes: [UInt8], start: Int, end: Int) -> Bool {
   var colonIndex: Int?
   var index = start
   while index < end {
@@ -9723,33 +9723,33 @@ private func swiftMutagenSourceLineLooksLikeArgumentLabel(bytes: [UInt8], start:
   }
 
   var labelEnd = colonIndex
-  while labelEnd > start && swiftMutagenIsHorizontalWhitespace(bytes[labelEnd - 1]) {
+  while labelEnd > start && swiftmutIsHorizontalWhitespace(bytes[labelEnd - 1]) {
     labelEnd -= 1
   }
   guard start < labelEnd else {
     return false
   }
   for labelIndex in start..<labelEnd {
-    guard swiftMutagenIsASCIILetterNumberOrUnderscore(bytes[labelIndex]) else {
+    guard swiftmutIsASCIILetterNumberOrUnderscore(bytes[labelIndex]) else {
       return false
     }
   }
   return true
 }
 
-private func swiftMutagenSkipHorizontalWhitespace(_ bytes: [UInt8], from start: Int) -> Int {
+private func swiftmutSkipHorizontalWhitespace(_ bytes: [UInt8], from start: Int) -> Int {
   var index = start
-  while index < bytes.count && swiftMutagenIsHorizontalWhitespace(bytes[index]) {
+  while index < bytes.count && swiftmutIsHorizontalWhitespace(bytes[index]) {
     index += 1
   }
   return index
 }
 
-private func swiftMutagenASCIIContains(_ bytes: [UInt8], start: Int, end: Int, pattern: String) -> Bool {
-  swiftMutagenASCIIIndex(bytes, start: start, end: end, pattern: pattern) != nil
+private func swiftmutASCIIContains(_ bytes: [UInt8], start: Int, end: Int, pattern: String) -> Bool {
+  swiftmutASCIIIndex(bytes, start: start, end: end, pattern: pattern) != nil
 }
 
-private func swiftMutagenASCIIIndex(_ bytes: [UInt8], start: Int, end: Int, pattern: String) -> Int? {
+private func swiftmutASCIIIndex(_ bytes: [UInt8], start: Int, end: Int, pattern: String) -> Int? {
   let patternBytes = Array(pattern.utf8)
   guard !patternBytes.isEmpty,
         start >= 0,
@@ -9776,7 +9776,7 @@ private func swiftMutagenASCIIIndex(_ bytes: [UInt8], start: Int, end: Int, patt
   return nil
 }
 
-private func swiftMutagenASCIIHasExactPrefix(_ bytes: [UInt8], start: Int, prefix: String) -> Bool {
+private func swiftmutASCIIHasExactPrefix(_ bytes: [UInt8], start: Int, prefix: String) -> Bool {
   let prefixBytes = Array(prefix.utf8)
   guard start >= 0 && start + prefixBytes.count <= bytes.count else {
     return false
@@ -9789,27 +9789,27 @@ private func swiftMutagenASCIIHasExactPrefix(_ bytes: [UInt8], start: Int, prefi
   return true
 }
 
-private func swiftMutagenASCIIHasPrefix(_ bytes: [UInt8], start: Int, prefix: String) -> Bool {
+private func swiftmutASCIIHasPrefix(_ bytes: [UInt8], start: Int, prefix: String) -> Bool {
   let prefixBytes = Array(prefix.utf8)
   guard start >= 0 && start + prefixBytes.count <= bytes.count else {
     return false
   }
   for offset in 0..<prefixBytes.count {
-    if swiftMutagenASCIILowercase(bytes[start + offset]) != swiftMutagenASCIILowercase(prefixBytes[offset]) {
+    if swiftmutASCIILowercase(bytes[start + offset]) != swiftmutASCIILowercase(prefixBytes[offset]) {
       return false
     }
   }
   return true
 }
 
-private func swiftMutagenASCIILowercase(_ byte: UInt8) -> UInt8 {
+private func swiftmutASCIILowercase(_ byte: UInt8) -> UInt8 {
   if byte >= 65 && byte <= 90 {
     return byte + 32
   }
   return byte
 }
 
-private func swiftMutagenIsASCIIIdentifierStart(_ byte: UInt8) -> Bool {
+private func swiftmutIsASCIIIdentifierStart(_ byte: UInt8) -> Bool {
   if byte >= 65 && byte <= 90 {
     return true
   }
@@ -9819,7 +9819,7 @@ private func swiftMutagenIsASCIIIdentifierStart(_ byte: UInt8) -> Bool {
   return byte == 95
 }
 
-private func swiftMutagenIsASCIILetterNumberOrUnderscore(_ byte: UInt8) -> Bool {
+private func swiftmutIsASCIILetterNumberOrUnderscore(_ byte: UInt8) -> Bool {
   if byte >= 48 && byte <= 57 {
     return true
   }
@@ -9832,14 +9832,14 @@ private func swiftMutagenIsASCIILetterNumberOrUnderscore(_ byte: UInt8) -> Bool 
   return byte == 95
 }
 
-private func swiftMutagenExclusionReason(
+private func swiftmutExclusionReason(
   function: Function,
-  config: SwiftMutagenConfig
+  config: SwiftmutConfig
 ) -> String? {
-  if swiftMutagenIsGeneratedInvalidLocationFunction(function) {
+  if swiftmutIsGeneratedInvalidLocationFunction(function) {
     return "generatedInvalidLocation"
   }
-  if swiftMutagenIsGeneratedSpecializationFunctionName(function.name.string) {
+  if swiftmutIsGeneratedSpecializationFunctionName(function.name.string) {
     return "generatedSpecialization"
   }
   let location = function.location.description
@@ -9851,7 +9851,7 @@ private func swiftMutagenExclusionReason(
   return nil
 }
 
-private func swiftMutagenIsGeneratedInvalidLocationFunction(_ function: Function) -> Bool {
+private func swiftmutIsGeneratedInvalidLocationFunction(_ function: Function) -> Bool {
   let location = function.location.description
   guard location.contains("<invalid loc>") else {
     return false
@@ -9863,27 +9863,27 @@ private func swiftMutagenIsGeneratedInvalidLocationFunction(_ function: Function
     || name.hasSuffix("TW")
 }
 
-private func swiftMutagenIsGeneratedSpecializationFunctionName(_ name: String) -> Bool {
+private func swiftmutIsGeneratedSpecializationFunctionName(_ name: String) -> Bool {
   name.contains("Tf4")
 }
 
-private func swiftMutagenFindSourceOperator(
+private func swiftmutFindSourceOperator(
   moduleName: String,
   functionLocation: String,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard !config.packageRoot.isEmpty else {
     return nil
   }
 
-  let displayRules = swiftMutagenSourceMutationDisplayRules(for: mutation, config: config)
+  let displayRules = swiftmutSourceMutationDisplayRules(for: mutation, config: config)
 
   let preferredPrefix = config.packageRoot + "/Sources/" + moduleName + "/"
-  let locatedSourcePaths = swiftMutagenSwiftSourcePaths(config: config).compactMap { path
+  let locatedSourcePaths = swiftmutSwiftSourcePaths(config: config).compactMap { path
     -> (path: String, preferredLine: Int)? in
     guard functionLocation.contains(path),
-          let preferredLine = swiftMutagenPreferredLine(in: functionLocation, path: path) else {
+          let preferredLine = swiftmutPreferredLine(in: functionLocation, path: path) else {
       return nil
     }
     return (path, preferredLine)
@@ -9897,12 +9897,12 @@ private func swiftMutagenFindSourceOperator(
   var fallback: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
 
   for (path, preferredLine) in locatedSourcePaths {
-    guard let text = swiftMutagenRead(path) else {
+    guard let text = swiftmutRead(path) else {
       continue
     }
     var bestForPath: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
     for rule in displayRules {
-      if let position = swiftMutagenFindOperator(
+      if let position = swiftmutFindOperator(
         rule.sourceOriginal,
         mutatedOperator: rule.sourceMutated,
         in: text,
@@ -9913,13 +9913,13 @@ private func swiftMutagenFindSourceOperator(
           ? position.sourceMutated
           : rule.sourceMutatedOverride
         let result = (
-          swiftMutagenTrimPackageRoot(path, config: config),
+          swiftmutTrimPackageRoot(path, config: config),
           position.line,
           position.column,
           position.sourceOriginal,
           sourceMutated)
         if let existing = bestForPath,
-           swiftMutagenLineDistance(existing.line, preferredLine) <= swiftMutagenLineDistance(result.1, preferredLine) {
+           swiftmutLineDistance(existing.line, preferredLine) <= swiftmutLineDistance(result.1, preferredLine) {
           continue
         }
         bestForPath = result
@@ -9935,7 +9935,7 @@ private func swiftMutagenFindSourceOperator(
       continue
     }
 
-    if let result = swiftMutagenFindUniqueSourceOperatorInFunctionBody(
+    if let result = swiftmutFindUniqueSourceOperatorInFunctionBody(
       path: path,
       preferredLine: preferredLine,
       displayRules: displayRules,
@@ -9953,14 +9953,14 @@ private func swiftMutagenFindSourceOperator(
   return fallback
 }
 
-private func swiftMutagenFindUniqueSourceOperatorInFunctionBody(
+private func swiftmutFindUniqueSourceOperatorInFunctionBody(
   path: String,
   preferredLine: Int,
-  displayRules: [SwiftMutagenSourceMutationDisplayRule],
-  config: SwiftMutagenConfig
+  displayRules: [SwiftmutSourceMutationDisplayRule],
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -9977,7 +9977,7 @@ private func swiftMutagenFindUniqueSourceOperatorInFunctionBody(
       return
     }
     for rule in displayRules {
-      guard let position = swiftMutagenFindOperator(
+      guard let position = swiftmutFindOperator(
         rule.sourceOriginal,
         mutatedOperator: rule.sourceMutated,
         in: lineText,
@@ -10035,31 +10035,31 @@ private func swiftMutagenFindUniqueSourceOperatorInFunctionBody(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
 }
 
-private func swiftMutagenFindDescribedSourceOperator(
+private func swiftmutFindDescribedSourceOperator(
   moduleName: String,
   functionLocation: String,
   locationDescription: String,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  guard let snippet = swiftMutagenQuotedSourceSnippetPrefix(locationDescription),
-        let needle = swiftMutagenDescribedSourceOperatorNeedle(snippet) else {
+  guard let snippet = swiftmutQuotedSourceSnippetPrefix(locationDescription),
+        let needle = swiftmutDescribedSourceOperatorNeedle(snippet) else {
     return nil
   }
 
-  let displayRules = swiftMutagenSourceMutationDisplayRules(for: mutation, config: config)
+  let displayRules = swiftmutSourceMutationDisplayRules(for: mutation, config: config)
   let preferredPrefix = config.packageRoot + "/Sources/" + moduleName + "/"
-  let locatedSourcePaths = swiftMutagenSwiftSourcePaths(config: config).compactMap { path
+  let locatedSourcePaths = swiftmutSwiftSourcePaths(config: config).compactMap { path
     -> (path: String, preferredLine: Int)? in
     guard functionLocation.contains(path),
-          let preferredLine = swiftMutagenPreferredLine(in: functionLocation, path: path) else {
+          let preferredLine = swiftmutPreferredLine(in: functionLocation, path: path) else {
       return nil
     }
     return (path, preferredLine)
@@ -10072,7 +10072,7 @@ private func swiftMutagenFindDescribedSourceOperator(
 
   var fallback: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
   for (path, preferredLine) in locatedSourcePaths {
-    guard let result = swiftMutagenFindDescribedSourceOperatorInFunctionBody(
+    guard let result = swiftmutFindDescribedSourceOperatorInFunctionBody(
       path: path,
       preferredLine: preferredLine,
       displayRules: displayRules,
@@ -10091,22 +10091,22 @@ private func swiftMutagenFindDescribedSourceOperator(
   return fallback
 }
 
-private func swiftMutagenDescribedSourceOperatorNeedle(_ snippet: String) -> String? {
+private func swiftmutDescribedSourceOperatorNeedle(_ snippet: String) -> String? {
   let bytes = Array(snippet.utf8)
-  var start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-  var end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  var start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  var end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard start < end else {
     return nil
   }
   if start + 1 < end
       && (bytes[start] == 38 || bytes[start] == 124)
       && bytes[start + 1] == bytes[start] {
-    start = swiftMutagenSkipHorizontalWhitespace(bytes, from: start + 2)
+    start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 2)
   }
   while end > start {
     let byte = bytes[end - 1]
     if byte == 44 || byte == 123 || byte == 125 {
-      end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: end - 1)
+      end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: end - 1)
       continue
     }
     break
@@ -10115,32 +10115,32 @@ private func swiftMutagenDescribedSourceOperatorNeedle(_ snippet: String) -> Str
     return nil
   }
   let result = String(decoding: bytes[start..<end], as: UTF8.self)
-  return swiftMutagenSourceOperatorNeedleContainsOperator(result) ? result : nil
+  return swiftmutSourceOperatorNeedleContainsOperator(result) ? result : nil
 }
 
-private func swiftMutagenSourceOperatorNeedleContainsOperator(_ needle: String) -> Bool {
+private func swiftmutSourceOperatorNeedleContainsOperator(_ needle: String) -> Bool {
   let operators = ["!=", "==", ">=", "<=", ">", "<"]
   let bytes = Array(needle.utf8)
-  let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
-  let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard start < end else {
     return false
   }
-  for operatorText in operators where swiftMutagenASCIIContains(bytes, start: start, end: end, pattern: operatorText) {
+  for operatorText in operators where swiftmutASCIIContains(bytes, start: start, end: end, pattern: operatorText) {
     return true
   }
   return false
 }
 
-private func swiftMutagenFindDescribedSourceOperatorInFunctionBody(
+private func swiftmutFindDescribedSourceOperatorInFunctionBody(
   path: String,
   preferredLine: Int,
-  displayRules: [SwiftMutagenSourceMutationDisplayRule],
+  displayRules: [SwiftmutSourceMutationDisplayRule],
   needle: String,
-  config: SwiftMutagenConfig
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -10161,7 +10161,7 @@ private func swiftMutagenFindDescribedSourceOperatorInFunctionBody(
     var lineMatches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
     for rule in displayRules {
       let sourceMutatedOverride = rule.sourceMutatedOverride
-      for position in swiftMutagenFindOperatorMatches(
+      for position in swiftmutFindOperatorMatches(
         rule.sourceOriginal,
         mutatedOperator: rule.sourceMutated,
         in: lineText
@@ -10229,18 +10229,18 @@ private func swiftMutagenFindDescribedSourceOperatorInFunctionBody(
     return nil
   }
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
 }
 
-private func swiftMutagenComparisonOrdinalAndCount(
+private func swiftmutComparisonOrdinalAndCount(
   for comparison: BuiltinInst,
   in function: Function
 ) -> (ordinal: Int, count: Int)? {
-  guard let targetID = swiftMutagenComparisonBuiltinIDName(comparison) else {
+  guard let targetID = swiftmutComparisonBuiltinIDName(comparison) else {
     return nil
   }
 
@@ -10249,7 +10249,7 @@ private func swiftMutagenComparisonOrdinalAndCount(
   for block in function.blocks {
     for instruction in block.instructions {
       guard let candidate = instruction as? BuiltinInst,
-            swiftMutagenComparisonBuiltinIDName(candidate) == targetID else {
+            swiftmutComparisonBuiltinIDName(candidate) == targetID else {
         continue
       }
       count += 1
@@ -10264,24 +10264,24 @@ private func swiftMutagenComparisonOrdinalAndCount(
   return (ordinal, count)
 }
 
-private func swiftMutagenFindOrdinalSourceOperator(
+private func swiftmutFindOrdinalSourceOperator(
   moduleName: String,
   functionLocation: String,
   ordinal: Int,
   expectedCount: Int,
-  mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard ordinal > 0, expectedCount > 0 else {
     return nil
   }
 
-  let displayRules = swiftMutagenSourceMutationDisplayRules(for: mutation, config: config)
+  let displayRules = swiftmutSourceMutationDisplayRules(for: mutation, config: config)
   let preferredPrefix = config.packageRoot + "/Sources/" + moduleName + "/"
-  let locatedSourcePaths = swiftMutagenSwiftSourcePaths(config: config).compactMap { path
+  let locatedSourcePaths = swiftmutSwiftSourcePaths(config: config).compactMap { path
     -> (path: String, preferredLine: Int)? in
     guard functionLocation.contains(path),
-          let preferredLine = swiftMutagenPreferredLine(in: functionLocation, path: path) else {
+          let preferredLine = swiftmutPreferredLine(in: functionLocation, path: path) else {
       return nil
     }
     return (path, preferredLine)
@@ -10294,7 +10294,7 @@ private func swiftMutagenFindOrdinalSourceOperator(
 
   var fallback: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
   for (path, preferredLine) in locatedSourcePaths {
-    guard let result = swiftMutagenFindOrdinalSourceOperatorInFunctionBody(
+    guard let result = swiftmutFindOrdinalSourceOperatorInFunctionBody(
       path: path,
       preferredLine: preferredLine,
       displayRules: displayRules,
@@ -10314,16 +10314,16 @@ private func swiftMutagenFindOrdinalSourceOperator(
   return fallback
 }
 
-private func swiftMutagenFindOrdinalSourceOperatorInFunctionBody(
+private func swiftmutFindOrdinalSourceOperatorInFunctionBody(
   path: String,
   preferredLine: Int,
-  displayRules: [SwiftMutagenSourceMutationDisplayRule],
+  displayRules: [SwiftmutSourceMutationDisplayRule],
   ordinal: Int,
   expectedCount: Int,
-  config: SwiftMutagenConfig
+  config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
-        let text = swiftMutagenRead(path) else {
+        let text = swiftmutRead(path) else {
     return nil
   }
 
@@ -10341,7 +10341,7 @@ private func swiftMutagenFindOrdinalSourceOperatorInFunctionBody(
     }
     for rule in displayRules {
       let sourceMutatedOverride = rule.sourceMutatedOverride
-      for position in swiftMutagenFindOperatorMatches(
+      for position in swiftmutFindOperatorMatches(
         rule.sourceOriginal,
         mutatedOperator: rule.sourceMutated,
         in: lineText
@@ -10409,18 +10409,18 @@ private func swiftMutagenFindOrdinalSourceOperatorInFunctionBody(
   }
   let match = matches[ordinal - 1]
   return (
-    swiftMutagenTrimPackageRoot(path, config: config),
+    swiftmutTrimPackageRoot(path, config: config),
     match.line,
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
 }
 
-private func swiftMutagenSourceMutationDisplayRules(
-  for mutation: SwiftMutagenMutation,
-  config: SwiftMutagenConfig
-) -> [SwiftMutagenSourceMutationDisplayRule] {
-  let builtinID = swiftMutagenBuiltinIDName(mutation.originalID) ?? ""
+private func swiftmutSourceMutationDisplayRules(
+  for mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> [SwiftmutSourceMutationDisplayRule] {
+  let builtinID = swiftmutBuiltinIDName(mutation.originalID) ?? ""
   let rules = config.sourceMutationDisplayRules.filter {
     $0.mutator == mutation.mutator && $0.builtinID == builtinID
   }
@@ -10428,7 +10428,7 @@ private func swiftMutagenSourceMutationDisplayRules(
     return rules
   }
   return [
-    SwiftMutagenSourceMutationDisplayRule(
+    SwiftmutSourceMutationDisplayRule(
       mutator: mutation.mutator,
       builtinID: builtinID,
       sourceOriginal: mutation.sourceOriginal,
@@ -10438,7 +10438,7 @@ private func swiftMutagenSourceMutationDisplayRules(
   ]
 }
 
-private func swiftMutagenFindOperator(
+private func swiftmutFindOperator(
   _ op: String,
   mutatedOperator: String,
   in text: String,
@@ -10464,7 +10464,7 @@ private func swiftMutagenFindOperator(
       }
     }
     if matched {
-      if !swiftMutagenIsSourceComparisonOperator(
+      if !swiftmutIsSourceComparisonOperator(
         bytes: bytes,
         operatorStart: index,
         operatorEnd: index + opBytes.count
@@ -10478,7 +10478,7 @@ private func swiftMutagenFindOperator(
         index += 1
         continue
       }
-      let expression = swiftMutagenSourceExpression(
+      let expression = swiftmutSourceExpression(
         in: bytes,
         operatorStart: index,
         operatorEnd: index + opBytes.count,
@@ -10488,7 +10488,7 @@ private func swiftMutagenFindOperator(
         return candidate
       }
       if let maxPreferredLineDistance = maxPreferredLineDistance,
-         swiftMutagenLineDistance(line, preferredLine) > maxPreferredLineDistance {
+         swiftmutLineDistance(line, preferredLine) > maxPreferredLineDistance {
         if bytes[index] == 10 {
           line += 1
           column = 1
@@ -10502,7 +10502,7 @@ private func swiftMutagenFindOperator(
         return candidate
       }
       if let existing = best {
-        if swiftMutagenLineDistance(line, preferredLine) < swiftMutagenLineDistance(existing.line, preferredLine) {
+        if swiftmutLineDistance(line, preferredLine) < swiftmutLineDistance(existing.line, preferredLine) {
           best = candidate
         }
       } else {
@@ -10520,7 +10520,7 @@ private func swiftMutagenFindOperator(
   return best
 }
 
-private func swiftMutagenFindOperatorMatches(
+private func swiftmutFindOperatorMatches(
   _ op: String,
   mutatedOperator: String,
   in text: String
@@ -10542,12 +10542,12 @@ private func swiftMutagenFindOperatorMatches(
       break
     }
     if matched,
-       swiftMutagenIsSourceComparisonOperator(
+       swiftmutIsSourceComparisonOperator(
         bytes: bytes,
         operatorStart: index,
         operatorEnd: index + opBytes.count
        ) {
-      let expression = swiftMutagenSourceExpression(
+      let expression = swiftmutSourceExpression(
         in: bytes,
         operatorStart: index,
         operatorEnd: index + opBytes.count,
@@ -10560,10 +10560,10 @@ private func swiftMutagenFindOperatorMatches(
   return matches
 }
 
-private func swiftMutagenPreferredLine(in location: String, path: String) -> Int? {
+private func swiftmutPreferredLine(in location: String, path: String) -> Int? {
   let locationBytes = Array(location.utf8)
   let pathBytes = Array(path.utf8)
-  guard let pathIndex = swiftMutagenFind(pathBytes, in: locationBytes, startingAt: 0) else {
+  guard let pathIndex = swiftmutFind(pathBytes, in: locationBytes, startingAt: 0) else {
     return nil
   }
   var index = pathIndex + pathBytes.count
@@ -10585,11 +10585,11 @@ private func swiftMutagenPreferredLine(in location: String, path: String) -> Int
   return hasDigit ? value : nil
 }
 
-private func swiftMutagenLineDistance(_ lhs: Int, _ rhs: Int) -> Int {
+private func swiftmutLineDistance(_ lhs: Int, _ rhs: Int) -> Int {
   lhs >= rhs ? lhs - rhs : rhs - lhs
 }
 
-private func swiftMutagenIsSourceComparisonOperator(
+private func swiftmutIsSourceComparisonOperator(
   bytes: [UInt8],
   operatorStart: Int,
   operatorEnd: Int
@@ -10597,16 +10597,16 @@ private func swiftMutagenIsSourceComparisonOperator(
   if operatorStart > 0 && bytes[operatorStart - 1] == 45 {
     return false
   }
-  if operatorStart > 0 && swiftMutagenIsOperatorByte(bytes[operatorStart - 1]) {
+  if operatorStart > 0 && swiftmutIsOperatorByte(bytes[operatorStart - 1]) {
     return false
   }
-  if operatorEnd < bytes.count && swiftMutagenIsOperatorByte(bytes[operatorEnd]) {
+  if operatorEnd < bytes.count && swiftmutIsOperatorByte(bytes[operatorEnd]) {
     return false
   }
-  if swiftMutagenIsOperatorFunctionDeclaration(bytes: bytes, operatorStart: operatorStart) {
+  if swiftmutIsOperatorFunctionDeclaration(bytes: bytes, operatorStart: operatorStart) {
     return false
   }
-  if swiftMutagenIsLikelyGenericAngleBracket(
+  if swiftmutIsLikelyGenericAngleBracket(
     bytes: bytes,
     operatorStart: operatorStart,
     operatorEnd: operatorEnd
@@ -10616,7 +10616,7 @@ private func swiftMutagenIsSourceComparisonOperator(
   return true
 }
 
-private func swiftMutagenIsLikelyGenericAngleBracket(
+private func swiftmutIsLikelyGenericAngleBracket(
   bytes: [UInt8],
   operatorStart: Int,
   operatorEnd: Int
@@ -10625,29 +10625,29 @@ private func swiftMutagenIsLikelyGenericAngleBracket(
     return false
   }
   if bytes[operatorStart] == 60 {
-    return swiftMutagenHasIdentifierBefore(bytes: bytes, index: operatorStart)
-      && swiftMutagenHasIdentifierAfter(bytes: bytes, index: operatorEnd)
-      && swiftMutagenHasClosingAngleBeforeExpressionDelimiter(bytes: bytes, index: operatorEnd)
+    return swiftmutHasIdentifierBefore(bytes: bytes, index: operatorStart)
+      && swiftmutHasIdentifierAfter(bytes: bytes, index: operatorEnd)
+      && swiftmutHasClosingAngleBeforeExpressionDelimiter(bytes: bytes, index: operatorEnd)
   }
   if bytes[operatorStart] == 62 {
-    return swiftMutagenHasIdentifierBefore(bytes: bytes, index: operatorStart)
-      && swiftMutagenHasOpeningAngleBeforeExpressionDelimiter(bytes: bytes, index: operatorStart)
+    return swiftmutHasIdentifierBefore(bytes: bytes, index: operatorStart)
+      && swiftmutHasOpeningAngleBeforeExpressionDelimiter(bytes: bytes, index: operatorStart)
   }
   return false
 }
 
-private func swiftMutagenHasIdentifierBefore(bytes: [UInt8], index: Int) -> Bool {
-  index > 0 && swiftMutagenIsExpressionByte(bytes[index - 1])
+private func swiftmutHasIdentifierBefore(bytes: [UInt8], index: Int) -> Bool {
+  index > 0 && swiftmutIsExpressionByte(bytes[index - 1])
 }
 
-private func swiftMutagenIsOperatorFunctionDeclaration(bytes: [UInt8], operatorStart: Int) -> Bool {
+private func swiftmutIsOperatorFunctionDeclaration(bytes: [UInt8], operatorStart: Int) -> Bool {
   var offset = operatorStart
-  while offset > 0 && swiftMutagenIsHorizontalWhitespace(bytes[offset - 1]) {
+  while offset > 0 && swiftmutIsHorizontalWhitespace(bytes[offset - 1]) {
     offset -= 1
   }
 
   let tokenEnd = offset
-  while offset > 0 && swiftMutagenIsExpressionByte(bytes[offset - 1]) {
+  while offset > 0 && swiftmutIsExpressionByte(bytes[offset - 1]) {
     offset -= 1
   }
 
@@ -10657,11 +10657,11 @@ private func swiftMutagenIsOperatorFunctionDeclaration(bytes: [UInt8], operatorS
   return String(decoding: bytes[offset..<tokenEnd], as: UTF8.self) == "func"
 }
 
-private func swiftMutagenHasIdentifierAfter(bytes: [UInt8], index: Int) -> Bool {
-  index < bytes.count && swiftMutagenIsExpressionByte(bytes[index])
+private func swiftmutHasIdentifierAfter(bytes: [UInt8], index: Int) -> Bool {
+  index < bytes.count && swiftmutIsExpressionByte(bytes[index])
 }
 
-private func swiftMutagenHasClosingAngleBeforeExpressionDelimiter(bytes: [UInt8], index: Int) -> Bool {
+private func swiftmutHasClosingAngleBeforeExpressionDelimiter(bytes: [UInt8], index: Int) -> Bool {
   var offset = index
   while offset < bytes.count {
     let byte = bytes[offset]
@@ -10676,7 +10676,7 @@ private func swiftMutagenHasClosingAngleBeforeExpressionDelimiter(bytes: [UInt8]
   return false
 }
 
-private func swiftMutagenHasOpeningAngleBeforeExpressionDelimiter(bytes: [UInt8], index: Int) -> Bool {
+private func swiftmutHasOpeningAngleBeforeExpressionDelimiter(bytes: [UInt8], index: Int) -> Bool {
   var offset = index
   while offset > 0 {
     offset -= 1
@@ -10691,7 +10691,7 @@ private func swiftMutagenHasOpeningAngleBeforeExpressionDelimiter(bytes: [UInt8]
   return false
 }
 
-private func swiftMutagenIsOperatorByte(_ byte: UInt8) -> Bool {
+private func swiftmutIsOperatorByte(_ byte: UInt8) -> Bool {
   switch byte {
   case 33, 37, 38, 42, 43, 45, 47, 58, 60, 61, 62, 63, 94, 124, 126:
     return true
@@ -10700,7 +10700,7 @@ private func swiftMutagenIsOperatorByte(_ byte: UInt8) -> Bool {
   }
 }
 
-private func swiftMutagenSourceExpression(
+private func swiftmutSourceExpression(
   in bytes: [UInt8],
   operatorStart: Int,
   operatorEnd: Int,
@@ -10708,19 +10708,19 @@ private func swiftMutagenSourceExpression(
 ) -> (original: String, mutated: String) {
   var leftStart = operatorStart
   if !mutatedOperator.isEmpty {
-    while leftStart > 0 && swiftMutagenIsHorizontalWhitespace(bytes[leftStart - 1]) {
+    while leftStart > 0 && swiftmutIsHorizontalWhitespace(bytes[leftStart - 1]) {
       leftStart -= 1
     }
-    while leftStart > 0 && swiftMutagenIsExpressionByte(bytes[leftStart - 1]) {
+    while leftStart > 0 && swiftmutIsExpressionByte(bytes[leftStart - 1]) {
       leftStart -= 1
     }
   }
 
   var rightEnd = operatorEnd
-  while rightEnd < bytes.count && swiftMutagenIsHorizontalWhitespace(bytes[rightEnd]) {
+  while rightEnd < bytes.count && swiftmutIsHorizontalWhitespace(bytes[rightEnd]) {
     rightEnd += 1
   }
-  while rightEnd < bytes.count && swiftMutagenIsExpressionByte(bytes[rightEnd]) {
+  while rightEnd < bytes.count && swiftmutIsExpressionByte(bytes[rightEnd]) {
     rightEnd += 1
   }
 
@@ -10730,11 +10730,11 @@ private func swiftMutagenSourceExpression(
   return (original, mutatedPrefix + mutatedOperator + mutatedSuffix)
 }
 
-private func swiftMutagenIsHorizontalWhitespace(_ byte: UInt8) -> Bool {
+private func swiftmutIsHorizontalWhitespace(_ byte: UInt8) -> Bool {
   byte == 32 || byte == 9
 }
 
-private func swiftMutagenIsExpressionByte(_ byte: UInt8) -> Bool {
+private func swiftmutIsExpressionByte(_ byte: UInt8) -> Bool {
   if byte >= 48 && byte <= 57 {
     return true
   }
@@ -10752,24 +10752,24 @@ private func swiftMutagenIsExpressionByte(_ byte: UInt8) -> Bool {
   }
 }
 
-private func swiftMutagenSwiftSourcePaths(config: SwiftMutagenConfig) -> [String] {
+private func swiftmutSwiftSourcePaths(config: SwiftmutConfig) -> [String] {
   var paths: [String] = []
   for path in config.sourceFiles {
-    if swiftMutagenPathIsIncluded(path, config: config) {
+    if swiftmutPathIsIncluded(path, config: config) {
       paths.append(path)
     }
   }
   return paths
 }
 
-private func swiftMutagenPathIsIncluded(
+private func swiftmutPathIsIncluded(
   _ path: String,
-  config: SwiftMutagenConfig
+  config: SwiftmutConfig
 ) -> Bool {
   if !config.packageRoot.isEmpty && !path.hasPrefix(config.packageRoot + "/") {
     return false
   }
-  if !config.sourceFiles.isEmpty && !swiftMutagenPathIsConfiguredSource(path, config: config) {
+  if !config.sourceFiles.isEmpty && !swiftmutPathIsConfiguredSource(path, config: config) {
     return false
   }
   for fragment in config.excludePathFragments {
@@ -10780,9 +10780,9 @@ private func swiftMutagenPathIsIncluded(
   return true
 }
 
-private func swiftMutagenPathIsConfiguredSource(
+private func swiftmutPathIsConfiguredSource(
   _ path: String,
-  config: SwiftMutagenConfig
+  config: SwiftmutConfig
 ) -> Bool {
   for sourcePath in config.sourceFiles {
     if path == sourcePath {
@@ -10792,26 +10792,26 @@ private func swiftMutagenPathIsConfiguredSource(
   return false
 }
 
-private func swiftMutagenIncludedSourcePath(
+private func swiftmutIncludedSourcePath(
   _ path: String,
-  config: SwiftMutagenConfig
+  config: SwiftmutConfig
 ) -> String? {
-  if swiftMutagenPathIsIncluded(path, config: config) {
+  if swiftmutPathIsIncluded(path, config: config) {
     return path
   }
   let suffix = path.hasPrefix("/") ? path : "/" + path
   for sourceFile in config.sourceFiles {
     if sourceFile.hasSuffix(suffix),
-       swiftMutagenPathIsIncluded(sourceFile, config: config) {
+       swiftmutPathIsIncluded(sourceFile, config: config) {
       return sourceFile
     }
   }
   return nil
 }
 
-private func swiftMutagenTrimPackageRoot(
+private func swiftmutTrimPackageRoot(
   _ path: String,
-  config: SwiftMutagenConfig
+  config: SwiftmutConfig
 ) -> String {
   guard !config.packageRoot.isEmpty else {
     return path
@@ -10825,7 +10825,7 @@ private func swiftMutagenTrimPackageRoot(
   return path
 }
 
-private func swiftMutagenCreateParentDirectories(forFile path: String) {
+private func swiftmutCreateParentDirectories(forFile path: String) {
   #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS) || os(Linux) || os(Android)
   let components = path.split(separator: "/", omittingEmptySubsequences: true)
   guard components.count > 1 else {
@@ -10844,7 +10844,7 @@ private func swiftMutagenCreateParentDirectories(forFile path: String) {
   #endif
 }
 
-private func swiftMutagenRead(_ path: String) -> String? {
+private func swiftmutRead(_ path: String) -> String? {
   #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS) || os(Linux) || os(Android)
   return path.withCString { pathPointer in
     guard let file = fopen(pathPointer, "r") else {
@@ -10870,7 +10870,7 @@ private func swiftMutagenRead(_ path: String) -> String? {
   #endif
 }
 
-private func swiftMutagenWrite(
+private func swiftmutWrite(
   _ text: String,
   to path: String,
   append: Bool
@@ -10891,37 +10891,37 @@ private func swiftMutagenWrite(
   #endif
 }
 
-private func swiftMutagenJSONStringValue(_ key: String, in json: String) -> String? {
+private func swiftmutJSONStringValue(_ key: String, in json: String) -> String? {
   let bytes = Array(json.utf8)
   let keyBytes = Array(("\"" + key + "\"").utf8)
-  guard let keyIndex = swiftMutagenFind(keyBytes, in: bytes, startingAt: 0) else {
+  guard let keyIndex = swiftmutFind(keyBytes, in: bytes, startingAt: 0) else {
     return nil
   }
 
   var index = keyIndex + keyBytes.count
-  swiftMutagenSkipJSONWhitespace(in: bytes, index: &index)
+  swiftmutSkipJSONWhitespace(in: bytes, index: &index)
   guard index < bytes.count, bytes[index] == 58 else {
     return nil
   }
   index += 1
-  swiftMutagenSkipJSONWhitespace(in: bytes, index: &index)
-  return swiftMutagenParseJSONString(in: bytes, index: &index)
+  swiftmutSkipJSONWhitespace(in: bytes, index: &index)
+  return swiftmutParseJSONString(in: bytes, index: &index)
 }
 
-private func swiftMutagenJSONStringArray(_ key: String, in json: String) -> [String] {
+private func swiftmutJSONStringArray(_ key: String, in json: String) -> [String] {
   let bytes = Array(json.utf8)
   let keyBytes = Array(("\"" + key + "\"").utf8)
-  guard let keyIndex = swiftMutagenFind(keyBytes, in: bytes, startingAt: 0) else {
+  guard let keyIndex = swiftmutFind(keyBytes, in: bytes, startingAt: 0) else {
     return []
   }
 
   var index = keyIndex + keyBytes.count
-  swiftMutagenSkipJSONWhitespace(in: bytes, index: &index)
+  swiftmutSkipJSONWhitespace(in: bytes, index: &index)
   guard index < bytes.count, bytes[index] == 58 else {
     return []
   }
   index += 1
-  swiftMutagenSkipJSONWhitespace(in: bytes, index: &index)
+  swiftmutSkipJSONWhitespace(in: bytes, index: &index)
   guard index < bytes.count, bytes[index] == 91 else {
     return []
   }
@@ -10929,14 +10929,14 @@ private func swiftMutagenJSONStringArray(_ key: String, in json: String) -> [Str
 
   var values: [String] = []
   while index < bytes.count {
-    swiftMutagenSkipJSONWhitespace(in: bytes, index: &index)
+    swiftmutSkipJSONWhitespace(in: bytes, index: &index)
     guard index < bytes.count else {
       break
     }
     if bytes[index] == 93 {
       break
     }
-    if let value = swiftMutagenParseJSONString(in: bytes, index: &index) {
+    if let value = swiftmutParseJSONString(in: bytes, index: &index) {
       values.append(value)
     } else {
       index += 1
@@ -10945,7 +10945,7 @@ private func swiftMutagenJSONStringArray(_ key: String, in json: String) -> [Str
   return values
 }
 
-private func swiftMutagenParseJSONString(in bytes: [UInt8], index: inout Int) -> String? {
+private func swiftmutParseJSONString(in bytes: [UInt8], index: inout Int) -> String? {
   guard index < bytes.count, bytes[index] == 34 else {
     return nil
   }
@@ -10982,7 +10982,7 @@ private func swiftMutagenParseJSONString(in bytes: [UInt8], index: inout Int) ->
   return nil
 }
 
-private func swiftMutagenSkipJSONWhitespace(in bytes: [UInt8], index: inout Int) {
+private func swiftmutSkipJSONWhitespace(in bytes: [UInt8], index: inout Int) {
   while index < bytes.count {
     switch bytes[index] {
     case 32, 10, 13, 9:
@@ -10993,7 +10993,7 @@ private func swiftMutagenSkipJSONWhitespace(in bytes: [UInt8], index: inout Int)
   }
 }
 
-private func swiftMutagenFind(_ needle: [UInt8], in haystack: [UInt8], startingAt start: Int) -> Int? {
+private func swiftmutFind(_ needle: [UInt8], in haystack: [UInt8], startingAt start: Int) -> Int? {
   guard !needle.isEmpty, haystack.count >= needle.count, start <= haystack.count - needle.count else {
     return nil
   }
@@ -11014,7 +11014,7 @@ private func swiftMutagenFind(_ needle: [UInt8], in haystack: [UInt8], startingA
   return nil
 }
 
-private func swiftMutagenFormatMutantID(_ ordinal: Int) -> String {
+private func swiftmutFormatMutantID(_ ordinal: Int) -> String {
   if ordinal < 10 {
     return "M00\(ordinal)"
   }
@@ -11024,7 +11024,7 @@ private func swiftMutagenFormatMutantID(_ ordinal: Int) -> String {
   return "M\(ordinal)"
 }
 
-private func swiftMutagenEscapeJSON(_ value: String) -> String {
+private func swiftmutEscapeJSON(_ value: String) -> String {
   var escaped = ""
   for character in value {
     switch character {

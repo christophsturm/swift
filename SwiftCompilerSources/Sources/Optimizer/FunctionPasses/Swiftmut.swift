@@ -1167,6 +1167,8 @@ private func swiftmutDiscoverConditionSites(
       }
       if sourceLocation == nil {
         sourceLocation = location
+      } else if !swiftmutSourceLocationMatchesSite(location, sourceLocation!) {
+        continue
       }
       let displayMutation = mutation.withSource(
         original: location.sourceOriginal,
@@ -1270,6 +1272,8 @@ private func swiftmutDiscoverReturnSites(
       }
       if sourceLocation == nil {
         sourceLocation = location
+      } else if !swiftmutSourceLocationMatchesSite(location, sourceLocation!) {
+        continue
       }
       let displayMutation = mutation.withSource(
         original: location.sourceOriginal,
@@ -1354,6 +1358,8 @@ private func swiftmutDiscoverReturnBranchSites(
       }
       if sourceLocation == nil {
         sourceLocation = location
+      } else if !swiftmutSourceLocationMatchesSite(location, sourceLocation!) {
+        continue
       }
       let displayMutation = mutation.withSource(
         original: location.sourceOriginal,
@@ -1441,6 +1447,8 @@ private func swiftmutDiscoverArithmeticSites(
         }
         if sourceLocation == nil {
           sourceLocation = location
+        } else if !swiftmutSourceLocationMatchesSite(location, sourceLocation!) {
+          continue
         }
         let displayMutation = mutation.withSource(
           original: location.sourceOriginal,
@@ -1523,6 +1531,8 @@ private func swiftmutDiscoverScalarValueSites(
         }
         if sourceLocation == nil {
           sourceLocation = location
+        } else if !swiftmutSourceLocationMatchesSite(location, sourceLocation!) {
+          continue
         }
         let displayMutation = mutation.withSource(
           original: location.sourceOriginal,
@@ -1613,6 +1623,8 @@ private func swiftmutDiscoverValueApplySites(
         }
         if sourceLocation == nil {
           sourceLocation = location
+        } else if !swiftmutSourceLocationMatchesSite(location, sourceLocation!) {
+          continue
         }
         let displayMutation = mutation.withSource(
           original: location.sourceOriginal,
@@ -1716,6 +1728,8 @@ private func swiftmutDiscoverAssignmentValueSites(
         }
         if sourceLocation == nil {
           sourceLocation = location
+        } else if !swiftmutSourceLocationMatchesSite(location, sourceLocation!) {
+          continue
         }
         let displayMutation = mutation.withSource(
           original: location.sourceOriginal,
@@ -1759,6 +1773,16 @@ private func swiftmutDiscoverAssignmentValueSites(
   }
 
   return SwiftmutAssignmentValueDiscoveryResult(sites: sites, stats: stats)
+}
+
+private func swiftmutSourceLocationMatchesSite(
+  _ candidate: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String),
+  _ site: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)
+) -> Bool {
+  candidate.file == site.file
+    && candidate.line == site.line
+    && candidate.column == site.column
+    && candidate.sourceOriginal == site.sourceOriginal
 }
 
 private func swiftmutMetamutantReturnMutations(
@@ -5753,15 +5777,6 @@ private func swiftmutAssignmentValueSourceLocation(
   }
 
   if let functionSourceLocation {
-    if let anchored = swiftmutFindFunctionSignatureAssignmentValueSourceLocation(
-      path: functionSourceLocation.path,
-      functionLine: functionSourceLocation.line,
-      mutation: mutation,
-      config: config,
-      targetNames: targetNames
-    ) {
-      return anchored
-    }
     if let anchored = swiftmutFindScopedAssignmentValueSourceLocation(
       path: functionSourceLocation.path,
       functionLine: functionSourceLocation.line,
@@ -5843,6 +5858,15 @@ private func swiftmutAssignmentValueSourceLocation(
       return anchored
     }
     if let anchored = swiftmutFindScopedLabeledAssignmentValueSourceLocation(
+      path: functionSourceLocation.path,
+      functionLine: functionSourceLocation.line,
+      mutation: mutation,
+      config: config,
+      targetNames: targetNames
+    ) {
+      return anchored
+    }
+    if let anchored = swiftmutFindFunctionSignatureAssignmentValueSourceLocation(
       path: functionSourceLocation.path,
       functionLine: functionSourceLocation.line,
       mutation: mutation,

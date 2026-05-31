@@ -519,6 +519,7 @@ private struct SwiftmutAssignmentValueDiscoveryStats {
   var mutationEligibleStoreInstructions = 0
   var mutationAlternatives = 0
   var sourceLocationMisses = 0
+  var sourceLocationMissSamples = 0
 }
 
 private struct SwiftmutAssignmentValueDiscoveryResult {
@@ -1671,6 +1672,11 @@ private func swiftmutDiscoverAssignmentValueSites(
       }
       stats.mutationEligibleStoreInstructions += 1
       stats.mutationAlternatives += mutations.count
+      let destinationNames = swiftmutAssignmentDestinationNames(for: store)
+      let sourceNames = swiftmutAssignmentSourceNames(for: store)
+      let targetNames = destinationNames.isEmpty
+        ? swiftmutUniqueAssignmentNames(sourceNames)
+        : swiftmutUniqueAssignmentNames(destinationNames)
 
       var alternatives: [SwiftmutAssignmentValueAlternative] = []
       var sourceLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
@@ -1681,6 +1687,19 @@ private func swiftmutDiscoverAssignmentValueSites(
           config: config
         ) else {
           stats.sourceLocationMisses += 1
+          if stats.sourceLocationMissSamples < 500 {
+            stats.sourceLocationMissSamples += 1
+            swiftmutLogAssignmentValueSourceLocationMiss(
+              store: store,
+              mutation: mutation,
+              moduleName: moduleName,
+              functionName: functionName,
+              destinationNames: destinationNames,
+              sourceNames: sourceNames,
+              targetNames: targetNames,
+              config: config
+            )
+          }
           continue
         }
         if sourceLocation == nil {
@@ -3360,6 +3379,36 @@ private func swiftmutLogEvent(
   }
   swiftmutCreateParentDirectories(forFile: config.compilerEventsPath)
   swiftmutWrite("{\(jsonFields.joined(separator: ","))}\n", to: config.compilerEventsPath, append: true)
+}
+
+private func swiftmutLogAssignmentValueSourceLocationMiss(
+  store: StoreInst,
+  mutation: SwiftmutMutation,
+  moduleName: String,
+  functionName: String,
+  destinationNames: [String],
+  sourceNames: [String],
+  targetNames: [String],
+  config: SwiftmutConfig
+) {
+  swiftmutLogEvent(
+    "assignmentValueSourceLocationMiss",
+    config: config,
+    fields: [
+      ("mode", swiftmutModeName(config.mode)),
+      ("module", moduleName),
+      ("function", functionName),
+      ("functionLocation", store.parentFunction.location.description),
+      ("storeLocation", store.location.description),
+      ("sourceLocation", store.source.definingInstruction?.location.description ?? "<no defining instruction>"),
+      ("destinationNames", destinationNames.joined(separator: ",")),
+      ("sourceNames", sourceNames.joined(separator: ",")),
+      ("targetNames", targetNames.joined(separator: ",")),
+      ("mutator", mutation.mutator),
+      ("mutatedBuiltinName", mutation.mutatedBuiltinName),
+      ("sourceOriginal", mutation.sourceOriginal),
+      ("sourceMutated", mutation.sourceMutated)
+    ])
 }
 
 private func swiftmutFunctionName(_ functionName: String, belongsToModule moduleName: String) -> Bool {
@@ -5590,10 +5639,11 @@ private func swiftmutAssignmentValueSourceLocation(
   mutation: SwiftmutMutation,
   config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  let targetNames = swiftmutUniqueAssignmentNames(
-    swiftmutAssignmentDestinationNames(for: store) +
-    swiftmutAssignmentSourceNames(for: store)
-  )
+  let destinationNames = swiftmutAssignmentDestinationNames(for: store)
+  let sourceNames = swiftmutAssignmentSourceNames(for: store)
+  let targetNames = destinationNames.isEmpty
+    ? swiftmutUniqueAssignmentNames(sourceNames)
+    : swiftmutUniqueAssignmentNames(destinationNames)
   let functionSourceLocation = swiftmutFunctionSourceLocation(
     for: store.parentFunction,
     config: config

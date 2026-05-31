@@ -39,14 +39,33 @@ swift_compiler_sources(Optimizer
   StackPromotion.swift
   StripObjectHeaders.swift
   Swiftmut.swift
+  SwiftmutAssignmentSourceLocations.swift
   SwiftmutAssignmentText.swift
   SwiftmutConfig.swift
+  SwiftmutDiscovery.swift
+  SwiftmutExplicitReturnSourceLocations.swift
+  SwiftmutFilesystem.swift
+  SwiftmutGenericConditionSourceLocations.swift
+  SwiftmutIdentifierSourceLocations.swift
+  SwiftmutImplicitReturnSourceLocations.swift
+  SwiftmutInjection.swift
   SwiftmutJSON.swift
+  SwiftmutLabeledReturnSourceLocations.swift
   SwiftmutManifest.swift
+  SwiftmutMetamutantInstrumentation.swift
+  SwiftmutMutationBuilders.swift
+  SwiftmutMutationRules.swift
   SwiftmutObservability.swift
+  SwiftmutOperatorSourceLocations.swift
+  SwiftmutOperatorText.swift
+  SwiftmutReturnSourceLocations.swift
   SwiftmutReturnText.swift
+  SwiftmutRuntimeChoice.swift
   SwiftmutSites.swift
+  SwiftmutStatementSourceLocations.swift
   SwiftmutText.swift
+  SwiftmutValueApplyAssignmentSourceLocations.swift
+  SwiftmutValueExpressionSourceLocations.swift
   TempLValueElimination.swift
   TempRValueElimination.swift
   PackSpecialization.swift

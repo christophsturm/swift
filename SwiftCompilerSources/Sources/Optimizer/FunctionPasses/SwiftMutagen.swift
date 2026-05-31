@@ -4880,6 +4880,87 @@ private func swiftMutagenFindScopedAssignmentValueSourceLocation(
     match.sourceMutated)
 }
 
+private func swiftMutagenFindScopedLocalBindingValueSourceLocation(
+  path: String,
+  functionLine: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig,
+  targetNames: [String]
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard functionLine > 0,
+        !targetNames.isEmpty,
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+
+  var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  var braceDepth = 0
+  var sawOpeningBrace = false
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard line >= functionLine,
+          matches.count < 2,
+          let expression = swiftMutagenLocalBindingValueExpression(
+            lineText,
+            mutation: mutation,
+            targetNames: targetNames
+          ) else {
+      return
+    }
+    matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
+  }
+
+  func updateBraceDepth(_ lineText: String) {
+    for byte in lineText.utf8 {
+      if byte == 123 {
+        braceDepth += 1
+        sawOpeningBrace = true
+      } else if byte == 125 {
+        braceDepth -= 1
+      }
+    }
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      let lineText = String(text[lineStart..<index])
+      if currentLine >= functionLine {
+        if sawOpeningBrace && braceDepth > 0 {
+          inspectLine(lineText, line: currentLine)
+          if matches.count >= 2 {
+            break
+          }
+        }
+        updateBraceDepth(lineText)
+        if sawOpeningBrace && braceDepth <= 0 {
+          break
+        }
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine >= functionLine && sawOpeningBrace && braceDepth > 0 {
+    inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
+  }
+
+  guard matches.count == 1,
+        let match = matches.first else {
+    return nil
+  }
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    match.sourceOriginal,
+    match.sourceMutated)
+}
+
 private func swiftMutagenAssignmentValueSourceLocation(
   in text: String,
   path: String,
@@ -5202,6 +5283,15 @@ private func swiftMutagenAssignmentValueSourceLocation(
       preferredLine: functionSourceLocation.line,
       mutation: mutation,
       config: config
+    ) {
+      return anchored
+    }
+    if let anchored = swiftMutagenFindScopedLocalBindingValueSourceLocation(
+      path: functionSourceLocation.path,
+      functionLine: functionSourceLocation.line,
+      mutation: mutation,
+      config: config,
+      targetNames: targetNames
     ) {
       return anchored
     }
@@ -6118,6 +6208,79 @@ private func swiftMutagenLabeledArgumentValueExpression(
     valueStart + 1,
     sourceOriginal,
     swiftMutagenImplicitReturnSourceMutation(for: mutation))
+}
+
+private func swiftMutagenLocalBindingValueExpression(
+  _ line: String,
+  mutation: SwiftMutagenMutation,
+  targetNames: [String]
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard !targetNames.isEmpty else {
+    return nil
+  }
+  let bytes = Array(line.utf8)
+  let lineStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  let lineEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard lineStart < lineEnd,
+        !swiftMutagenASCIIHasPrefix(bytes, start: lineStart, prefix: "//") else {
+    return nil
+  }
+
+  var matches: [(column: Int, name: String)] = []
+  var index = lineStart
+  while index < lineEnd {
+    if swiftMutagenLocalBindingTokenMatches(bytes: bytes, index: index, end: lineEnd, token: "let")
+        || swiftMutagenLocalBindingTokenMatches(bytes: bytes, index: index, end: lineEnd, token: "var") {
+      let nameStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: index + 3)
+      if nameStart < lineEnd && swiftMutagenIsIdentifierStartByte(bytes[nameStart]) {
+        var nameEnd = nameStart + 1
+        while nameEnd < lineEnd && swiftMutagenIsIdentifierByte(bytes[nameEnd]) {
+          nameEnd += 1
+        }
+        let name = String(decoding: bytes[nameStart..<nameEnd], as: UTF8.self)
+        if targetNames.contains(name),
+           swiftMutagenReturnValueIsEligible(bytes: bytes, start: nameStart, mutation: mutation) {
+          matches.append((nameStart + 1, name))
+          if matches.count >= 2 {
+            return nil
+          }
+        }
+        index = nameEnd
+        continue
+      }
+    }
+    index += 1
+  }
+
+  guard matches.count == 1,
+        let match = matches.first else {
+    return nil
+  }
+  return (
+    match.column,
+    match.name,
+    swiftMutagenImplicitReturnSourceMutation(for: mutation))
+}
+
+private func swiftMutagenLocalBindingTokenMatches(
+  bytes: [UInt8],
+  index: Int,
+  end: Int,
+  token: String
+) -> Bool {
+  let tokenBytes = Array(token.utf8)
+  guard index >= 0,
+        index + tokenBytes.count < end else {
+    return false
+  }
+  if index > 0 && swiftMutagenIsIdentifierByte(bytes[index - 1]) {
+    return false
+  }
+  for offset in 0..<tokenBytes.count where bytes[index + offset] != tokenBytes[offset] {
+    return false
+  }
+  let after = index + tokenBytes.count
+  return after < end && swiftMutagenIsHorizontalWhitespace(bytes[after])
 }
 
 private func swiftMutagenFirstLabeledArgumentSeparator(bytes: [UInt8], start: Int, end: Int) -> Int? {

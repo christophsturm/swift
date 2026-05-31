@@ -1661,7 +1661,7 @@ private func swiftmutDiscoverAssignmentValueSites(
         continue
       }
       stats.storeInstructions += 1
-      guard swiftmutAssignmentStoreIsEligible(store) else {
+      guard swiftmutAssignmentStoreIsEligible(store, config: config) else {
         continue
       }
 
@@ -1824,7 +1824,7 @@ private func swiftmutCanDispatchAssignmentValue(_ store: StoreInst) -> Bool {
   store.source.type.isTrivial(in: store.parentFunction) || store.source.ownership == .owned
 }
 
-private func swiftmutAssignmentStoreIsEligible(_ store: StoreInst) -> Bool {
+private func swiftmutAssignmentStoreIsEligible(_ store: StoreInst, config: SwiftmutConfig) -> Bool {
   guard !store.source.type.isAddress else {
     return false
   }
@@ -1832,11 +1832,37 @@ private func swiftmutAssignmentStoreIsEligible(_ store: StoreInst) -> Bool {
     return true
   }
   switch definingInstruction {
-  case is StructInst, is BuiltinInst, is ApplyInst:
+  case is BuiltinInst:
     return false
+  case let structInst as StructInst:
+    return !swiftmutScalarValueHasMappedSource(structInst, config: config)
+  case let apply as ApplyInst:
+    return !swiftmutValueApplyHasMappedSource(apply, config: config)
   default:
     return true
   }
+}
+
+private func swiftmutScalarValueHasMappedSource(_ value: StructInst, config: SwiftmutConfig) -> Bool {
+  for mutation in swiftmutScalarValueMutations(for: value, config: config) {
+    if swiftmutScalarValueSourceLocation(for: value, mutation: mutation, config: config) != nil {
+      return true
+    }
+  }
+  return false
+}
+
+private func swiftmutValueApplyHasMappedSource(_ apply: ApplyInst, config: SwiftmutConfig) -> Bool {
+  for mutation in swiftmutValueReplacementMutations(
+    for: apply,
+    valueType: apply.type,
+    config: config
+  ) {
+    if swiftmutValueApplySourceLocation(for: apply, mutation: mutation, config: config) != nil {
+      return true
+    }
+  }
+  return false
 }
 
 private func swiftmutValueReplacementMutations(
@@ -5354,7 +5380,7 @@ private func swiftmutAssignmentValueOrdinalAndCount(
   for block in store.parentFunction.blocks {
     for instruction in block.instructions {
       guard let candidate = instruction as? StoreInst,
-            swiftmutAssignmentStoreIsEligible(candidate) else {
+            swiftmutAssignmentStoreIsEligible(candidate, config: config) else {
         continue
       }
       let mutations = swiftmutAssignmentValueMutations(for: candidate, config: config)

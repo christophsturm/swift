@@ -9497,6 +9497,10 @@ private func swiftmutVoidCallSourceLocation(
   mutation: SwiftmutMutation,
   config: SwiftmutConfig
 ) -> SwiftmutVoidCallSourceLocationResult {
+  let functionSourceLocation = swiftmutFunctionSourceLocation(
+    for: apply.parentFunction,
+    config: config
+  )
   if let fileNameAndPosition = apply.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
@@ -9521,6 +9525,23 @@ private func swiftmutVoidCallSourceLocation(
         mutation: mutation,
         config: config
       ) {
+        return .found(
+          file: anchored.file,
+          line: anchored.line,
+          column: anchored.column,
+          sourceOriginal: anchored.sourceOriginal,
+          sourceMutated: anchored.sourceMutated
+        )
+      }
+      if let functionSourceLocation,
+         functionSourceLocation.path == matchedPath,
+         let anchored = swiftmutFindCalleeOrdinalVoidCallSourceLocation(
+           for: apply,
+           path: matchedPath,
+           preferredLine: functionSourceLocation.line,
+           mutation: mutation,
+           config: config
+         ) {
         return .found(
           file: anchored.file,
           line: anchored.line,
@@ -9563,10 +9584,149 @@ private func swiftmutVoidCallSourceLocation(
         sourceMutated: anchored.sourceMutated
       )
     }
+    if let functionSourceLocation,
+       functionSourceLocation.path == fallbackPath,
+       let anchored = swiftmutFindCalleeOrdinalVoidCallSourceLocation(
+         for: apply,
+         path: fallbackPath,
+         preferredLine: functionSourceLocation.line,
+         mutation: mutation,
+         config: config
+       ) {
+      return .found(
+        file: anchored.file,
+        line: anchored.line,
+        column: anchored.column,
+        sourceOriginal: anchored.sourceOriginal,
+        sourceMutated: anchored.sourceMutated
+      )
+    }
     return .nonStatement
   }
 
+  if let functionSourceLocation,
+     let anchored = swiftmutFindCalleeOrdinalVoidCallSourceLocation(
+       for: apply,
+       path: functionSourceLocation.path,
+       preferredLine: functionSourceLocation.line,
+       mutation: mutation,
+       config: config
+     ) {
+    return .found(
+      file: anchored.file,
+      line: anchored.line,
+      column: anchored.column,
+      sourceOriginal: anchored.sourceOriginal,
+      sourceMutated: anchored.sourceMutated
+    )
+  }
+
   return .missing
+}
+
+private func swiftmutFindCalleeOrdinalVoidCallSourceLocation(
+  for apply: ApplyInst,
+  path: String,
+  preferredLine: Int,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let identifiers = swiftmutSourceExpressionIdentifiers(for: apply)
+  guard !identifiers.isEmpty,
+        let ordinal = swiftmutVoidCallOrdinal(for: apply, matchingAnyOf: identifiers, config: config),
+        let text = swiftmutRead(path) else {
+    return nil
+  }
+
+  let candidates = swiftmutCalleeVoidCallSourceCandidates(
+    in: text,
+    path: path,
+    preferredLine: preferredLine,
+    identifiers: identifiers,
+    mutation: mutation,
+    config: config
+  )
+  guard ordinal > 0,
+        ordinal <= candidates.count else {
+    return nil
+  }
+  return candidates[ordinal - 1]
+}
+
+private func swiftmutVoidCallOrdinal(
+  for apply: ApplyInst,
+  matchingAnyOf identifiers: [String],
+  config: SwiftmutConfig
+) -> Int? {
+  var ordinal = 0
+  for block in apply.parentFunction.blocks {
+    for instruction in block.instructions {
+      guard let candidate = instruction as? ApplyInst,
+            candidate.type.isVoid,
+            swiftmutVoidCallMutation(for: candidate, config: config) != nil,
+            swiftmutSourceCalleeIdentifiers(for: candidate).contains(where: { identifiers.contains($0) }) else {
+        continue
+      }
+      ordinal += 1
+      if candidate === apply {
+        return ordinal
+      }
+    }
+  }
+  return nil
+}
+
+private func swiftmutCalleeVoidCallSourceCandidates(
+  in text: String,
+  path: String,
+  preferredLine: Int,
+  identifiers: [String],
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> [(file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] {
+  guard preferredLine > 0 else {
+    return []
+  }
+  let lastLine = preferredLine + 220
+  var candidates: [(file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard line >= preferredLine,
+          line <= lastLine,
+          swiftmutSourceLineLooksLikeVoidCallStatement(lineText),
+          swiftmutSourceLineContainsExpressionIdentifier(lineText, identifiers: identifiers) else {
+      return
+    }
+    let bytes = Array(lineText.utf8)
+    let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+    candidates.append((
+      swiftmutTrimPackageRoot(path, config: config),
+      line,
+      start + 1,
+      mutation.sourceOriginal,
+      mutation.sourceMutated
+    ))
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      inspectLine(String(text[lineStart..<index]), line: currentLine)
+      if currentLine >= lastLine {
+        break
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine <= lastLine {
+    inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
+  }
+  return candidates
 }
 
 private func swiftmutFindUniqueVoidCallSourceLocation(

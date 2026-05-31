@@ -197,17 +197,9 @@ func swiftmutFindUniqueDescribedValueExpressionSourceLocation(
 
 func swiftmutDescribedValueSnippetLooksMappable(_ snippet: String) -> Bool {
   let bytes = Array(snippet.utf8)
-  var start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let start = swiftmutDescribedValuePayloadStart(bytes: bytes, start: 0, end: bytes.count)
   guard start < bytes.count else {
     return false
-  }
-  if start + 1 < bytes.count
-      && (bytes[start] == 38 || bytes[start] == 124)
-      && bytes[start + 1] == bytes[start] {
-    start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 2)
-  }
-  if start < bytes.count && bytes[start] == 33 {
-    start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 1)
   }
   if swiftmutDescribedSnippetStartsWithOperator(bytes: bytes, start: start, end: bytes.count) {
     return true
@@ -425,13 +417,20 @@ func swiftmutDescribedValueExpressionSearchStart(
   matchStart: Int,
   lineEnd: Int
 ) -> Int {
-  var start = swiftmutSkipHorizontalWhitespace(bytes, from: matchStart)
-  if start + 1 < lineEnd
+  swiftmutDescribedValuePayloadStart(bytes: bytes, start: matchStart, end: lineEnd)
+}
+
+func swiftmutDescribedValuePayloadStart(bytes: [UInt8], start: Int, end: Int) -> Int {
+  var start = swiftmutSkipHorizontalWhitespace(bytes, from: start)
+  if start + 1 < end
       && (bytes[start] == 38 || bytes[start] == 124)
       && bytes[start + 1] == bytes[start] {
     start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 2)
   }
-  if start < lineEnd && bytes[start] == 33 {
+  if start < end && bytes[start] == 33 {
+    start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 1)
+  }
+  while start < end && bytes[start] == 40 {
     start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 1)
   }
   return start

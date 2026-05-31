@@ -39,6 +39,7 @@ swift_compiler_sources(Optimizer
   StackPromotion.swift
   StripObjectHeaders.swift
   Swiftmut.swift
+  SwiftmutJSON.swift
   TempLValueElimination.swift
   TempRValueElimination.swift
   PackSpecialization.swift

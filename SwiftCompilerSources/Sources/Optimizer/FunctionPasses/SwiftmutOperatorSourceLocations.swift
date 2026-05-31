@@ -40,7 +40,16 @@ func swiftmutIsGeneratedInvalidLocationFunction(_ function: Function) -> Bool {
   let name = function.name.string
   return name.contains("__derived_")
     || name.contains("CodingKeys")
+    || swiftmutIsGeneratedRawRepresentableFunctionName(name)
     || name.hasSuffix("TW")
+}
+
+func swiftmutIsGeneratedRawRepresentableFunctionName(_ name: String) -> Bool {
+  guard name.contains("O8rawValue") else {
+    return false
+  }
+  return name.hasSuffix("SSvg")
+    || name.contains("SgSS_tcfC")
 }
 
 func swiftmutIsGeneratedSpecializationFunctionName(_ name: String) -> Bool {
@@ -938,4 +947,3 @@ func swiftmutFindOrdinalSourceOperatorInFunctionBody(
     match.sourceOriginal,
     match.sourceMutated)
 }
-

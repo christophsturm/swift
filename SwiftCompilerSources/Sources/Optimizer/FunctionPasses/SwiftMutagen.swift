@@ -8083,7 +8083,7 @@ private func swiftMutagenFindDescribedDefaultArgumentReturnSourceLocation(
   }
 
   let snippet = swiftMutagenDecodedSourceSnippet(rawSnippet)
-  guard swiftMutagenDefaultArgumentSnippetLooksMappable(snippet),
+  guard swiftMutagenDefaultArgumentSnippetLooksMappable(snippet, functionName: functionName),
         let expression = swiftMutagenDefaultArgumentSnippetExpression(snippet, mutation: mutation) else {
     return nil
   }
@@ -8191,13 +8191,37 @@ private func swiftMutagenDecodedSourceSnippet(_ snippet: String) -> String {
   return String(decoding: decoded, as: UTF8.self)
 }
 
-private func swiftMutagenDefaultArgumentSnippetLooksMappable(_ snippet: String) -> Bool {
+private func swiftMutagenDefaultArgumentSnippetLooksMappable(
+  _ snippet: String,
+  functionName: String
+) -> Bool {
   let bytes = Array(snippet.utf8)
   guard bytes.count >= 4 else {
     return false
   }
   for byte in bytes where byte == 10 || byte == 13 {
     return true
+  }
+  guard swiftMutagenFunctionNameLooksDefaultArgumentThunk(functionName) else {
+    return false
+  }
+  for byte in bytes where byte == 41 || byte == 44 {
+    return true
+  }
+  return false
+}
+
+private func swiftMutagenFunctionNameLooksDefaultArgumentThunk(_ functionName: String) -> Bool {
+  let bytes = Array(functionName.utf8)
+  guard bytes.count >= 3 else {
+    return false
+  }
+  for index in 0..<(bytes.count - 2) {
+    if bytes[index] == 102,
+       bytes[index + 1] == 65,
+       swiftMutagenIsASCIILetterNumberOrUnderscore(bytes[index + 2]) {
+      return true
+    }
   }
   return false
 }
@@ -8327,7 +8351,7 @@ private func swiftMutagenDefaultArgumentDeclarationScore(
     return 0
   }
   let lines = sourceText.split(separator: "\n", omittingEmptySubsequences: false)
-  let startLine = max(1, line - 30)
+  let startLine = max(1, line - 160)
   let endLine = min(lines.count, line)
   var signature = ""
   if startLine <= endLine {

@@ -41,6 +41,7 @@ swift_compiler_sources(Optimizer
   Swiftmut.swift
   SwiftmutAssignmentText.swift
   SwiftmutJSON.swift
+  SwiftmutReturnText.swift
   SwiftmutText.swift
   TempLValueElimination.swift
   TempRValueElimination.swift

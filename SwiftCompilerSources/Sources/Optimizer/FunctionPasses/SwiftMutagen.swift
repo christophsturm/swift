@@ -5504,6 +5504,34 @@ private func swiftMutagenAssignmentValueSourceLocation(
     }
   }
 
+  if let definingInstruction = store.source.definingInstruction,
+     let fileNameAndPosition = definingInstruction.location.fileNameAndPosition {
+    let path = fileNameAndPosition.path.string
+    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
+      if let anchored = swiftMutagenFindAssignmentValueSourceLocation(
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config,
+        targetNames: targetNames,
+        requiresDirectValueExpression: true
+      ) {
+        return anchored
+      }
+      if !targetNames.isEmpty,
+         let anchored = swiftMutagenFindAssignmentValueSourceLocation(
+           path: matchedPath,
+           preferredLine: fileNameAndPosition.line,
+           mutation: mutation,
+           config: config,
+           targetNames: targetNames,
+           requiresDirectValueExpression: false
+         ) {
+        return anchored
+      }
+    }
+  }
+
   if let functionSourceLocation {
     if let anchored = swiftMutagenFindScopedAssignmentValueSourceLocation(
       path: functionSourceLocation.path,
@@ -5594,8 +5622,81 @@ private func swiftMutagenAssignmentValueSourceLocation(
     ) {
       return anchored
     }
+    if let definingInstruction = store.source.definingInstruction,
+       let anchored = swiftMutagenFindSourceSnippetAssignmentValueSourceLocation(
+         path: functionSourceLocation.path,
+         locationDescription: definingInstruction.location.description,
+         mutation: mutation,
+         config: config,
+         targetNames: targetNames
+       ) {
+      return anchored
+    }
   }
   return nil
+}
+
+private func swiftMutagenFindSourceSnippetAssignmentValueSourceLocation(
+  path: String,
+  locationDescription: String,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig,
+  targetNames: [String]
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard !targetNames.isEmpty,
+        let expectedExpression = swiftMutagenSourceSnippetValueExpression(locationDescription),
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+
+  var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard matches.count < 2,
+          let expression = swiftMutagenAssignmentValueExpression(
+            lineText,
+            mutation: mutation,
+            targetNames: targetNames,
+            requiresDirectValueExpression: false
+          ),
+          swiftMutagenStoreLocationExpressionMatches(
+            expression.sourceOriginal,
+            expected: expectedExpression
+          ) else {
+      return
+    }
+    matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      inspectLine(String(text[lineStart..<index]), line: currentLine)
+      if matches.count >= 2 {
+        break
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex {
+    inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
+  }
+
+  guard matches.count == 1,
+        let match = matches.first else {
+    return nil
+  }
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    match.sourceOriginal,
+    match.sourceMutated)
 }
 
 private func swiftMutagenFindStoreSnippetAssignmentValueSourceLocation(
@@ -5797,6 +5898,53 @@ private func swiftMutagenStoreLocationAssignedExpression(_ description: String) 
     return nil
   }
   return String(decoding: bytes[expressionStart..<trimmedEnd], as: UTF8.self)
+}
+
+private func swiftMutagenSourceSnippetValueExpression(_ description: String) -> String? {
+  guard let snippet = swiftMutagenQuotedSourceSnippetPrefix(description) else {
+    return nil
+  }
+
+  let bytes = Array(snippet.utf8)
+  let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  var end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  if end > start && bytes[end - 1] == 44 {
+    end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: end - 1)
+  }
+  guard start < end else {
+    return nil
+  }
+
+  if bytes[start] == 40 {
+    var index = start + 1
+    while index + 4 <= end {
+      if swiftMutagenASCIIHasExactPrefix(bytes, start: index, prefix: "let ") {
+        let nameStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: index + 3)
+        guard nameStart < end && swiftMutagenIsIdentifierStartByte(bytes[nameStart]) else {
+          return nil
+        }
+        var nameEnd = nameStart + 1
+        while nameEnd < end && swiftMutagenIsIdentifierByte(bytes[nameEnd]) {
+          nameEnd += 1
+        }
+        return String(decoding: bytes[nameStart..<nameEnd], as: UTF8.self)
+      }
+      index += 1
+    }
+  }
+
+  while end > start {
+    let byte = bytes[end - 1]
+    if byte == 41 || byte == 93 || byte == 125 {
+      end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: end - 1)
+      continue
+    }
+    break
+  }
+  guard start < end else {
+    return nil
+  }
+  return String(decoding: bytes[start..<end], as: UTF8.self)
 }
 
 private func swiftMutagenStoreLocationExpressionMatches(

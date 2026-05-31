@@ -4172,6 +4172,10 @@ private func swiftMutagenScalarValueSourceLocation(
   mutation: SwiftMutagenMutation,
   config: SwiftMutagenConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let functionSourceLocation = swiftMutagenFunctionSourceLocation(
+    for: value.parentFunction,
+    config: config
+  )
   if let fileNameAndPosition = value.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config) {
@@ -4184,25 +4188,33 @@ private func swiftMutagenScalarValueSourceLocation(
       ) {
         return assignment
       }
-      return swiftMutagenFindReturnedScalarValueSourceLocation(
+      if let returned = swiftMutagenFindReturnedScalarValueSourceLocation(
         for: value,
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config
-      )
+      ) {
+        return returned
+      }
+      if let functionSourceLocation,
+         functionSourceLocation.path == matchedPath,
+         let anchored = swiftMutagenFindOrdinalScalarValueSourceLocation(
+           for: value,
+           path: matchedPath,
+           preferredLine: functionSourceLocation.line,
+           mutation: mutation,
+           config: config
+         ) {
+        return anchored
+      }
     }
   }
 
-  let location = value.parentFunction.location.description
-  for path in swiftMutagenSwiftSourcePaths(config: config) {
-    guard location.contains(path),
-          let line = swiftMutagenPreferredLine(in: location, path: path) else {
-      continue
-    }
+  if let functionSourceLocation {
     if let anchored = swiftMutagenFindAssignmentValueSourceLocation(
-      path: path,
-      preferredLine: line,
+      path: functionSourceLocation.path,
+      preferredLine: functionSourceLocation.line,
       mutation: mutation,
       config: config,
       requiresDirectValueExpression: true
@@ -4211,8 +4223,17 @@ private func swiftMutagenScalarValueSourceLocation(
     }
     if let anchored = swiftMutagenFindReturnedScalarValueSourceLocation(
       for: value,
-      path: path,
-      preferredLine: line,
+      path: functionSourceLocation.path,
+      preferredLine: functionSourceLocation.line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
+    if let anchored = swiftMutagenFindOrdinalScalarValueSourceLocation(
+      for: value,
+      path: functionSourceLocation.path,
+      preferredLine: functionSourceLocation.line,
       mutation: mutation,
       config: config
     ) {
@@ -4220,6 +4241,62 @@ private func swiftMutagenScalarValueSourceLocation(
     }
   }
   return nil
+}
+
+private func swiftMutagenFindOrdinalScalarValueSourceLocation(
+  for value: StructInst,
+  path: String,
+  preferredLine: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard let ordinal = swiftMutagenScalarValueOrdinalAndCount(
+    for: value,
+    mutation: mutation,
+    config: config
+  ), ordinal.count <= 200 else {
+    return nil
+  }
+  return swiftMutagenFindOrdinalValueExpressionSourceLocation(
+    path: path,
+    preferredLine: preferredLine,
+    ordinal: ordinal.ordinal,
+    expectedCount: ordinal.count,
+    mutation: mutation,
+    config: config
+  )
+}
+
+private func swiftMutagenScalarValueOrdinalAndCount(
+  for value: StructInst,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (ordinal: Int, count: Int)? {
+  var ordinal = 0
+  var count = 0
+  var foundValue = false
+
+  for block in value.parentFunction.blocks {
+    for instruction in block.instructions {
+      guard let candidate = instruction as? StructInst else {
+        continue
+      }
+      let mutations = swiftMutagenScalarValueMutations(for: candidate, config: config)
+      guard mutations.contains(where: { $0.mutatedBuiltinName == mutation.mutatedBuiltinName }) else {
+        continue
+      }
+      count += 1
+      if candidate === value {
+        ordinal = count
+        foundValue = true
+      }
+    }
+  }
+
+  guard foundValue else {
+    return nil
+  }
+  return (ordinal, count)
 }
 
 private func swiftMutagenFindReturnedScalarValueSourceLocation(

@@ -266,6 +266,14 @@ func swiftmutDescribedValueExpression(
   ) {
     return expression
   }
+  if let expression = swiftmutDescribedOptionalBindingValueExpression(
+    bytes: bytes,
+    matchStart: matchStart,
+    lineEnd: lineEnd,
+    mutation: mutation
+  ) {
+    return expression
+  }
   if let expression = swiftmutDescribedCatchPatternValueExpression(
     bytes: bytes,
     matchStart: matchStart,
@@ -315,6 +323,102 @@ func swiftmutDescribedValueExpression(
     expressionRange: expressionRange,
     mutation: mutation
   )
+}
+
+func swiftmutDescribedOptionalBindingValueExpression(
+  bytes: [UInt8],
+  matchStart: Int,
+  lineEnd: Int,
+  mutation: SwiftmutMutation
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let lineStart = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  guard swiftmutDescribedLineStartsWithOptionalBinding(bytes: bytes, lineStart: lineStart) else {
+    return nil
+  }
+  guard let equals = swiftmutLastTopLevelEqualsBefore(
+    bytes: bytes,
+    start: lineStart,
+    end: matchStart
+  ), equals < matchStart else {
+    return nil
+  }
+
+  var expressionStart = matchStart
+  while expressionStart > equals + 1 && swiftmutIsSourceExpressionPrefixByte(bytes[expressionStart - 1]) {
+    expressionStart -= 1
+  }
+  expressionStart = swiftmutSkipHorizontalWhitespace(bytes, from: expressionStart)
+
+  var expressionEnd = matchStart
+  while expressionEnd < lineEnd {
+    let byte = bytes[expressionEnd]
+    if swiftmutIsHorizontalWhitespace(byte) || byte == 123 || byte == 44 {
+      break
+    }
+    expressionEnd += 1
+  }
+
+  guard expressionStart < expressionEnd,
+        swiftmutReturnValueIsEligible(bytes: bytes, start: expressionStart, mutation: mutation) else {
+    return nil
+  }
+
+  let sourceOriginal = String(decoding: bytes[expressionStart..<expressionEnd], as: UTF8.self)
+  return (
+    expressionStart + 1,
+    sourceOriginal,
+    swiftmutImplicitReturnSourceMutation(for: mutation))
+}
+
+func swiftmutDescribedLineStartsWithOptionalBinding(bytes: [UInt8], lineStart: Int) -> Bool {
+  if swiftmutASCIIHasExactPrefix(bytes, start: lineStart, prefix: "if let ") {
+    return true
+  }
+  if swiftmutASCIIHasExactPrefix(bytes, start: lineStart, prefix: "if var ") {
+    return true
+  }
+  if swiftmutASCIIHasExactPrefix(bytes, start: lineStart, prefix: "guard let ") {
+    return true
+  }
+  if swiftmutASCIIHasExactPrefix(bytes, start: lineStart, prefix: "guard var ") {
+    return true
+  }
+  return false
+}
+
+func swiftmutLastTopLevelEqualsBefore(bytes: [UInt8], start: Int, end: Int) -> Int? {
+  var index = start
+  var parenDepth = 0
+  var bracketDepth = 0
+  var quote: UInt8?
+  var escaped = false
+  var lastEquals: Int?
+  while index < end {
+    let byte = bytes[index]
+    if let activeQuote = quote {
+      if escaped {
+        escaped = false
+      } else if byte == 92 {
+        escaped = true
+      } else if byte == activeQuote {
+        quote = nil
+      }
+    } else if byte == 34 || byte == 39 {
+      quote = byte
+    } else if byte == 40 {
+      parenDepth += 1
+    } else if byte == 41 {
+      parenDepth -= 1
+    } else if byte == 91 {
+      bracketDepth += 1
+    } else if byte == 93 {
+      bracketDepth -= 1
+    } else if byte == 61 && parenDepth == 0 && bracketDepth == 0 {
+      lastEquals = index
+    }
+    index += 1
+  }
+  return lastEquals
 }
 
 func swiftmutDescribedCatchPatternValueExpression(

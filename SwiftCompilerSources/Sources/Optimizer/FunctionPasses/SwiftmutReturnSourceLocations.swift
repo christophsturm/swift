@@ -841,4 +841,3 @@ func swiftmutReturnBranchOrdinalAndCount(
   }
   return (ordinal, count)
 }
-

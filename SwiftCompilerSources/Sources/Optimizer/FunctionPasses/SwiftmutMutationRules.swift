@@ -368,4 +368,3 @@ func swiftmutIsComparisonBuiltin(_ builtin: BuiltinInst) -> Bool {
     return false
   }
 }
-

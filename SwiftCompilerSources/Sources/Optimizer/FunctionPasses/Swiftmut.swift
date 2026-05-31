@@ -1872,6 +1872,21 @@ private func swiftmutValueReplacementMutations(
     mutations.append(swiftmutReturnMutation(rule, silOriginal: valueType.description))
   }
 
+  if swiftmutIsCollectionType(valueType, named: "Array"),
+     let rule = swiftmutFirstReturnRule(context: "arrayToEmpty", config: config) {
+    mutations.append(swiftmutReturnMutation(rule, silOriginal: valueType.description))
+  }
+
+  if swiftmutIsCollectionType(valueType, named: "Dictionary"),
+     let rule = swiftmutFirstReturnRule(context: "dictionaryToEmpty", config: config) {
+    mutations.append(swiftmutReturnMutation(rule, silOriginal: valueType.description))
+  }
+
+  if swiftmutIsCollectionType(valueType, named: "Set"),
+     let rule = swiftmutFirstReturnRule(context: "setToEmpty", config: config) {
+    mutations.append(swiftmutReturnMutation(rule, silOriginal: valueType.description))
+  }
+
   return mutations
 }
 
@@ -2848,25 +2863,40 @@ private func swiftmutCanMakeReturnAlternative(
       ), context) != nil
   case "return_empty_array":
     return swiftmutIsCollectionType(returnType, named: "Array")
-      && swiftmutEmptyCollectionFunction(named: swiftmutRuntimeHelperThunkName(
-        runtimeFunctionName: runtimeFunctionName,
-        suffix: "empty_array",
-        fallbackName: "__swiftmut_empty_array"
-      ), context) != nil
+      && swiftmutCanApplyEmptyCollection(
+        type: returnType,
+        helperName: swiftmutRuntimeHelperThunkName(
+          runtimeFunctionName: runtimeFunctionName,
+          suffix: "empty_array",
+          fallbackName: "__swiftmut_empty_array"
+        ),
+        expectedReplacementCount: 1,
+        context: context
+      )
   case "return_empty_dictionary":
     return swiftmutIsCollectionType(returnType, named: "Dictionary")
-      && swiftmutEmptyCollectionFunction(named: swiftmutRuntimeHelperThunkName(
-        runtimeFunctionName: runtimeFunctionName,
-        suffix: "empty_dictionary",
-        fallbackName: "__swiftmut_empty_dictionary"
-      ), context) != nil
+      && swiftmutCanApplyEmptyCollection(
+        type: returnType,
+        helperName: swiftmutRuntimeHelperThunkName(
+          runtimeFunctionName: runtimeFunctionName,
+          suffix: "empty_dictionary",
+          fallbackName: "__swiftmut_empty_dictionary"
+        ),
+        expectedReplacementCount: 2,
+        context: context
+      )
   case "return_empty_set":
     return swiftmutIsCollectionType(returnType, named: "Set")
-      && swiftmutEmptyCollectionFunction(named: swiftmutRuntimeHelperThunkName(
-        runtimeFunctionName: runtimeFunctionName,
-        suffix: "empty_set",
-        fallbackName: "__swiftmut_empty_set"
-      ), context) != nil
+      && swiftmutCanApplyEmptyCollection(
+        type: returnType,
+        helperName: swiftmutRuntimeHelperThunkName(
+          runtimeFunctionName: runtimeFunctionName,
+          suffix: "empty_set",
+          fallbackName: "__swiftmut_empty_set"
+        ),
+        expectedReplacementCount: 1,
+        context: context
+      )
   default:
     return false
   }
@@ -3928,18 +3958,56 @@ private func swiftmutMakeEmptyCollection(
   guard let emptyCollectionFunction = swiftmutEmptyCollectionFunction(named: helperName, context) else {
     return nil
   }
-  let replacements = Array(type.contextSubstitutionMap.replacementTypes)
-  guard replacements.count == expectedReplacementCount else {
+  guard let substitutionMap = swiftmutEmptyCollectionSubstitutionMap(
+    type: type,
+    helper: emptyCollectionFunction,
+    expectedReplacementCount: expectedReplacementCount
+  ) else {
     return nil
   }
   let functionRef = builder.createFunctionRef(emptyCollectionFunction)
   return builder.createApply(
     function: functionRef,
-    SubstitutionMap(
-      genericSignature: emptyCollectionFunction.genericSignature,
-      replacementTypes: replacements
-    ),
+    substitutionMap,
     arguments: []
+  )
+}
+
+private func swiftmutCanApplyEmptyCollection(
+  type: Type,
+  helperName: String,
+  expectedReplacementCount: Int,
+  context: FunctionPassContext
+) -> Bool {
+  guard let helper = swiftmutEmptyCollectionFunction(named: helperName, context) else {
+    return false
+  }
+  return swiftmutEmptyCollectionSubstitutionMap(
+    type: type,
+    helper: helper,
+    expectedReplacementCount: expectedReplacementCount
+  ) != nil
+}
+
+private func swiftmutEmptyCollectionSubstitutionMap(
+  type: Type,
+  helper: Function,
+  expectedReplacementCount: Int
+) -> SubstitutionMap? {
+  let genericSignature = helper.loweredFunctionType.invocationGenericSignatureOfFunction
+  if genericSignature.isEmpty {
+    return SubstitutionMap()
+  }
+  guard genericSignature.genericParameters.count == expectedReplacementCount else {
+    return nil
+  }
+  let replacements = Array(type.contextSubstitutionMap.replacementTypes)
+  guard replacements.count == expectedReplacementCount else {
+    return nil
+  }
+  return SubstitutionMap(
+    genericSignature: genericSignature,
+    replacementTypes: replacements
   )
 }
 

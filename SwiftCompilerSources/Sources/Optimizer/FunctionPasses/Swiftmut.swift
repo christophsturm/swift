@@ -1906,7 +1906,27 @@ private func swiftmutAssignmentValueMutations(
     valueType: store.source.type,
     function: store.parentFunction,
     config: config
-  )
+  ).filter { mutation in
+    swiftmutAssignmentMutationChangesConcreteValue(mutation, source: store.source)
+  }
+}
+
+private func swiftmutAssignmentMutationChangesConcreteValue(
+  _ mutation: SwiftmutMutation,
+  source: Value
+) -> Bool {
+  switch mutation.mutatedBuiltinName {
+  case "return_false":
+    return swiftmutBoolLiteralValue(source) != false
+  case "return_true":
+    return swiftmutBoolLiteralValue(source) != true
+  case "return_nil":
+    return !swiftmutIsOptionalNone(source)
+  case "return_zero":
+    return swiftmutIntegerStructLiteralValue(source) != 0
+  default:
+    return true
+  }
 }
 
 private func swiftmutCanDispatchAssignmentValue(_ store: StoreInst) -> Bool {

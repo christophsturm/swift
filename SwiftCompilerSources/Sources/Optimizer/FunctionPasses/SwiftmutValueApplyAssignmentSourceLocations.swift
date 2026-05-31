@@ -214,6 +214,27 @@ func swiftmutAssignmentValueSourceLocation(
     ) {
       return anchored
     }
+    if let anchored = swiftmutFindScopedDescribedAssignmentValueSourceLocation(
+      path: functionSourceLocation.path,
+      functionLine: functionSourceLocation.line,
+      locationDescription: store.location.description,
+      mutation: mutation,
+      config: config,
+      targetNames: targetNames
+    ) {
+      return anchored
+    }
+    if let definingInstruction = store.source.definingInstruction,
+       let anchored = swiftmutFindScopedDescribedAssignmentValueSourceLocation(
+         path: functionSourceLocation.path,
+         functionLine: functionSourceLocation.line,
+         locationDescription: definingInstruction.location.description,
+         mutation: mutation,
+         config: config,
+         targetNames: targetNames
+       ) {
+      return anchored
+    }
     if let anchored = swiftmutFindAssignmentValueSourceLocation(
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,
@@ -318,102 +339,6 @@ func swiftmutAssignmentValueSourceLocation(
     }
   }
   return nil
-}
-
-func swiftmutFindDescribedAssignmentValueSourceLocation(
-  locationDescription: String,
-  mutation: SwiftmutMutation,
-  config: SwiftmutConfig,
-  targetNames: [String]
-) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  guard !targetNames.isEmpty,
-        let rawSnippet = swiftmutQuotedSourceSearchSnippet(locationDescription),
-        rawSnippet.count >= 2 else {
-    return nil
-  }
-
-  let snippet = swiftmutDecodedSourceSnippet(rawSnippet)
-  let expressionStart = swiftmutSnippetExpressionStartOffset(snippet)
-  guard expressionStart >= 0,
-        let expression = swiftmutDefaultArgumentSnippetExpression(snippet, mutation: mutation) else {
-    return nil
-  }
-
-  var matches: [(path: String, line: Int, column: Int)] = []
-  for path in swiftmutSwiftSourcePaths(config: config) {
-    guard let text = swiftmutRead(path) else {
-      continue
-    }
-    for match in swiftmutSourceSnippetMatches(snippet, in: text) {
-      let expressionColumn = match.column + expressionStart
-      guard let lineText = swiftmutSourceLine(text, line: match.line),
-            swiftmutDescribedAssignmentLineIsMappable(
-              lineText,
-              expression: expression,
-              expressionColumn: expressionColumn,
-              targetNames: targetNames
-            ) else {
-        continue
-      }
-      matches.append((path, match.line, expressionColumn))
-      if matches.count >= 2 {
-        break
-      }
-    }
-    if matches.count >= 2 {
-      break
-    }
-  }
-
-  guard matches.count == 1,
-        let match = matches.first else {
-    return nil
-  }
-  return (
-    swiftmutTrimPackageRoot(match.path, config: config),
-    match.line,
-    match.column,
-    expression,
-    swiftmutImplicitReturnSourceMutation(for: mutation))
-}
-
-func swiftmutDescribedAssignmentLineIsMappable(
-  _ line: String,
-  expression: String,
-  expressionColumn: Int,
-  targetNames: [String]
-) -> Bool {
-  guard swiftmutLineContainsAnyIdentifier(line, identifiers: targetNames) else {
-    return false
-  }
-
-  let bytes = Array(line.utf8)
-  let expressionStart = max(0, min(bytes.count, expressionColumn - 1))
-  if expressionStart > 0 {
-    for index in 0..<expressionStart where bytes[index] == 61 {
-      return true
-    }
-  }
-
-  if targetNames.contains(expression) {
-    return false
-  }
-
-  for targetName in targetNames {
-    guard let targetRange = swiftmutFindSourceIdentifier(
-      targetName,
-      in: bytes,
-      start: 0,
-      end: expressionStart
-    ) else {
-      continue
-    }
-    let colonIndex = swiftmutSkipHorizontalWhitespace(bytes, from: targetRange.end)
-    if colonIndex < expressionStart && bytes[colonIndex] == 58 {
-      return true
-    }
-  }
-  return false
 }
 
 func swiftmutFindFunctionSignatureAssignmentValueSourceLocation(

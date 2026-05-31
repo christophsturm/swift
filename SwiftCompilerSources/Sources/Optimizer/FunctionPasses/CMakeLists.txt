@@ -42,6 +42,7 @@ swift_compiler_sources(Optimizer
   SwiftmutAssignmentSourceLocations.swift
   SwiftmutAssignmentText.swift
   SwiftmutConfig.swift
+  SwiftmutDescribedAssignmentSourceLocations.swift
   SwiftmutDiscovery.swift
   SwiftmutExplicitReturnSourceLocations.swift
   SwiftmutFilesystem.swift

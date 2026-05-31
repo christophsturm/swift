@@ -8723,6 +8723,15 @@ private func swiftMutagenSourceLocation(
     return located
   }
 
+  if let located = swiftMutagenFindDescribedSourceOperator(
+    moduleName: moduleName,
+    functionLocation: function.location.description,
+    locationDescription: instruction.location.description,
+    mutation: mutation,
+    config: config) {
+    return located
+  }
+
   if let comparison = instruction as? BuiltinInst,
      swiftMutagenIsComparisonBuiltin(comparison),
      let ordinal = swiftMutagenComparisonOrdinalAndCount(for: comparison, in: function),
@@ -9423,6 +9432,200 @@ private func swiftMutagenFindUniqueSourceOperatorInFunctionBody(
       if currentLine >= preferredLine {
         inspectLine(lineText, line: currentLine)
         updateBraceDepth(lineText)
+        if sawOpeningBrace && braceDepth <= 0 {
+          break
+        }
+        if currentLine >= preferredLine + 300 {
+          break
+        }
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine >= preferredLine {
+    let lineText = String(text[lineStart..<text.endIndex])
+    inspectLine(lineText, line: currentLine)
+  }
+
+  guard matches.count == 1,
+        let match = matches.first else {
+    return nil
+  }
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    match.sourceOriginal,
+    match.sourceMutated)
+}
+
+private func swiftMutagenFindDescribedSourceOperator(
+  moduleName: String,
+  functionLocation: String,
+  locationDescription: String,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard let snippet = swiftMutagenQuotedSourceSnippetPrefix(locationDescription),
+        let needle = swiftMutagenDescribedSourceOperatorNeedle(snippet) else {
+    return nil
+  }
+
+  let displayRules = swiftMutagenSourceMutationDisplayRules(for: mutation, config: config)
+  let preferredPrefix = config.packageRoot + "/Sources/" + moduleName + "/"
+  let locatedSourcePaths = swiftMutagenSwiftSourcePaths(config: config).compactMap { path
+    -> (path: String, preferredLine: Int)? in
+    guard functionLocation.contains(path),
+          let preferredLine = swiftMutagenPreferredLine(in: functionLocation, path: path) else {
+      return nil
+    }
+    return (path, preferredLine)
+  }.sorted { lhs, rhs in
+    lhs.path < rhs.path
+  }
+  guard !locatedSourcePaths.isEmpty else {
+    return nil
+  }
+
+  var fallback: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
+  for (path, preferredLine) in locatedSourcePaths {
+    guard let result = swiftMutagenFindDescribedSourceOperatorInFunctionBody(
+      path: path,
+      preferredLine: preferredLine,
+      displayRules: displayRules,
+      needle: needle,
+      config: config
+    ) else {
+      continue
+    }
+    if path.hasPrefix(preferredPrefix) {
+      return result
+    }
+    if fallback == nil {
+      fallback = result
+    }
+  }
+  return fallback
+}
+
+private func swiftMutagenDescribedSourceOperatorNeedle(_ snippet: String) -> String? {
+  let bytes = Array(snippet.utf8)
+  var start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  var end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard start < end else {
+    return nil
+  }
+  if start + 1 < end
+      && (bytes[start] == 38 || bytes[start] == 124)
+      && bytes[start + 1] == bytes[start] {
+    start = swiftMutagenSkipHorizontalWhitespace(bytes, from: start + 2)
+  }
+  while end > start {
+    let byte = bytes[end - 1]
+    if byte == 44 || byte == 123 || byte == 125 {
+      end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: end - 1)
+      continue
+    }
+    break
+  }
+  guard end - start >= 2 else {
+    return nil
+  }
+  let result = String(decoding: bytes[start..<end], as: UTF8.self)
+  return swiftMutagenSourceOperatorNeedleContainsOperator(result) ? result : nil
+}
+
+private func swiftMutagenSourceOperatorNeedleContainsOperator(_ needle: String) -> Bool {
+  let operators = ["!=", "==", ">=", "<=", ">", "<"]
+  let bytes = Array(needle.utf8)
+  let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard start < end else {
+    return false
+  }
+  for operatorText in operators where swiftMutagenASCIIContains(bytes, start: start, end: end, pattern: operatorText) {
+    return true
+  }
+  return false
+}
+
+private func swiftMutagenFindDescribedSourceOperatorInFunctionBody(
+  path: String,
+  preferredLine: Int,
+  displayRules: [SwiftMutagenSourceMutationDisplayRule],
+  needle: String,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard preferredLine > 0,
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+
+  var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  var braceDepth = 0
+  var sawOpeningBrace = false
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard line >= preferredLine,
+          matches.count < 2,
+          lineText.contains(needle) else {
+      return
+    }
+
+    var lineMatches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
+    for rule in displayRules {
+      let sourceMutatedOverride = rule.sourceMutatedOverride
+      for position in swiftMutagenFindOperatorMatches(
+        rule.sourceOriginal,
+        mutatedOperator: rule.sourceMutated,
+        in: lineText
+      ) {
+        let sourceMutated = sourceMutatedOverride.isEmpty
+          ? position.sourceMutated
+          : sourceMutatedOverride
+        lineMatches.append((line, position.column, position.sourceOriginal, sourceMutated))
+      }
+    }
+
+    if lineMatches.count == 1,
+       let only = lineMatches.first {
+      matches.append(only)
+      return
+    }
+
+    let filtered = lineMatches.filter { $0.sourceOriginal.contains(needle) }
+    if filtered.count == 1,
+       let only = filtered.first {
+      matches.append(only)
+    }
+  }
+
+  func updateBraceDepth(_ lineText: String) {
+    for byte in lineText.utf8 {
+      if byte == 123 {
+        braceDepth += 1
+        sawOpeningBrace = true
+      } else if byte == 125 {
+        braceDepth -= 1
+      }
+    }
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      let lineText = String(text[lineStart..<index])
+      if currentLine >= preferredLine {
+        inspectLine(lineText, line: currentLine)
+        updateBraceDepth(lineText)
+        if matches.count >= 2 {
+          break
+        }
         if sawOpeningBrace && braceDepth <= 0 {
           break
         }

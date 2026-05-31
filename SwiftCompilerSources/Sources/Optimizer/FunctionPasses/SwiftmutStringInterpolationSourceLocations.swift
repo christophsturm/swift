@@ -34,14 +34,30 @@ func swiftmutFindStringInterpolationValueSourceLocation(
     preferredLine: preferredLine,
     expectedCount: ordinal.count,
     mutation: mutation,
-    config: config
+    config: config,
+    descriptionBackedOnly: false
   )
-  guard candidates.count == ordinal.count,
+  if candidates.count == ordinal.count,
+     ordinal.ordinal > 0,
+     ordinal.ordinal <= candidates.count {
+    return candidates[ordinal.ordinal - 1]
+  }
+
+  let descriptionBackedCandidates = swiftmutStringInterpolationExpressionCandidates(
+    in: text,
+    path: path,
+    preferredLine: preferredLine,
+    expectedCount: ordinal.count,
+    mutation: mutation,
+    config: config,
+    descriptionBackedOnly: true
+  )
+  guard descriptionBackedCandidates.count == ordinal.count,
         ordinal.ordinal > 0,
-        ordinal.ordinal <= candidates.count else {
+        ordinal.ordinal <= descriptionBackedCandidates.count else {
     return nil
   }
-  return candidates[ordinal.ordinal - 1]
+  return descriptionBackedCandidates[ordinal.ordinal - 1]
 }
 
 func swiftmutStringInterpolationApplyOrdinalAndCount(
@@ -99,7 +115,8 @@ func swiftmutStringInterpolationExpressionCandidates(
   preferredLine: Int,
   expectedCount: Int,
   mutation: SwiftmutMutation,
-  config: SwiftmutConfig
+  config: SwiftmutConfig,
+  descriptionBackedOnly: Bool
 ) -> [(file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] {
   guard preferredLine > 0 else {
     return []
@@ -117,7 +134,11 @@ func swiftmutStringInterpolationExpressionCandidates(
           candidates.count <= expectedCount else {
       return
     }
-    let expressions = swiftmutStringInterpolationExpressions(on: lineText, mutation: mutation)
+    let expressions = swiftmutStringInterpolationExpressions(
+      on: lineText,
+      mutation: mutation,
+      descriptionBackedOnly: descriptionBackedOnly
+    )
     for expression in expressions {
       candidates.append((
         swiftmutTrimPackageRoot(path, config: config),
@@ -172,7 +193,8 @@ func swiftmutStringInterpolationExpressionCandidates(
 
 func swiftmutStringInterpolationExpressions(
   on line: String,
-  mutation: SwiftmutMutation
+  mutation: SwiftmutMutation,
+  descriptionBackedOnly: Bool
 ) -> [(column: Int, sourceOriginal: String, sourceMutated: String)] {
   let bytes = Array(line.utf8)
   let lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
@@ -190,7 +212,12 @@ func swiftmutStringInterpolationExpressions(
       let expressionStart = swiftmutSkipHorizontalWhitespace(bytes, from: index + 2)
       let expressionEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: close - 1)
       if expressionStart < expressionEnd,
-         swiftmutReturnValueIsEligible(bytes: bytes, start: expressionStart, mutation: mutation) {
+         swiftmutReturnValueIsEligible(bytes: bytes, start: expressionStart, mutation: mutation),
+         (!descriptionBackedOnly || swiftmutStringInterpolationLooksDescriptionBacked(
+           bytes: bytes,
+           start: expressionStart,
+           end: expressionEnd
+         )) {
         expressions.append((
           expressionStart + 1,
           String(decoding: bytes[expressionStart..<expressionEnd], as: UTF8.self),
@@ -203,4 +230,69 @@ func swiftmutStringInterpolationExpressions(
     index += 1
   }
   return expressions
+}
+
+func swiftmutStringInterpolationLooksDescriptionBacked(
+  bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> Bool {
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: start)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: end)
+  guard start < end else {
+    return false
+  }
+  if swiftmutStringInterpolationStartsWithDirectCall(bytes: bytes, start: start, end: end) {
+    return false
+  }
+  if swiftmutStringInterpolationHasStringNilCoalescing(bytes: bytes, start: start, end: end) {
+    return false
+  }
+  if swiftmutASCIIHasSuffix(bytes, start: start, end: end, suffix: ".rawValue") {
+    return false
+  }
+  if swiftmutASCIIHasSuffix(bytes, start: start, end: end, suffix: ".file") {
+    return false
+  }
+  return true
+}
+
+func swiftmutStringInterpolationStartsWithDirectCall(
+  bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> Bool {
+  guard start < end,
+        swiftmutIsASCIIIdentifierStart(bytes[start]) else {
+    return false
+  }
+  var index = start + 1
+  while index < end && swiftmutIsASCIILetterNumberOrUnderscore(bytes[index]) {
+    index += 1
+  }
+  let suffixStart = swiftmutSkipHorizontalWhitespace(bytes, from: index)
+  return suffixStart < end && bytes[suffixStart] == 40
+}
+
+func swiftmutStringInterpolationHasStringNilCoalescing(
+  bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> Bool {
+  guard let coalesce = swiftmutTopLevelASCIIIndex(bytes, start: start, end: end, pattern: "??") else {
+    return false
+  }
+  let fallback = swiftmutSkipHorizontalWhitespace(bytes, from: coalesce + 2)
+  return fallback + 1 < end && bytes[fallback] == 34
+}
+
+func swiftmutASCIIHasSuffix(_ bytes: [UInt8], start: Int, end: Int, suffix: String) -> Bool {
+  let suffixBytes = Array(suffix.utf8)
+  guard start >= 0,
+        end <= bytes.count,
+        suffixBytes.count <= end - start else {
+    return false
+  }
+  let suffixStart = end - suffixBytes.count
+  return swiftmutBytesMatch(bytes, start: suffixStart, pattern: suffixBytes)
 }

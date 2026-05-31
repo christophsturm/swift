@@ -56,6 +56,17 @@ func swiftmutValueApplySourceLocation(
       }
       if let functionSourceLocation,
          functionSourceLocation.path == matchedPath,
+         let anchored = swiftmutFindMultilineCallValueSourceLocation(
+           path: matchedPath,
+           functionLine: functionSourceLocation.line,
+           locationDescription: apply.location.description,
+           mutation: mutation,
+           config: config
+         ) {
+        return anchored
+      }
+      if let functionSourceLocation,
+         functionSourceLocation.path == matchedPath,
          let anchored = swiftmutFindStringInterpolationValueSourceLocation(
            for: apply,
            path: matchedPath,
@@ -124,6 +135,15 @@ func swiftmutValueApplySourceLocation(
     if let anchored = swiftmutFindUniqueDescribedValueExpressionSourceLocation(
       for: apply,
       path: functionSourceLocation.path,
+      locationDescription: apply.location.description,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
+    if let anchored = swiftmutFindMultilineCallValueSourceLocation(
+      path: functionSourceLocation.path,
+      functionLine: functionSourceLocation.line,
       locationDescription: apply.location.description,
       mutation: mutation,
       config: config

@@ -55,6 +55,7 @@ swift_compiler_sources(Optimizer
   SwiftmutLabeledReturnSourceLocations.swift
   SwiftmutManifest.swift
   SwiftmutMetamutantInstrumentation.swift
+  SwiftmutMultilineCallSourceLocations.swift
   SwiftmutMutationBuilders.swift
   SwiftmutMutationRules.swift
   SwiftmutObservability.swift

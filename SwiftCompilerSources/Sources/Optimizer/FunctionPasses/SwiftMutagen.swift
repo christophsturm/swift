@@ -4267,6 +4267,24 @@ private func swiftMutagenReturnSourceLocation(
     }
   }
 
+  if let anchored = swiftMutagenFindDescribedDefaultArgumentReturnSourceLocation(
+    functionName: returnInst.parentFunction.name.string,
+    locationDescription: returnInst.location.description,
+    mutation: mutation,
+    config: config
+  ) {
+    return anchored
+  }
+  if let definingInstruction = returnInst.returnedValue.definingInstruction,
+     let anchored = swiftMutagenFindDescribedDefaultArgumentReturnSourceLocation(
+       functionName: returnInst.parentFunction.name.string,
+       locationDescription: definingInstruction.location.description,
+       mutation: mutation,
+       config: config
+     ) {
+    return anchored
+  }
+
   let returnLocation = returnInst.location.description
   for path in swiftMutagenSwiftSourcePaths(config: config) {
     guard returnLocation.contains(path),
@@ -8051,6 +8069,372 @@ private func swiftMutagenFindDescribedExplicitReturnSourceLocation(
     match.column,
     mutation.sourceOriginal,
     mutation.sourceMutated)
+}
+
+private func swiftMutagenFindDescribedDefaultArgumentReturnSourceLocation(
+  functionName: String,
+  locationDescription: String,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard let rawSnippet = swiftMutagenQuotedSourceSearchSnippet(locationDescription),
+        rawSnippet.count >= 4 else {
+    return nil
+  }
+
+  let snippet = swiftMutagenDecodedSourceSnippet(rawSnippet)
+  guard swiftMutagenDefaultArgumentSnippetLooksMappable(snippet),
+        let expression = swiftMutagenDefaultArgumentSnippetExpression(snippet, mutation: mutation) else {
+    return nil
+  }
+
+  var matches: [(path: String, line: Int, column: Int, score: Int)] = []
+  for path in swiftMutagenSwiftSourcePaths(config: config) {
+    guard let text = swiftMutagenRead(path) else {
+      continue
+    }
+    let fileMatches = swiftMutagenSourceSnippetMatches(snippet, in: text)
+    for match in fileMatches {
+      let score = swiftMutagenDefaultArgumentDeclarationScore(
+        functionName: functionName,
+        sourceText: text,
+        line: match.line
+      )
+      matches.append((path, match.line, match.column, score))
+    }
+  }
+
+  guard !matches.isEmpty else {
+    return nil
+  }
+  let bestScore = matches.map { $0.score }.max() ?? 0
+  let bestMatches = matches.filter { $0.score == bestScore }
+  guard bestMatches.count == 1,
+        let match = bestMatches.first else {
+    return nil
+  }
+
+  return (
+    swiftMutagenTrimPackageRoot(match.path, config: config),
+    match.line,
+    match.column,
+    expression,
+    swiftMutagenImplicitReturnSourceMutation(for: mutation))
+}
+
+private func swiftMutagenQuotedSourceSearchSnippet(_ description: String) -> String? {
+  let bytes = Array(description.utf8)
+  guard bytes.count > 1,
+        bytes[0] == 34 else {
+    return nil
+  }
+
+  var end = 1
+  while end < bytes.count {
+    if end + 4 <= bytes.count,
+       bytes[end] == 91,
+       bytes[end + 1] == 46,
+       bytes[end + 2] == 46,
+       bytes[end + 3] == 46 {
+      break
+    }
+    if end + 9 <= bytes.count,
+       bytes[end] == 34,
+       bytes[end + 1] == 44,
+       bytes[end + 2] == 32,
+       bytes[end + 3] == 115,
+       bytes[end + 4] == 99,
+       bytes[end + 5] == 111,
+       bytes[end + 6] == 112,
+       bytes[end + 7] == 101,
+       bytes[end + 8] == 61 {
+      break
+    }
+    end += 1
+  }
+
+  let trimmedEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: end)
+  guard trimmedEnd > 1 else {
+    return nil
+  }
+  return String(decoding: bytes[1..<trimmedEnd], as: UTF8.self)
+}
+
+private func swiftMutagenDecodedSourceSnippet(_ snippet: String) -> String {
+  let bytes = Array(snippet.utf8)
+  var decoded: [UInt8] = []
+  var index = 0
+  while index < bytes.count {
+    if bytes[index] == 92,
+       index + 1 < bytes.count {
+      let next = bytes[index + 1]
+      switch next {
+      case 34, 92:
+        decoded.append(next)
+        index += 2
+        continue
+      case 110:
+        decoded.append(10)
+        index += 2
+        continue
+      case 116:
+        decoded.append(9)
+        index += 2
+        continue
+      default:
+        break
+      }
+    }
+    decoded.append(bytes[index])
+    index += 1
+  }
+  return String(decoding: decoded, as: UTF8.self)
+}
+
+private func swiftMutagenDefaultArgumentSnippetLooksMappable(_ snippet: String) -> Bool {
+  let bytes = Array(snippet.utf8)
+  guard bytes.count >= 4 else {
+    return false
+  }
+  for byte in bytes where byte == 10 || byte == 13 {
+    return true
+  }
+  return false
+}
+
+private func swiftMutagenDefaultArgumentSnippetExpression(
+  _ snippet: String,
+  mutation: SwiftMutagenMutation
+) -> String? {
+  let bytes = Array(snippet.utf8)
+  var index = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  guard index < bytes.count else {
+    return nil
+  }
+
+  let start = index
+  var inString = false
+  var escaped = false
+  var squareDepth = 0
+  var parenDepth = 0
+  while index < bytes.count {
+    let byte = bytes[index]
+    if inString {
+      if escaped {
+        escaped = false
+      } else if byte == 92 {
+        escaped = true
+      } else if byte == 34 {
+        inString = false
+      }
+      index += 1
+      continue
+    }
+
+    if byte == 34 {
+      inString = true
+    } else if byte == 91 {
+      squareDepth += 1
+    } else if byte == 93 {
+      squareDepth -= 1
+    } else if byte == 40 {
+      parenDepth += 1
+    } else if byte == 41 {
+      if parenDepth == 0 {
+        break
+      }
+      parenDepth -= 1
+    } else if squareDepth == 0 && parenDepth == 0 && (byte == 44 || byte == 10 || byte == 13) {
+      break
+    }
+    index += 1
+  }
+
+  let end = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: index)
+  guard end > start else {
+    return nil
+  }
+  let expression = String(decoding: bytes[start..<end], as: UTF8.self)
+  let expressionBytes = Array(expression.utf8)
+  guard swiftMutagenImplicitReturnExpressionIsEligible(
+    bytes: expressionBytes,
+    start: swiftMutagenSkipHorizontalWhitespace(expressionBytes, from: 0),
+    mutation: mutation,
+    allowsInlineBraces: true
+  ) else {
+    return nil
+  }
+  return expression
+}
+
+private func swiftMutagenSourceSnippetMatches(
+  _ snippet: String,
+  in text: String
+) -> [(line: Int, column: Int)] {
+  let source = Array(text.utf8)
+  let pattern = Array(snippet.utf8)
+  guard !pattern.isEmpty,
+        pattern.count <= source.count else {
+    return []
+  }
+
+  var matches: [(line: Int, column: Int)] = []
+  var index = 0
+  while index + pattern.count <= source.count {
+    var matched = true
+    for offset in 0..<pattern.count where source[index + offset] != pattern[offset] {
+      matched = false
+      break
+    }
+    if matched {
+      matches.append(swiftMutagenSourceLineAndColumn(source, offset: index))
+      if matches.count > 8 {
+        return matches
+      }
+      index += pattern.count
+    } else {
+      index += 1
+    }
+  }
+  return matches
+}
+
+private func swiftMutagenSourceLineAndColumn(
+  _ bytes: [UInt8],
+  offset: Int
+) -> (line: Int, column: Int) {
+  var line = 1
+  var column = 1
+  var index = 0
+  while index < offset && index < bytes.count {
+    if bytes[index] == 10 {
+      line += 1
+      column = 1
+    } else {
+      column += 1
+    }
+    index += 1
+  }
+  return (line, column)
+}
+
+private func swiftMutagenDefaultArgumentDeclarationScore(
+  functionName: String,
+  sourceText: String,
+  line: Int
+) -> Int {
+  guard line > 0 else {
+    return 0
+  }
+  let lines = sourceText.split(separator: "\n", omittingEmptySubsequences: false)
+  let startLine = max(1, line - 30)
+  let endLine = min(lines.count, line)
+  var signature = ""
+  if startLine <= endLine {
+    for currentLine in startLine...endLine {
+      signature += String(lines[currentLine - 1])
+      signature += "\n"
+    }
+  }
+
+  var score = 0
+  if let functionIdentifier = swiftMutagenNearestFunctionIdentifier(in: signature),
+     swiftMutagenMangledNameContainsIdentifier(functionName, identifier: functionIdentifier) {
+    score += 2
+  }
+  if let typeIdentifier = swiftMutagenNearestTypeIdentifier(in: signature),
+     swiftMutagenMangledNameContainsIdentifier(functionName, identifier: typeIdentifier) {
+    score += 1
+  }
+  let signatureBytes = Array(signature.utf8)
+  if swiftMutagenASCIIContains(signatureBytes, start: 0, end: signatureBytes.count, pattern: "init("),
+     functionName.contains("cf") {
+    score += 1
+  }
+  return score
+}
+
+private func swiftMutagenNearestFunctionIdentifier(in signature: String) -> String? {
+  let lines = signature.split(separator: "\n", omittingEmptySubsequences: false)
+  var index = lines.count
+  while index > 0 {
+    index -= 1
+    let line = String(lines[index])
+    if let identifier = swiftMutagenDeclarationIdentifier(after: "public static func ", in: line) {
+      return identifier
+    }
+    if let identifier = swiftMutagenDeclarationIdentifier(after: "static func ", in: line) {
+      return identifier
+    }
+    if let identifier = swiftMutagenDeclarationIdentifier(after: "public func ", in: line) {
+      return identifier
+    }
+    if let identifier = swiftMutagenDeclarationIdentifier(after: "private func ", in: line) {
+      return identifier
+    }
+    if let identifier = swiftMutagenDeclarationIdentifier(after: "func ", in: line) {
+      return identifier
+    }
+    let bytes = Array(line.utf8)
+    if swiftMutagenASCIIContains(bytes, start: 0, end: bytes.count, pattern: "init(") {
+      return "init"
+    }
+  }
+  return nil
+}
+
+private func swiftMutagenNearestTypeIdentifier(in signature: String) -> String? {
+  let lines = signature.split(separator: "\n", omittingEmptySubsequences: false)
+  var index = lines.count
+  while index > 0 {
+    index -= 1
+    let line = String(lines[index])
+    if let identifier = swiftMutagenDeclarationIdentifier(after: "struct ", in: line) {
+      return identifier
+    }
+    if let identifier = swiftMutagenDeclarationIdentifier(after: "enum ", in: line) {
+      return identifier
+    }
+    if let identifier = swiftMutagenDeclarationIdentifier(after: "class ", in: line) {
+      return identifier
+    }
+  }
+  return nil
+}
+
+private func swiftMutagenDeclarationIdentifier(after marker: String, in line: String) -> String? {
+  let bytes = Array(line.utf8)
+  guard let markerStart = swiftMutagenASCIIIndex(bytes, start: 0, end: bytes.count, pattern: marker) else {
+    return nil
+  }
+  var index = markerStart + marker.utf8.count
+  index = swiftMutagenSkipHorizontalWhitespace(bytes, from: index)
+  let start = index
+  while index < bytes.count && swiftMutagenIsIdentifierByte(bytes[index]) {
+    index += 1
+  }
+  guard index > start else {
+    return nil
+  }
+  return String(decoding: bytes[start..<index], as: UTF8.self)
+}
+
+private func swiftMutagenMangledNameContainsIdentifier(
+  _ functionName: String,
+  identifier: String
+) -> Bool {
+  guard identifier != "init" else {
+    return functionName.contains("cf")
+  }
+  if identifier.count <= 3 {
+    return functionName.contains(identifier)
+  }
+  if functionName.contains(identifier) {
+    return true
+  }
+  let prefixLength = min(identifier.count, 8)
+  let prefix = String(identifier.prefix(prefixLength))
+  return prefix.count >= 4 && functionName.contains(prefix)
 }
 
 private func swiftMutagenFindNearestPriorImplicitReturnSourceLocation(

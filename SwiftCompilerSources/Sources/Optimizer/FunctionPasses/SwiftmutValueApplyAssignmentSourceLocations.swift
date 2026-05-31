@@ -42,7 +42,16 @@ func swiftmutValueApplySourceLocation(
            locationDescription: apply.location.description,
            mutation: mutation,
            config: config
-         ) {
+      ) {
+        return anchored
+      }
+      if let anchored = swiftmutFindUniqueDescribedValueExpressionSourceLocation(
+        for: apply,
+        path: matchedPath,
+        locationDescription: apply.location.description,
+        mutation: mutation,
+        config: config
+      ) {
         return anchored
       }
       if let functionSourceLocation,
@@ -73,6 +82,15 @@ func swiftmutValueApplySourceLocation(
       for: apply,
       path: functionSourceLocation.path,
       functionLine: functionSourceLocation.line,
+      locationDescription: apply.location.description,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
+    if let anchored = swiftmutFindUniqueDescribedValueExpressionSourceLocation(
+      for: apply,
+      path: functionSourceLocation.path,
       locationDescription: apply.location.description,
       mutation: mutation,
       config: config

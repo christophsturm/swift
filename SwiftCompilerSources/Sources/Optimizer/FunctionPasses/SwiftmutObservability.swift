@@ -92,6 +92,31 @@ func swiftmutLogAssignmentValueSourceLocationMiss(
     ])
 }
 
+func swiftmutLogValueApplySourceLocationMiss(
+  apply: ApplyInst,
+  mutation: SwiftmutMutation,
+  moduleName: String,
+  functionName: String,
+  config: SwiftmutConfig
+) {
+  swiftmutLogEvent(
+    "valueApplySourceLocationMiss",
+    config: config,
+    fields: [
+      ("mode", swiftmutModeName(config.mode)),
+      ("module", moduleName),
+      ("function", functionName),
+      ("functionLocation", apply.parentFunction.location.description),
+      ("applyLocation", apply.location.description),
+      ("applyType", apply.type.description),
+      ("callee", apply.callee.description),
+      ("mutator", mutation.mutator),
+      ("mutatedBuiltinName", mutation.mutatedBuiltinName),
+      ("sourceOriginal", mutation.sourceOriginal),
+      ("sourceMutated", mutation.sourceMutated)
+    ])
+}
+
 func swiftmutLogConditionSourceLocationMiss(
   branch: CondBranchInst,
   comparison: BuiltinInst?,

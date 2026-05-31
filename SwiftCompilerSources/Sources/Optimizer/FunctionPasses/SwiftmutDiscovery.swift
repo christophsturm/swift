@@ -640,6 +640,16 @@ func swiftmutDiscoverValueApplySites(
           config: config
         ) else {
           stats.sourceLocationMisses += 1
+          if stats.sourceLocationMissSamples < 500 {
+            stats.sourceLocationMissSamples += 1
+            swiftmutLogValueApplySourceLocationMiss(
+              apply: apply,
+              mutation: mutation,
+              moduleName: moduleName,
+              functionName: functionName,
+              config: config
+            )
+          }
           continue
         }
         if sourceLocation == nil {

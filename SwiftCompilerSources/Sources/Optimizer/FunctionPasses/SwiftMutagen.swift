@@ -391,6 +391,19 @@ private struct SwiftMutagenReturnSite {
   let alternatives: [SwiftMutagenReturnAlternative]
 }
 
+private struct SwiftMutagenReturnBranchSite {
+  let siteID: UInt64
+  let runtimeFunctionName: String
+  let module: String
+  let function: String
+  let file: String
+  let line: Int
+  let column: Int
+  let branch: BranchInst
+  let value: Value
+  let alternatives: [SwiftMutagenReturnAlternative]
+}
+
 private struct SwiftMutagenReturnDiscoveryStats {
   var terminators = 0
   var boolTerminators = 0
@@ -414,6 +427,18 @@ private struct SwiftMutagenReturnDiscoveryStats {
 private struct SwiftMutagenReturnDiscoveryResult {
   let sites: [SwiftMutagenReturnSite]
   let stats: SwiftMutagenReturnDiscoveryStats
+}
+
+private struct SwiftMutagenReturnBranchDiscoveryStats {
+  var branches = 0
+  var mutationEligibleBranches = 0
+  var mutationAlternatives = 0
+  var sourceLocationMisses = 0
+}
+
+private struct SwiftMutagenReturnBranchDiscoveryResult {
+  let sites: [SwiftMutagenReturnBranchSite]
+  let stats: SwiftMutagenReturnBranchDiscoveryStats
 }
 
 private struct SwiftMutagenArithmeticSite {
@@ -800,6 +825,12 @@ private func swiftMutagenInstrumentMetamutantSites(
     config: config
   )
   let returnSites = returnDiscovery.sites
+  let returnBranchDiscovery = swiftMutagenDiscoverReturnBranchSites(
+    in: function,
+    moduleName: moduleName,
+    config: config
+  )
+  let returnBranchSites = returnBranchDiscovery.sites
   let voidCallDiscovery = swiftMutagenDiscoverVoidCallSites(
     in: function,
     moduleName: moduleName,
@@ -861,7 +892,12 @@ private func swiftMutagenInstrumentMetamutantSites(
       ("returnStringSourceLocationMisses", "\(returnDiscovery.stats.missingStringSourceLocations)"),
       ("returnCollectionSourceLocationMisses", "\(returnDiscovery.stats.missingCollectionSourceLocations)"),
       ("returnOtherSourceLocationMisses", "\(returnDiscovery.stats.missingOtherSourceLocations)"),
-      ("returnNonStatementSourceLocations", "\(returnDiscovery.stats.nonStatementSourceLocations)")
+      ("returnNonStatementSourceLocations", "\(returnDiscovery.stats.nonStatementSourceLocations)"),
+      ("returnBranchSites", "\(returnBranchSites.count)"),
+      ("returnBranchBranches", "\(returnBranchDiscovery.stats.branches)"),
+      ("returnBranchMutationEligibleBranches", "\(returnBranchDiscovery.stats.mutationEligibleBranches)"),
+      ("returnBranchMutationAlternatives", "\(returnBranchDiscovery.stats.mutationAlternatives)"),
+      ("returnBranchSourceLocationMisses", "\(returnBranchDiscovery.stats.sourceLocationMisses)")
     ])
   guard !conditionSites.isEmpty
         || !arithmeticSites.isEmpty
@@ -869,6 +905,7 @@ private func swiftMutagenInstrumentMetamutantSites(
         || !valueApplySites.isEmpty
         || !assignmentValueSites.isEmpty
         || !returnSites.isEmpty
+        || !returnBranchSites.isEmpty
         || !voidCallSites.isEmpty else {
     return false
   }
@@ -881,6 +918,7 @@ private func swiftMutagenInstrumentMetamutantSites(
   var injectedAssignmentValueSites = 0
   var injectedConditionSites = 0
   var injectedReturnSites = 0
+  var injectedReturnBranchSites = 0
   var injectedVoidCallSites = 0
   for site in arithmeticSites {
     if swiftMutagenInjectArithmeticSite(site, context) {
@@ -924,6 +962,13 @@ private func swiftMutagenInstrumentMetamutantSites(
       changed = true
     }
   }
+  for site in returnBranchSites {
+    if swiftMutagenInjectReturnBranchSite(site, context) {
+      injectedSiteJSON.append(swiftMutagenReturnBranchSiteJSON(site))
+      injectedReturnBranchSites += 1
+      changed = true
+    }
+  }
   for site in voidCallSites {
     if swiftMutagenInjectVoidCallSite(site, context) {
       injectedSiteJSON.append(swiftMutagenVoidCallSiteJSON(site))
@@ -938,6 +983,7 @@ private func swiftMutagenInstrumentMetamutantSites(
     valueApplySites: valueApplySites,
     assignmentValueSites: assignmentValueSites,
     returnSites: returnSites,
+    returnBranchSites: returnBranchSites,
     voidCallSites: voidCallSites,
     context
   )
@@ -959,6 +1005,8 @@ private func swiftMutagenInstrumentMetamutantSites(
       ("injectedAssignmentValueSites", "\(injectedAssignmentValueSites)"),
       ("attemptedReturnSites", "\(returnSites.count)"),
       ("injectedReturnSites", "\(injectedReturnSites)"),
+      ("attemptedReturnBranchSites", "\(returnBranchSites.count)"),
+      ("injectedReturnBranchSites", "\(injectedReturnBranchSites)"),
       ("attemptedVoidCallSites", "\(voidCallSites.count)"),
       ("injectedVoidCallSites", "\(injectedVoidCallSites)"),
       ("runtimeVisitAvailable", "\(runtimeVisitAvailable)")
@@ -1251,6 +1299,100 @@ private func swiftMutagenDiscoverReturnSites(
   }
 
   return SwiftMutagenReturnDiscoveryResult(sites: sites, stats: stats)
+}
+
+private func swiftMutagenDiscoverReturnBranchSites(
+  in function: Function,
+  moduleName: String,
+  config: SwiftMutagenConfig
+) -> SwiftMutagenReturnBranchDiscoveryResult {
+  var sites: [SwiftMutagenReturnBranchSite] = []
+  var stats = SwiftMutagenReturnBranchDiscoveryStats()
+  var localOrdinal = 1
+  let functionName = function.name.string
+  guard !functionName.hasSuffix("TW") else {
+    return SwiftMutagenReturnBranchDiscoveryResult(sites: [], stats: stats)
+  }
+
+  for block in function.blocks {
+    guard let branch = block.terminator as? BranchInst,
+          swiftMutagenBranchFeedsReturnValue(branch),
+          let value = branch.operands.first?.value else {
+      continue
+    }
+    stats.branches += 1
+    let mutations = swiftMutagenReturnBranchMutations(for: branch, config: config)
+    guard !mutations.isEmpty else {
+      continue
+    }
+    stats.mutationEligibleBranches += 1
+    stats.mutationAlternatives += mutations.count
+
+    var alternatives: [SwiftMutagenReturnAlternative] = []
+    var sourceLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
+    for mutation in mutations {
+      guard let location = swiftMutagenReturnBranchSourceLocation(
+        for: branch,
+        mutation: mutation,
+        config: config
+      ) else {
+        stats.sourceLocationMisses += 1
+        continue
+      }
+      if sourceLocation == nil {
+        sourceLocation = location
+      }
+      let displayMutation = mutation.withSource(
+        original: location.sourceOriginal,
+        mutated: location.sourceMutated
+      )
+      alternatives.append(SwiftMutagenReturnAlternative(
+        mutantID: "local-return-branch-\(localOrdinal)-\(alternatives.count + 1)",
+        alternativeIndex: UInt32(alternatives.count + 1),
+        mutation: displayMutation
+      ))
+    }
+
+    guard let location = sourceLocation, !alternatives.isEmpty else {
+      continue
+    }
+
+    let siteID = swiftMutagenStableSiteID(
+      packageRoot: config.packageRoot,
+      module: moduleName,
+      file: location.file,
+      line: location.line,
+      column: location.column,
+      function: functionName,
+      siteKind: "returnBranchValue",
+      localOrdinal: localOrdinal
+    )
+    localOrdinal += 1
+
+    sites.append(SwiftMutagenReturnBranchSite(
+      siteID: siteID,
+      runtimeFunctionName: swiftMutagenRuntimeVisitThunkName(file: location.file, config: config),
+      module: moduleName,
+      function: functionName,
+      file: location.file,
+      line: location.line,
+      column: location.column,
+      branch: branch,
+      value: value,
+      alternatives: alternatives
+    ))
+  }
+
+  return SwiftMutagenReturnBranchDiscoveryResult(sites: sites, stats: stats)
+}
+
+private func swiftMutagenBranchFeedsReturnValue(_ branch: BranchInst) -> Bool {
+  guard branch.operands.count == 1,
+        branch.targetBlock.arguments.count == 1,
+        let returnInst = branch.targetBlock.terminator as? ReturnInst else {
+    return false
+  }
+  return returnInst.returnedValue == branch.targetBlock.arguments[0]
 }
 
 private func swiftMutagenDiscoverArithmeticSites(
@@ -1640,6 +1782,26 @@ private func swiftMutagenValueReplacementMutations(
   swiftMutagenValueReplacementMutations(
     valueType: valueType,
     function: apply.parentFunction,
+    config: config
+  )
+}
+
+private func swiftMutagenReturnBranchMutations(
+  for branch: BranchInst,
+  config: SwiftMutagenConfig
+) -> [SwiftMutagenMutation] {
+  guard swiftMutagenBranchFeedsReturnValue(branch),
+        let value = branch.operands.first?.value,
+        value.type.isTrivial(in: branch.parentFunction) else {
+    return []
+  }
+  if let structInst = value.definingInstruction as? StructInst,
+     !swiftMutagenScalarValueMutations(for: structInst, config: config).isEmpty {
+    return []
+  }
+  return swiftMutagenValueReplacementMutations(
+    valueType: value.type,
+    function: branch.parentFunction,
     config: config
   )
 }
@@ -2050,6 +2212,102 @@ private func swiftMutagenInjectReturnSite(
   }
 
   context.erase(instruction: site.returnInst)
+  return true
+}
+
+private func swiftMutagenInjectReturnBranchSite(
+  _ site: SwiftMutagenReturnBranchSite,
+  _ context: FunctionPassContext
+) -> Bool {
+  guard let visitFunction = swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+        let siteID = swiftMutagenMakeRuntimeSiteID(
+          site.siteID,
+          visitFunction: visitFunction,
+          insertionPoint: site.branch,
+          context
+        ) else {
+    return false
+  }
+
+  guard let currentValue = site.branch.operands.first?.value else {
+    return false
+  }
+
+  let valueType = currentValue.type
+  let function = site.branch.parentFunction
+  guard valueType.isTrivial(in: function),
+        site.alternatives.allSatisfy({
+          swiftMutagenCanMakeReturnAlternative(
+            $0.mutation,
+            returnType: valueType,
+            in: function,
+            runtimeFunctionName: site.runtimeFunctionName,
+            context
+          )
+        }) else {
+    return false
+  }
+
+  let targetBlock = site.branch.targetBlock
+  let originalBlock = function.appendNewBlock(context)
+  let alternativeBlocks = site.alternatives.map { _ in function.appendNewBlock(context) }
+  let checkBlocks = site.alternatives.dropFirst().map { _ in function.appendNewBlock(context) }
+
+  let dispatchBuilder = Builder(before: site.branch, context)
+  let visitRef = dispatchBuilder.createFunctionRef(visitFunction)
+  let choice = dispatchBuilder.createApply(
+    function: visitRef,
+    SubstitutionMap(),
+    arguments: [siteID]
+  )
+  guard let rawChoice = swiftMutagenRuntimeChoiceRawValue(
+    choice,
+    builder: dispatchBuilder,
+    function: function
+  ) else {
+    return false
+  }
+
+  for (index, alternative) in site.alternatives.enumerated() {
+    let builder = Builder(atEndOf: alternativeBlocks[index], location: site.branch.location, context)
+    guard let replacement = swiftMutagenMakeReturnAlternative(
+      alternative.mutation,
+      returnType: valueType,
+      function: function,
+      runtimeFunctionName: site.runtimeFunctionName,
+      context: context,
+      builder: builder
+    ) else {
+      return false
+    }
+    builder.createBranch(to: targetBlock, arguments: [replacement])
+  }
+
+  Builder(atEndOf: originalBlock, location: site.branch.location, context)
+    .createBranch(to: targetBlock, arguments: [currentValue])
+
+  for (index, alternative) in site.alternatives.enumerated() {
+    let builder = index == 0
+      ? dispatchBuilder
+      : Builder(atEndOf: checkBlocks[index - 1], location: site.branch.location, context)
+    let nextBlock = index + 1 < site.alternatives.count
+      ? checkBlocks[index]
+      : originalBlock
+    let alternativeLiteral = builder.createIntegerLiteral(alternative.alternativeIndex, type: rawChoice.type)
+    let isSelected = builder.createBuiltinBinaryFunction(
+      name: "cmp_eq",
+      operandType: rawChoice.type,
+      resultType: context.getBuiltinIntegerType(bitWidth: 1),
+      arguments: [rawChoice, alternativeLiteral]
+    )
+    builder.createCondBranch(
+      condition: isSelected,
+      trueBlock: alternativeBlocks[index],
+      falseBlock: nextBlock
+    )
+  }
+
+  context.erase(instruction: site.branch)
   return true
 }
 
@@ -2525,6 +2783,7 @@ private func swiftMutagenAnyRuntimeVisitFunctionAvailable(
   valueApplySites: [SwiftMutagenValueApplySite],
   assignmentValueSites: [SwiftMutagenAssignmentValueSite],
   returnSites: [SwiftMutagenReturnSite],
+  returnBranchSites: [SwiftMutagenReturnBranchSite],
   voidCallSites: [SwiftMutagenVoidCallSite],
   _ context: FunctionPassContext
 ) -> Bool {
@@ -2544,6 +2803,9 @@ private func swiftMutagenAnyRuntimeVisitFunctionAvailable(
     return true
   }
   for site in returnSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+    return true
+  }
+  for site in returnBranchSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
     return true
   }
   for site in voidCallSites where swiftMutagenRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
@@ -2933,6 +3195,24 @@ private func swiftMutagenReturnSiteJSON(_ site: SwiftMutagenReturnSite) -> Strin
     #""sourceLocation":{"file":"\#(swiftMutagenEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#
   )
   fields.append(#""siteKind":"returnValue""#)
+  fields.append(#""resultKind":"returnValue""#)
+  var alternatives: [String] = []
+  for alternative in site.alternatives {
+    alternatives.append(swiftMutagenReturnAlternativeJSON(alternative))
+  }
+  fields.append(#""alternatives":[\#(alternatives.joined(separator: ","))]"#)
+  return "{\(fields.joined(separator: ","))}"
+}
+
+private func swiftMutagenReturnBranchSiteJSON(_ site: SwiftMutagenReturnBranchSite) -> String {
+  var fields: [String] = []
+  fields.append(#""siteID":\#(site.siteID)"#)
+  fields.append(#""module":"\#(swiftMutagenEscapeJSON(site.module))""#)
+  fields.append(#""function":"\#(swiftMutagenEscapeJSON(site.function))""#)
+  fields.append(
+    #""sourceLocation":{"file":"\#(swiftMutagenEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#
+  )
+  fields.append(#""siteKind":"returnBranchValue""#)
   fields.append(#""resultKind":"returnValue""#)
   var alternatives: [String] = []
   for alternative in site.alternatives {
@@ -4363,6 +4643,118 @@ private func swiftMutagenReturnedScalarValueOrdinalAndCount(
   }
 
   guard foundValue else {
+    return nil
+  }
+  return (ordinal, count)
+}
+
+private func swiftMutagenReturnBranchSourceLocation(
+  for branch: BranchInst,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let functionSourceLocation = swiftMutagenFunctionSourceLocation(
+    for: branch.parentFunction,
+    config: config
+  )
+  if let fileNameAndPosition = branch.location.fileNameAndPosition {
+    let path = fileNameAndPosition.path.string
+    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config),
+       let anchored = swiftMutagenFindReturnBranchSourceLocation(
+        for: branch,
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
+       ) {
+      return anchored
+    }
+  }
+
+  if let definingInstruction = branch.operands.first?.value.definingInstruction,
+     let fileNameAndPosition = definingInstruction.location.fileNameAndPosition {
+    let path = fileNameAndPosition.path.string
+    if let matchedPath = swiftMutagenIncludedSourcePath(path, config: config),
+       let anchored = swiftMutagenFindReturnBranchSourceLocation(
+        for: branch,
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
+       ) {
+      return anchored
+    }
+  }
+
+  if let functionSourceLocation {
+    return swiftMutagenFindReturnBranchSourceLocation(
+      for: branch,
+      path: functionSourceLocation.path,
+      preferredLine: functionSourceLocation.line,
+      mutation: mutation,
+      config: config
+    )
+  }
+  return nil
+}
+
+private func swiftMutagenFindReturnBranchSourceLocation(
+  for branch: BranchInst,
+  path: String,
+  preferredLine: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  if let exact = swiftMutagenFindUniqueExplicitReturnSourceLocation(
+    path: path,
+    preferredLine: preferredLine,
+    mutation: mutation,
+    config: config
+  ) {
+    return exact
+  }
+  guard let ordinal = swiftMutagenReturnBranchOrdinalAndCount(
+    for: branch,
+    mutation: mutation,
+    config: config
+  ), ordinal.count <= 40 else {
+    return nil
+  }
+  return swiftMutagenFindOrdinalExplicitReturnSourceLocation(
+    path: path,
+    preferredLine: preferredLine,
+    ordinal: ordinal.ordinal,
+    expectedCount: ordinal.count,
+    mutation: mutation,
+    config: config
+  )
+}
+
+private func swiftMutagenReturnBranchOrdinalAndCount(
+  for branch: BranchInst,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig
+) -> (ordinal: Int, count: Int)? {
+  var ordinal = 0
+  var count = 0
+  var foundBranch = false
+
+  for block in branch.parentFunction.blocks {
+    guard let candidate = block.terminator as? BranchInst else {
+      continue
+    }
+    let mutations = swiftMutagenReturnBranchMutations(for: candidate, config: config)
+    guard mutations.contains(where: { $0.mutatedBuiltinName == mutation.mutatedBuiltinName }) else {
+      continue
+    }
+    count += 1
+    if candidate === branch {
+      ordinal = count
+      foundBranch = true
+    }
+  }
+
+  guard foundBranch else {
     return nil
   }
   return (ordinal, count)
@@ -6026,6 +6418,19 @@ private func swiftMutagenFindUniqueExplicitReturnSourceLocation(
   guard preferredLine > 0,
         let text = swiftMutagenRead(path) else {
     return nil
+  }
+
+  if let exactLine = swiftMutagenAbsoluteSourceLine(path: path, line: preferredLine) {
+    let bytes = Array(exactLine.utf8)
+    let start = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+    if swiftMutagenReturnLineIsEligible(bytes: bytes, start: start, mutation: mutation) {
+      return (
+        swiftMutagenTrimPackageRoot(path, config: config),
+        preferredLine,
+        start + 1,
+        mutation.sourceOriginal,
+        mutation.sourceMutated)
+    }
   }
 
   var matches: [(line: Int, column: Int)] = []

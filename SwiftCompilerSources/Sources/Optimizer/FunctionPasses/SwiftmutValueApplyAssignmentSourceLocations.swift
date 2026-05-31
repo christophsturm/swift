@@ -67,6 +67,17 @@ func swiftmutValueApplySourceLocation(
       }
       if let functionSourceLocation,
          functionSourceLocation.path == matchedPath,
+         let anchored = swiftmutFindStringComparisonValueSourceLocation(
+           for: apply,
+           path: matchedPath,
+           preferredLine: functionSourceLocation.line,
+           mutation: mutation,
+           config: config
+         ) {
+        return anchored
+      }
+      if let functionSourceLocation,
+         functionSourceLocation.path == matchedPath,
          let anchored = swiftmutFindOrdinalValueExpressionSourceLocation(
            for: apply,
            path: matchedPath,
@@ -109,6 +120,15 @@ func swiftmutValueApplySourceLocation(
       return anchored
     }
     if let anchored = swiftmutFindStringInterpolationValueSourceLocation(
+      for: apply,
+      path: functionSourceLocation.path,
+      preferredLine: functionSourceLocation.line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
+    if let anchored = swiftmutFindStringComparisonValueSourceLocation(
       for: apply,
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,

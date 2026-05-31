@@ -5656,11 +5656,10 @@ private func swiftMutagenFindSourceSnippetAssignmentValueSourceLocation(
 
   func inspectLine(_ lineText: String, line: Int) {
     guard matches.count < 2,
-          let expression = swiftMutagenAssignmentValueExpression(
+          let expression = swiftMutagenAssignmentOrLocalBindingValueExpression(
             lineText,
             mutation: mutation,
-            targetNames: targetNames,
-            requiresDirectValueExpression: false
+            targetNames: targetNames
           ),
           swiftMutagenStoreLocationExpressionMatches(
             expression.sourceOriginal,
@@ -5697,6 +5696,26 @@ private func swiftMutagenFindSourceSnippetAssignmentValueSourceLocation(
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
+}
+
+private func swiftMutagenAssignmentOrLocalBindingValueExpression(
+  _ line: String,
+  mutation: SwiftMutagenMutation,
+  targetNames: [String]
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  if let assignment = swiftMutagenAssignmentValueExpression(
+    line,
+    mutation: mutation,
+    targetNames: targetNames,
+    requiresDirectValueExpression: false
+  ) {
+    return assignment
+  }
+  return swiftMutagenLocalBindingValueExpression(
+    line,
+    mutation: mutation,
+    targetNames: targetNames
+  )
 }
 
 private func swiftMutagenFindStoreSnippetAssignmentValueSourceLocation(

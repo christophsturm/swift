@@ -271,6 +271,22 @@ func swiftmutAssignmentValueSourceLocation(
     ) {
       return anchored
     }
+    if let anchored = swiftmutFindUniqueFileCompoundAssignmentValueSourceLocation(
+      path: functionSourceLocation.path,
+      mutation: mutation,
+      config: config,
+      targetNames: targetNames
+    ) {
+      return anchored
+    }
+    if let anchored = swiftmutFindUniqueFileAssignmentValueSourceLocation(
+      path: functionSourceLocation.path,
+      mutation: mutation,
+      config: config,
+      targetNames: targetNames
+    ) {
+      return anchored
+    }
     if let definingInstruction = store.source.definingInstruction,
        let anchored = swiftmutFindSourceSnippetAssignmentValueSourceLocation(
          path: functionSourceLocation.path,
@@ -837,4 +853,3 @@ func swiftmutStoreUsageComparisonSnippet(_ snippet: String) -> (operatorText: St
   let rhsText = String(decoding: bytes[rhsStart..<index], as: UTF8.self)
   return (operatorText, rhsText)
 }
-

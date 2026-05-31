@@ -704,13 +704,18 @@ func swiftmutInjectVoidCallSite(
   }
 
   let function = site.apply.parentFunction
-  let dispatchBlock = site.apply.parentBlock
-  let continuationBlock = context.splitBlock(after: site.apply)
-  let callBlock = context.splitBlock(before: site.apply)
+  let originalPredecessorBlock = site.apply.parentBlock
+  let continuationBlock = context.splitBlock(before: site.apply)
+  let selectedVoid = continuationBlock.addArgument(
+    type: site.apply.type,
+    ownership: site.apply.ownership,
+    context
+  )
+  let callBlock = function.appendNewBlock(context)
   let alternativeBlocks = site.alternatives.map { _ in function.appendNewBlock(context) }
   let checkBlocks = site.alternatives.dropFirst().map { _ in function.appendNewBlock(context) }
 
-  let dispatchBuilder = Builder(atEndOf: dispatchBlock, location: site.apply.location, context)
+  let dispatchBuilder = Builder(atEndOf: originalPredecessorBlock, location: site.apply.location, context)
   let visitRef = dispatchBuilder.createFunctionRef(visitFunction)
   let choice = dispatchBuilder.createApply(
     function: visitRef,
@@ -726,11 +731,20 @@ func swiftmutInjectVoidCallSite(
   }
 
   for (index, _) in site.alternatives.enumerated() {
-    Builder(atEndOf: alternativeBlocks[index], location: site.apply.location, context)
-      .createBranch(to: continuationBlock)
+    let builder = Builder(atEndOf: alternativeBlocks[index], location: site.apply.location, context)
+    let skippedVoid = builder.createTuple(type: site.apply.type, elements: [])
+    builder.createBranch(to: continuationBlock, arguments: [skippedVoid])
   }
-  Builder(atEndOf: callBlock, location: site.apply.location, context)
-    .createBranch(to: continuationBlock)
+  let callBuilder = Builder(atEndOf: callBlock, location: site.apply.location, context)
+  let originalValue = callBuilder.createApply(
+    function: site.apply.callee,
+    site.apply.substitutionMap,
+    arguments: Array(site.apply.arguments),
+    isNonThrowing: site.apply.isNonThrowing,
+    isNonAsync: site.apply.isNonAsync,
+    specializationInfo: site.apply.specializationInfo
+  )
+  callBuilder.createBranch(to: continuationBlock, arguments: [originalValue])
 
   for (index, alternative) in site.alternatives.enumerated() {
     let builder = index == 0
@@ -753,6 +767,6 @@ func swiftmutInjectVoidCallSite(
     )
   }
 
+  site.apply.replace(with: selectedVoid, context)
   return true
 }
-

@@ -485,10 +485,7 @@ private func swiftmutAssignmentLeftHandSideMatchesTargetNames(
   guard !targetNames.isEmpty else {
     return true
   }
-  for targetName in targetNames {
-    guard swiftmutIdentifierIsUsable(targetName) else {
-      continue
-    }
+  for targetName in swiftmutSpecificAssignmentTargetNames(targetNames) {
     if swiftmutLeftHandSideContainsIdentifier(
       bytes: bytes,
       start: start,
@@ -499,6 +496,15 @@ private func swiftmutAssignmentLeftHandSideMatchesTargetNames(
     }
   }
   return false
+}
+
+private func swiftmutSpecificAssignmentTargetNames(_ targetNames: [String]) -> [String] {
+  let usableNames = targetNames.filter(swiftmutIdentifierIsUsable)
+  guard usableNames.count > 1,
+        let first = usableNames.first else {
+    return usableNames
+  }
+  return [first]
 }
 
 private func swiftmutLeftHandSideContainsIdentifier(
@@ -665,6 +671,30 @@ func swiftmutCompoundAssignmentValueSource(
   )
 }
 
+func swiftmutCompoundAssignmentValueExpression(
+  _ line: String,
+  mutation: SwiftmutMutation,
+  targetNames: [String]
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let bytes = Array(line.utf8)
+  let lineStart = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard lineStart < lineEnd,
+        let compound = swiftmutCompoundAssignmentValueSource(
+          bytes: bytes,
+          lineStart: lineStart,
+          lineEnd: lineEnd,
+          targetNames: targetNames
+        ),
+        swiftmutReturnValueIsEligible(bytes: bytes, start: compound.valueStart, mutation: mutation) else {
+    return nil
+  }
+  return (
+    compound.column,
+    compound.sourceOriginal,
+    compound.assignmentPrefix + swiftmutImplicitReturnSourceMutation(for: mutation))
+}
+
 private func swiftmutFirstCompoundAssignmentOperator(
   bytes: [UInt8],
   start: Int,
@@ -696,32 +726,18 @@ private func swiftmutCompoundAssignmentLeftHandSideMatchesTargetNames(
   guard !targetNames.isEmpty else {
     return true
   }
-  for targetName in targetNames {
-    guard swiftmutCompoundAssignmentIdentifierIsUsable(targetName),
-          swiftmutCompoundAssignmentLeftHandSideContainsIdentifier(
-            bytes: bytes,
-            start: start,
-            end: end,
-            identifier: Array(targetName.utf8)
-          ) else {
+  for targetName in swiftmutSpecificAssignmentTargetNames(targetNames) {
+    guard swiftmutCompoundAssignmentLeftHandSideContainsIdentifier(
+      bytes: bytes,
+      start: start,
+      end: end,
+      identifier: Array(targetName.utf8)
+    ) else {
       continue
     }
     return true
   }
   return false
-}
-
-private func swiftmutCompoundAssignmentIdentifierIsUsable(_ name: String) -> Bool {
-  guard let first = name.utf8.first,
-        swiftmutIsASCIIIdentifierStart(first) else {
-    return false
-  }
-  for byte in name.utf8 {
-    guard swiftmutIsASCIILetterNumberOrUnderscore(byte) else {
-      return false
-    }
-  }
-  return true
 }
 
 private func swiftmutCompoundAssignmentLeftHandSideContainsIdentifier(

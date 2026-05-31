@@ -5057,7 +5057,10 @@ private func swiftMutagenAssignmentValueSourceLocation(
   mutation: SwiftMutagenMutation,
   config: SwiftMutagenConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  let targetNames = swiftMutagenAssignmentDestinationNames(for: store)
+  let targetNames = swiftMutagenUniqueAssignmentNames(
+    swiftMutagenAssignmentDestinationNames(for: store) +
+    swiftMutagenAssignmentSourceNames(for: store)
+  )
   let functionSourceLocation = swiftMutagenFunctionSourceLocation(
     for: store.parentFunction,
     config: config
@@ -6105,6 +6108,20 @@ private func swiftMutagenAssignmentDestinationNames(for store: StoreInst) -> [St
     names: &names,
     depth: 0
   )
+  return swiftMutagenUniqueAssignmentNames(names)
+}
+
+private func swiftMutagenAssignmentSourceNames(for store: StoreInst) -> [String] {
+  var names: [String] = []
+  swiftMutagenCollectAssignmentSourceNames(
+    from: store.source,
+    names: &names,
+    depth: 0
+  )
+  return swiftMutagenUniqueAssignmentNames(names)
+}
+
+private func swiftMutagenUniqueAssignmentNames(_ names: [String]) -> [String] {
   var seen = Set<String>()
   var uniqueNames: [String] = []
   for name in names where swiftMutagenIdentifierIsUsable(name) && !seen.contains(name) {
@@ -6112,6 +6129,51 @@ private func swiftMutagenAssignmentDestinationNames(for store: StoreInst) -> [St
     uniqueNames.append(name)
   }
   return uniqueNames
+}
+
+private func swiftMutagenCollectAssignmentSourceNames(
+  from value: Value,
+  names: inout [String],
+  depth: Int
+) {
+  guard depth < 6 else {
+    return
+  }
+
+  if let argumentName = (value as? Argument)?.findVarDecl()?.userFacingName.string {
+    names.append(argumentName)
+  }
+
+  guard let instruction = value.definingInstruction else {
+    return
+  }
+
+  if let declaration = instruction.findVarDecl() {
+    names.append(declaration.userFacingName.string)
+  }
+
+  switch instruction {
+  case let copyValue as CopyValueInst:
+    swiftMutagenCollectAssignmentSourceNames(
+      from: copyValue.fromValue,
+      names: &names,
+      depth: depth + 1
+    )
+  case let explicitCopyValue as ExplicitCopyValueInst:
+    swiftMutagenCollectAssignmentSourceNames(
+      from: explicitCopyValue.fromValue,
+      names: &names,
+      depth: depth + 1
+    )
+  case let moveValue as MoveValueInst:
+    swiftMutagenCollectAssignmentSourceNames(
+      from: moveValue.fromValue,
+      names: &names,
+      depth: depth + 1
+    )
+  default:
+    break
+  }
 }
 
 private func swiftMutagenCollectAssignmentDestinationNames(

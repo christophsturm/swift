@@ -421,6 +421,7 @@ private struct SwiftmutReturnDiscoveryStats {
   var missingStringSourceLocations = 0
   var missingCollectionSourceLocations = 0
   var missingOtherSourceLocations = 0
+  var missingSourceLocationSamples = 0
   var nonStatementSourceLocations = 0
 }
 
@@ -1249,6 +1250,17 @@ private func swiftmutDiscoverReturnSites(
       ) else {
         stats.missingSourceLocations += 1
         swiftmutRecordReturnSourceLocationMiss(returnType, in: function, stats: &stats)
+        if stats.missingSourceLocationSamples < 500 {
+          stats.missingSourceLocationSamples += 1
+          swiftmutLogReturnSourceLocationMiss(
+            returnInst: returnInst,
+            mutation: mutation,
+            returnType: returnType,
+            moduleName: moduleName,
+            functionName: functionName,
+            config: config
+          )
+        }
         continue
       }
       if location.sourceOriginal == "return",
@@ -3411,6 +3423,32 @@ private func swiftmutLogAssignmentValueSourceLocationMiss(
     ])
 }
 
+private func swiftmutLogReturnSourceLocationMiss(
+  returnInst: ReturnInst,
+  mutation: SwiftmutMutation,
+  returnType: Type,
+  moduleName: String,
+  functionName: String,
+  config: SwiftmutConfig
+) {
+  swiftmutLogEvent(
+    "returnSourceLocationMiss",
+    config: config,
+    fields: [
+      ("mode", swiftmutModeName(config.mode)),
+      ("module", moduleName),
+      ("function", functionName),
+      ("functionLocation", returnInst.parentFunction.location.description),
+      ("returnLocation", returnInst.location.description),
+      ("returnedValueLocation", returnInst.returnedValue.definingInstruction?.location.description ?? "<no defining instruction>"),
+      ("returnType", returnType.description),
+      ("mutator", mutation.mutator),
+      ("mutatedBuiltinName", mutation.mutatedBuiltinName),
+      ("sourceOriginal", mutation.sourceOriginal),
+      ("sourceMutated", mutation.sourceMutated)
+    ])
+}
+
 private func swiftmutFunctionName(_ functionName: String, belongsToModule moduleName: String) -> Bool {
   let mangledModulePrefix = "$s\(moduleName.utf8.count)\(moduleName)"
   if functionName.hasPrefix(mangledModulePrefix) {
@@ -4712,7 +4750,7 @@ private func swiftmutFunctionName(_ functionName: String, containsPropertyName p
   guard !propertyName.isEmpty else {
     return false
   }
-  return functionName.contains(propertyName)
+  return swiftmutMangledNameContainsIdentifier(functionName, identifier: propertyName)
 }
 
 private func swiftmutPropertyDeclarationKeyword(bytes: [UInt8], start: Int, end: Int) -> (start: Int, end: Int)? {

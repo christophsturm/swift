@@ -1150,7 +1150,15 @@ private func swiftmutDiscoverConditionSites(
           function: function,
           moduleName: moduleName,
           mutation: mutation,
-          config: config)
+          config: config
+        ) ?? swiftmutSourceLocation(
+          for: comparison,
+          branch: branch,
+          function: function,
+          moduleName: moduleName,
+          mutation: mutation,
+          config: config
+        )
       } else {
         location = swiftmutBranchSourceLocation(
           for: branch,
@@ -1162,7 +1170,21 @@ private func swiftmutDiscoverConditionSites(
           continue
         }
       }
-      guard let location else {
+      let resolvedLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
+      if let location {
+        resolvedLocation = location
+      } else if mutation.sourceOriginal == "condition",
+                let siteLocation = sourceLocation {
+        resolvedLocation = (
+          siteLocation.file,
+          siteLocation.line,
+          siteLocation.column,
+          siteLocation.sourceOriginal,
+          mutation.sourceMutated)
+      } else {
+        resolvedLocation = nil
+      }
+      guard let location = resolvedLocation else {
         stats.sourceLocationMisses += 1
         if swiftmutConditionSourceLocationMissSamples < 500 {
           swiftmutConditionSourceLocationMissSamples += 1
@@ -10024,6 +10046,25 @@ private func swiftmutSourceLocation(
   }
 
   return nil
+}
+
+private func swiftmutSourceLocation(
+  for comparison: BuiltinInst,
+  branch: CondBranchInst,
+  function: Function,
+  moduleName: String,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard swiftmutIsComparisonBuiltin(comparison) else {
+    return nil
+  }
+  return swiftmutFindDescribedSourceOperator(
+    moduleName: moduleName,
+    functionLocation: function.location.description,
+    locationDescription: branch.location.description,
+    mutation: mutation,
+    config: config)
 }
 
 private func swiftmutGenericConditionSourceIsExplicit(

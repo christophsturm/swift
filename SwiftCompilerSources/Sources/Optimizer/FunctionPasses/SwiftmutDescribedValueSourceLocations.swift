@@ -33,6 +33,12 @@ func swiftmutFindDescribedValueExpressionSourceLocation(
   }
 
   let identifiers = swiftmutSourceExpressionIdentifiers(for: apply)
+  let ordinal = swiftmutDescribedApplySnippetOrdinalAndCount(
+    for: apply,
+    snippet: snippet,
+    mutation: mutation,
+    config: config
+  )
   var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
   var currentLine = 1
   var lineStart = text.startIndex
@@ -42,7 +48,7 @@ func swiftmutFindDescribedValueExpressionSourceLocation(
 
   func inspectLine(_ lineText: String, line: Int) {
     guard line >= functionLine,
-          matches.count < 2 else {
+          matches.count < swiftmutDescribedMatchLimit(for: ordinal) else {
       return
     }
     let bytes = Array(lineText.utf8)
@@ -85,7 +91,7 @@ func swiftmutFindDescribedValueExpressionSourceLocation(
       if currentLine >= functionLine {
         if sawOpeningBrace && braceDepth > 0 {
           inspectLine(lineText, line: currentLine)
-          if matches.count >= 2 {
+          if matches.count >= swiftmutDescribedMatchLimit(for: ordinal) {
             break
           }
         }
@@ -104,8 +110,8 @@ func swiftmutFindDescribedValueExpressionSourceLocation(
     inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
   }
 
-  guard matches.count == 1,
-        let match = matches.first else {
+  let selected = swiftmutSelectedDescribedMatch(matches: matches, ordinal: ordinal)
+  guard let match = selected else {
     return nil
   }
   return (
@@ -114,6 +120,70 @@ func swiftmutFindDescribedValueExpressionSourceLocation(
     match.column,
     match.sourceOriginal,
     match.sourceMutated)
+}
+
+func swiftmutDescribedApplySnippetOrdinalAndCount(
+  for apply: ApplyInst,
+  snippet: String,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> (ordinal: Int, count: Int)? {
+  var ordinal = 0
+  var count = 0
+  var foundApply = false
+
+  for block in apply.parentFunction.blocks {
+    for instruction in block.instructions {
+      guard let candidate = instruction as? ApplyInst,
+            !candidate.type.isVoid,
+            swiftmutQuotedSourceSnippetPrefix(candidate.location.description) == snippet else {
+        continue
+      }
+      let mutations = swiftmutValueReplacementMutations(
+        for: candidate,
+        valueType: candidate.type,
+        config: config
+      )
+      guard mutations.contains(where: { $0.mutatedBuiltinName == mutation.mutatedBuiltinName }) else {
+        continue
+      }
+      count += 1
+      if candidate === apply {
+        ordinal = count
+        foundApply = true
+      }
+    }
+  }
+
+  guard foundApply,
+        count > 1,
+        count <= 20 else {
+    return nil
+  }
+  return (ordinal, count)
+}
+
+func swiftmutDescribedMatchLimit(for ordinal: (ordinal: Int, count: Int)?) -> Int {
+  if let ordinal {
+    return ordinal.count + 1
+  }
+  return 2
+}
+
+func swiftmutSelectedDescribedMatch(
+  matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)],
+  ordinal: (ordinal: Int, count: Int)?
+) -> (line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  if matches.count == 1 {
+    return matches.first
+  }
+  guard let ordinal,
+        matches.count == ordinal.count,
+        ordinal.ordinal > 0,
+        ordinal.ordinal <= matches.count else {
+    return nil
+  }
+  return matches[ordinal.ordinal - 1]
 }
 
 func swiftmutFindUniqueDescribedValueExpressionSourceLocation(
@@ -491,15 +561,7 @@ func swiftmutDescribedOperatorValueExpression(
     return nil
   }
 
-  var expressionStart = lhsEnd
-  while expressionStart > 0 {
-    let previous = bytes[expressionStart - 1]
-    if previous == 123 || previous == 40 || previous == 91 || previous == 44 || previous == 61 {
-      break
-    }
-    expressionStart -= 1
-  }
-  expressionStart = swiftmutSkipHorizontalWhitespace(bytes, from: expressionStart)
+  let expressionStart = swiftmutDescribedOperatorExpressionStart(bytes: bytes, lhsEnd: lhsEnd)
 
   guard expressionStart < lhsEnd,
         swiftmutReturnValueIsEligible(bytes: bytes, start: expressionStart, mutation: mutation) else {
@@ -520,6 +582,42 @@ func swiftmutDescribedOperatorValueExpression(
     expressionStart + 1,
     sourceOriginal,
     swiftmutImplicitReturnSourceMutation(for: mutation))
+}
+
+func swiftmutDescribedOperatorExpressionStart(bytes: [UInt8], lhsEnd: Int) -> Int {
+  var expressionStart = lhsEnd
+  while expressionStart > 0 {
+    let previous = bytes[expressionStart - 1]
+    if previous == 41,
+       let open = swiftmutMatchingOpenDelimiterBefore(
+         in: bytes,
+         closeIndex: expressionStart - 1,
+         open: 40,
+         close: 41
+       ) {
+      expressionStart = open
+      continue
+    }
+    if previous == 93,
+       let open = swiftmutMatchingOpenDelimiterBefore(
+         in: bytes,
+         closeIndex: expressionStart - 1,
+         open: 91,
+         close: 93
+       ) {
+      expressionStart = open
+      continue
+    }
+    if swiftmutIsSourceExpressionPrefixByte(previous) {
+      expressionStart -= 1
+      continue
+    }
+    if previous == 123 || previous == 40 || previous == 91 || previous == 44 || previous == 61 {
+      break
+    }
+    break
+  }
+  return swiftmutSkipHorizontalWhitespace(bytes, from: expressionStart)
 }
 
 func swiftmutDescribedSnippetStartsWithOperator(bytes: [UInt8], start: Int, end: Int) -> Bool {

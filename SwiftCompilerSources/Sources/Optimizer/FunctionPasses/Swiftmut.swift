@@ -5619,6 +5619,15 @@ private func swiftmutAssignmentValueSourceLocation(
   }
 
   if let functionSourceLocation {
+    if let anchored = swiftmutFindFunctionSignatureAssignmentValueSourceLocation(
+      path: functionSourceLocation.path,
+      functionLine: functionSourceLocation.line,
+      mutation: mutation,
+      config: config,
+      targetNames: targetNames
+    ) {
+      return anchored
+    }
     if let anchored = swiftmutFindScopedAssignmentValueSourceLocation(
       path: functionSourceLocation.path,
       functionLine: functionSourceLocation.line,
@@ -5720,6 +5729,69 @@ private func swiftmutAssignmentValueSourceLocation(
     }
   }
   return nil
+}
+
+private func swiftmutFindFunctionSignatureAssignmentValueSourceLocation(
+  path: String,
+  functionLine: Int,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig,
+  targetNames: [String]
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard functionLine > 0,
+        !targetNames.isEmpty,
+        let text = swiftmutRead(path) else {
+    return nil
+  }
+
+  var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard line >= functionLine,
+          matches.count < 2,
+          let expression = swiftmutSignatureAssignmentValueExpression(
+            lineText,
+            mutation: mutation,
+            targetNames: targetNames
+          ) else {
+      return
+    }
+    matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      let lineText = String(text[lineStart..<index])
+      if currentLine >= functionLine {
+        inspectLine(lineText, line: currentLine)
+        if matches.count >= 2 || swiftmutLineOpensFunctionBody(lineText) || currentLine > functionLine + 120 {
+          break
+        }
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine >= functionLine {
+    let lineText = String(text[lineStart..<text.endIndex])
+    inspectLine(lineText, line: currentLine)
+  }
+
+  guard matches.count == 1,
+        let match = matches.first else {
+    return nil
+  }
+  return (
+    swiftmutTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    match.sourceOriginal,
+    match.sourceMutated)
 }
 
 private func swiftmutFindSourceSnippetAssignmentValueSourceLocation(
@@ -7339,6 +7411,47 @@ private func swiftmutAssignmentValueExpression(
           isRequired: requiresDirectValueExpression
         ),
         swiftmutReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
+    return nil
+  }
+
+  let sourceOriginal = String(decoding: bytes[valueStart..<valueEnd], as: UTF8.self)
+  return (
+    valueStart + 1,
+    sourceOriginal,
+    swiftmutImplicitReturnSourceMutation(for: mutation))
+}
+
+private func swiftmutSignatureAssignmentValueExpression(
+  _ line: String,
+  mutation: SwiftmutMutation,
+  targetNames: [String],
+  requiresMutationEligibility: Bool = true
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let bytes = Array(line.utf8)
+  let lineStart = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  var lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  if let bodyStart = swiftmutTopLevelByteIndex(bytes, start: lineStart, end: lineEnd, byte: 123) {
+    lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bodyStart)
+  }
+  guard lineStart < lineEnd,
+        !swiftmutASCIIHasPrefix(bytes, start: lineStart, prefix: "//"),
+        let equals = swiftmutFirstAssignmentOperator(bytes: bytes, start: lineStart, end: lineEnd),
+        swiftmutAssignmentLeftHandSideMatchesTargetNames(
+          bytes: bytes,
+          start: lineStart,
+          end: equals,
+          targetNames: targetNames
+        ) else {
+    return nil
+  }
+
+  let valueStart = swiftmutSkipHorizontalWhitespace(bytes, from: equals + 1)
+  var valueEnd = swiftmutTopLevelByteIndex(bytes, start: valueStart, end: lineEnd, byte: 44) ?? lineEnd
+  valueEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: valueEnd)
+  guard valueStart < valueEnd,
+        swiftmutSourceExpressionIsSingleLineComplete(bytes: bytes, start: valueStart, end: valueEnd),
+        (!requiresMutationEligibility
+         || swiftmutReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation)) else {
     return nil
   }
 
@@ -9623,6 +9736,13 @@ private func swiftmutTopLevelByteIndex(
   }
 }
 
+private func swiftmutLineOpensFunctionBody(_ line: String) -> Bool {
+  let bytes = Array(line.utf8)
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  return swiftmutTopLevelByteIndex(bytes, start: start, end: end, byte: 123) != nil
+}
+
 private func swiftmutFirstTopLevelIndex(
   _ bytes: [UInt8],
   start: Int,
@@ -9675,6 +9795,59 @@ private func swiftmutFirstTopLevelIndex(
     index += 1
   }
   return nil
+}
+
+private func swiftmutSourceExpressionIsSingleLineComplete(
+  bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> Bool {
+  var parenDepth = 0
+  var bracketDepth = 0
+  var braceDepth = 0
+  var quote: UInt8?
+  var escaped = false
+  var index = start
+  while index < end {
+    let byte = bytes[index]
+    if let activeQuote = quote {
+      if escaped {
+        escaped = false
+      } else if byte == 92 {
+        escaped = true
+      } else if byte == activeQuote {
+        quote = nil
+      }
+      index += 1
+      continue
+    }
+    if byte == 34 || byte == 39 {
+      quote = byte
+      index += 1
+      continue
+    }
+    switch byte {
+    case 40:
+      parenDepth += 1
+    case 41:
+      parenDepth -= 1
+      if parenDepth < 0 { return false }
+    case 91:
+      bracketDepth += 1
+    case 93:
+      bracketDepth -= 1
+      if bracketDepth < 0 { return false }
+    case 123:
+      braceDepth += 1
+    case 125:
+      braceDepth -= 1
+      if braceDepth < 0 { return false }
+    default:
+      break
+    }
+    index += 1
+  }
+  return quote == nil && parenDepth == 0 && bracketDepth == 0 && braceDepth == 0
 }
 
 private func swiftmutSourceLineLooksLikeExplicitCondition(_ line: String) -> Bool {

@@ -5421,6 +5421,17 @@ private func swiftMutagenAssignmentValueSourceLocation(
       ) {
         return anchored
       }
+      if !targetNames.isEmpty,
+         let anchored = swiftMutagenFindAssignmentValueSourceLocation(
+           path: matchedPath,
+           preferredLine: fileNameAndPosition.line,
+           mutation: mutation,
+           config: config,
+           targetNames: targetNames,
+           requiresDirectValueExpression: false
+         ) {
+        return anchored
+      }
       if let functionSourceLocation,
          functionSourceLocation.path == matchedPath,
          let anchored = swiftMutagenFindOrdinalAssignmentValueSourceLocation(
@@ -5446,6 +5457,17 @@ private func swiftMutagenAssignmentValueSourceLocation(
     ) {
       return anchored
     }
+    if !targetNames.isEmpty,
+       let anchored = swiftMutagenFindScopedAssignmentValueSourceLocation(
+         path: functionSourceLocation.path,
+         functionLine: functionSourceLocation.line,
+         mutation: mutation,
+         config: config,
+         targetNames: targetNames,
+         requiresDirectValueExpression: false
+       ) {
+      return anchored
+    }
     if let anchored = swiftMutagenFindAssignmentValueSourceLocation(
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,
@@ -5454,6 +5476,17 @@ private func swiftMutagenAssignmentValueSourceLocation(
       targetNames: targetNames,
       requiresDirectValueExpression: true
     ) {
+      return anchored
+    }
+    if !targetNames.isEmpty,
+       let anchored = swiftMutagenFindAssignmentValueSourceLocation(
+         path: functionSourceLocation.path,
+         preferredLine: functionSourceLocation.line,
+         mutation: mutation,
+         config: config,
+         targetNames: targetNames,
+         requiresDirectValueExpression: false
+       ) {
       return anchored
     }
     if let anchored = swiftMutagenFindOrdinalAssignmentValueSourceLocation(

@@ -5514,6 +5514,16 @@ private func swiftMutagenAssignmentValueSourceLocation(
     ) {
       return anchored
     }
+    if let anchored = swiftMutagenFindStoreUsageSnippetAssignmentValueSourceLocation(
+      for: store,
+      path: functionSourceLocation.path,
+      functionLine: functionSourceLocation.line,
+      mutation: mutation,
+      config: config,
+      targetNames: targetNames
+    ) {
+      return anchored
+    }
     if let anchored = swiftMutagenFindAssignmentValueSourceLocation(
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,
@@ -5651,6 +5661,101 @@ private func swiftMutagenFindStoreSnippetAssignmentValueSourceLocation(
     match.sourceMutated)
 }
 
+private func swiftMutagenFindStoreUsageSnippetAssignmentValueSourceLocation(
+  for store: StoreInst,
+  path: String,
+  functionLine: Int,
+  mutation: SwiftMutagenMutation,
+  config: SwiftMutagenConfig,
+  targetNames: [String]
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard functionLine > 0,
+        !targetNames.isEmpty,
+        let snippet = swiftMutagenQuotedSourceSnippetPrefix(store.location.description),
+        let comparison = swiftMutagenStoreUsageComparisonSnippet(snippet),
+        let text = swiftMutagenRead(path) else {
+    return nil
+  }
+
+  var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  var braceDepth = 0
+  var sawOpeningBrace = false
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard line >= functionLine,
+          matches.count < 2 else {
+      return
+    }
+    for targetName in targetNames {
+      guard let column = swiftMutagenLineColumn(
+        ofTarget: targetName,
+        followedBy: comparison,
+        in: lineText
+      ) else {
+        continue
+      }
+      matches.append((
+        line,
+        column,
+        targetName,
+        swiftMutagenImplicitReturnSourceMutation(for: mutation)))
+      if matches.count >= 2 {
+        return
+      }
+    }
+  }
+
+  func updateBraceDepth(_ lineText: String) {
+    for byte in lineText.utf8 {
+      if byte == 123 {
+        braceDepth += 1
+        sawOpeningBrace = true
+      } else if byte == 125 {
+        braceDepth -= 1
+      }
+    }
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      let lineText = String(text[lineStart..<index])
+      if currentLine >= functionLine {
+        if sawOpeningBrace && braceDepth > 0 {
+          inspectLine(lineText, line: currentLine)
+          if matches.count >= 2 {
+            break
+          }
+        }
+        updateBraceDepth(lineText)
+        if sawOpeningBrace && braceDepth <= 0 {
+          break
+        }
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine >= functionLine && sawOpeningBrace && braceDepth > 0 {
+    inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
+  }
+
+  guard matches.count == 1,
+        let match = matches.first else {
+    return nil
+  }
+  return (
+    swiftMutagenTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    match.sourceOriginal,
+    match.sourceMutated)
+}
+
 private func swiftMutagenStoreLocationAssignedExpression(_ description: String) -> String? {
   let bytes = Array(description.utf8)
   guard bytes.count > 3,
@@ -5678,6 +5783,100 @@ private func swiftMutagenStoreLocationAssignedExpression(_ description: String) 
     return nil
   }
   return String(decoding: bytes[expressionStart..<trimmedEnd], as: UTF8.self)
+}
+
+private func swiftMutagenStoreUsageComparisonSnippet(_ snippet: String) -> (operatorText: String, rhsText: String)? {
+  let bytes = Array(snippet.utf8)
+  var index = swiftMutagenSkipHorizontalWhitespace(bytes, from: 0)
+  guard index < bytes.count else {
+    return nil
+  }
+
+  let operators = ["!=", "==", ">=", "<=", ">", "<"]
+  var matchedOperator: String?
+  for operatorText in operators {
+    if swiftMutagenASCIIHasExactPrefix(bytes, start: index, prefix: operatorText) {
+      matchedOperator = operatorText
+      index += operatorText.utf8.count
+      break
+    }
+  }
+  guard let operatorText = matchedOperator else {
+    return nil
+  }
+
+  index = swiftMutagenSkipHorizontalWhitespace(bytes, from: index)
+  let rhsStart = index
+  while index < bytes.count && !swiftMutagenIsHorizontalWhitespace(bytes[index]) {
+    index += 1
+  }
+  guard rhsStart < index else {
+    return nil
+  }
+  let rhsText = String(decoding: bytes[rhsStart..<index], as: UTF8.self)
+  return (operatorText, rhsText)
+}
+
+private func swiftMutagenLineColumn(
+  ofTarget targetName: String,
+  followedBy comparison: (operatorText: String, rhsText: String),
+  in line: String
+) -> Int? {
+  let bytes = Array(line.utf8)
+  let targetBytes = Array(targetName.utf8)
+  let operatorBytes = Array(comparison.operatorText.utf8)
+  let rhsBytes = Array(comparison.rhsText.utf8)
+  guard !targetBytes.isEmpty,
+        !operatorBytes.isEmpty,
+        !rhsBytes.isEmpty,
+        bytes.count >= targetBytes.count else {
+    return nil
+  }
+
+  var index = 0
+  while index + targetBytes.count <= bytes.count {
+    if swiftMutagenIdentifierTokenMatches(bytes, index: index, end: bytes.count, tokenBytes: targetBytes) {
+      var cursor = swiftMutagenSkipHorizontalWhitespace(bytes, from: index + targetBytes.count)
+      if swiftMutagenBytesMatch(bytes, start: cursor, pattern: operatorBytes) {
+        cursor = swiftMutagenSkipHorizontalWhitespace(bytes, from: cursor + operatorBytes.count)
+        if swiftMutagenBytesMatch(bytes, start: cursor, pattern: rhsBytes) {
+          return index + 1
+        }
+      }
+    }
+    index += 1
+  }
+  return nil
+}
+
+private func swiftMutagenIdentifierTokenMatches(
+  _ bytes: [UInt8],
+  index: Int,
+  end: Int,
+  tokenBytes: [UInt8]
+) -> Bool {
+  guard index + tokenBytes.count <= end else {
+    return false
+  }
+  if index > 0 && swiftMutagenIsIdentifierByte(bytes[index - 1]) {
+    return false
+  }
+  let after = index + tokenBytes.count
+  if after < end && swiftMutagenIsIdentifierByte(bytes[after]) {
+    return false
+  }
+  return swiftMutagenBytesMatch(bytes, start: index, pattern: tokenBytes)
+}
+
+private func swiftMutagenBytesMatch(_ bytes: [UInt8], start: Int, pattern: [UInt8]) -> Bool {
+  guard start >= 0,
+        start + pattern.count <= bytes.count else {
+    return false
+  }
+  for offset in 0..<pattern.count where bytes[start + offset] != pattern[offset] {
+    return false
+  }
+  return true
 }
 
 private func swiftMutagenQuotedSourceSnippetPrefix(_ description: String) -> String? {

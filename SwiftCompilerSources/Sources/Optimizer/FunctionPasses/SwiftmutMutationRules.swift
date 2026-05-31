@@ -156,6 +156,9 @@ func swiftmutAssignmentStoreIsEligible(_ store: StoreInst, config: SwiftmutConfi
   let sourceIsSourceAnchored = sourceLocation.map {
     $0.line > 0 && !$0.path.string.contains("<compiler-generated>")
   } ?? false
+  if destinationNames.isEmpty, !storeIsSourceAnchored, !sourceIsSourceAnchored {
+    return false
+  }
   if !storeIsSourceAnchored,
      !sourceIsSourceAnchored,
      swiftmutIsSynthesizedStorageAssignment(

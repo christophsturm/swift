@@ -561,6 +561,7 @@ private enum SwiftmutVoidCallSourceLocationResult {
 
 private var swiftmutNextOrdinal = 1
 private var swiftmutHasTruncatedDiscoveryOutput = false
+private var swiftmutConditionSourceLocationMissSamples = 0
 
 let swiftmut = FunctionPass(name: "swiftmut") {
   (function: Function, context: FunctionPassContext) in
@@ -1163,6 +1164,17 @@ private func swiftmutDiscoverConditionSites(
       }
       guard let location else {
         stats.sourceLocationMisses += 1
+        if swiftmutConditionSourceLocationMissSamples < 500 {
+          swiftmutConditionSourceLocationMissSamples += 1
+          swiftmutLogConditionSourceLocationMiss(
+            branch: branch,
+            comparison: comparison,
+            mutation: mutation,
+            moduleName: moduleName,
+            functionName: functionName,
+            config: config
+          )
+        }
         continue
       }
       if sourceLocation == nil {
@@ -3440,6 +3452,34 @@ private func swiftmutLogAssignmentValueSourceLocationMiss(
       ("destinationNames", destinationNames.joined(separator: ",")),
       ("sourceNames", sourceNames.joined(separator: ",")),
       ("targetNames", targetNames.joined(separator: ",")),
+      ("mutator", mutation.mutator),
+      ("mutatedBuiltinName", mutation.mutatedBuiltinName),
+      ("sourceOriginal", mutation.sourceOriginal),
+      ("sourceMutated", mutation.sourceMutated)
+    ])
+}
+
+private func swiftmutLogConditionSourceLocationMiss(
+  branch: CondBranchInst,
+  comparison: BuiltinInst?,
+  mutation: SwiftmutMutation,
+  moduleName: String,
+  functionName: String,
+  config: SwiftmutConfig
+) {
+  swiftmutLogEvent(
+    "conditionSourceLocationMiss",
+    config: config,
+    fields: [
+      ("mode", swiftmutModeName(config.mode)),
+      ("module", moduleName),
+      ("function", functionName),
+      ("functionLocation", branch.parentFunction.location.description),
+      ("branchLocation", branch.location.description),
+      ("conditionLocation", branch.condition.definingInstruction?.location.description ?? "<no defining instruction>"),
+      ("conditionType", branch.condition.type.description),
+      ("conditionKind", comparison == nil ? "generic" : "comparison"),
+      ("comparisonBuiltin", comparison.flatMap(swiftmutComparisonBuiltinIDName) ?? ""),
       ("mutator", mutation.mutator),
       ("mutatedBuiltinName", mutation.mutatedBuiltinName),
       ("sourceOriginal", mutation.sourceOriginal),

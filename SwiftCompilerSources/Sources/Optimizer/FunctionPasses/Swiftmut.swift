@@ -5151,6 +5151,22 @@ private func swiftmutFindReturnBranchSourceLocation(
   ) {
     return exact
   }
+  if let implicit = swiftmutFindNearestPriorImplicitReturnSourceLocation(
+    path: path,
+    preferredLine: preferredLine,
+    mutation: mutation,
+    config: config
+  ) {
+    return implicit
+  }
+  if let implicit = swiftmutFindUniqueImplicitReturnSourceLocation(
+    path: path,
+    preferredLine: preferredLine,
+    mutation: mutation,
+    config: config
+  ) {
+    return implicit
+  }
   guard let ordinal = swiftmutReturnBranchOrdinalAndCount(
     for: branch,
     mutation: mutation,

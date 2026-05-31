@@ -148,8 +148,24 @@ func swiftmutAssignmentStoreIsEligible(_ store: StoreInst, config: SwiftmutConfi
   ) {
     return false
   }
+  let storeLocation = store.location.fileNameAndPosition
+  let sourceLocation = store.source.definingInstruction?.location.fileNameAndPosition
+  let storeIsSourceAnchored = storeLocation.map {
+    $0.line > 0 && !$0.path.string.contains("<compiler-generated>")
+  } ?? false
+  let sourceIsSourceAnchored = sourceLocation.map {
+    $0.line > 0 && !$0.path.string.contains("<compiler-generated>")
+  } ?? false
+  if !storeIsSourceAnchored,
+     !sourceIsSourceAnchored,
+     swiftmutIsSynthesizedStorageAssignment(
+       destinationNames: destinationNames,
+       sourceNames: sourceNames
+     ) {
+    return false
+  }
   if destinationNames.isEmpty, sourceNames.isEmpty {
-    guard let storeLocation = store.location.fileNameAndPosition else {
+    guard let storeLocation else {
       return false
     }
     if storeLocation.line <= 0 || storeLocation.path.string.contains("<compiler-generated>") {
@@ -177,6 +193,14 @@ private func swiftmutIsSynthesizedCollectionStorageAssignment(
 ) -> Bool {
   let names = Set(destinationNames + sourceNames)
   return names.contains("_storage") && names.contains("countAndCapacity")
+}
+
+private func swiftmutIsSynthesizedStorageAssignment(
+  destinationNames: [String],
+  sourceNames: [String]
+) -> Bool {
+  let names = destinationNames + sourceNames
+  return !names.isEmpty && names.allSatisfy { $0.hasPrefix("_") || $0 == "countAndCapacity" }
 }
 
 func swiftmutScalarValueHasMappedSource(_ value: StructInst, config: SwiftmutConfig) -> Bool {

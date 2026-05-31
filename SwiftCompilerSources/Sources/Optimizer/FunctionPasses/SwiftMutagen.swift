@@ -5629,7 +5629,10 @@ private func swiftMutagenFindStoreSnippetAssignmentValueSourceLocation(
             targetNames: targetNames,
             requiresDirectValueExpression: false
           ),
-          expression.sourceOriginal == expectedExpression else {
+          swiftMutagenStoreLocationExpressionMatches(
+            expression.sourceOriginal,
+            expected: expectedExpression
+          ) else {
       return
     }
     matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
@@ -5779,32 +5782,34 @@ private func swiftMutagenFindStoreUsageSnippetAssignmentValueSourceLocation(
 }
 
 private func swiftMutagenStoreLocationAssignedExpression(_ description: String) -> String? {
-  let bytes = Array(description.utf8)
-  guard bytes.count > 3,
-        bytes[0] == 34,
-        bytes[1] == 61 else {
+  guard let snippet = swiftMutagenQuotedSourceSnippetPrefix(description) else {
     return nil
   }
 
-  let expressionStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 2)
-  var expressionEnd = expressionStart
-  while expressionEnd < bytes.count {
-    switch bytes[expressionEnd] {
-    case 10, 13, 34:
-      let trimmedEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: expressionEnd)
-      guard expressionStart < trimmedEnd else {
-        return nil
-      }
-      return String(decoding: bytes[expressionStart..<trimmedEnd], as: UTF8.self)
-    default:
-      expressionEnd += 1
-    }
+  let bytes = Array(snippet.utf8)
+  guard bytes.count > 1,
+        bytes[0] == 61 else {
+    return nil
   }
-  let trimmedEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: expressionEnd)
+  let expressionStart = swiftMutagenSkipHorizontalWhitespace(bytes, from: 2)
+  let trimmedEnd = swiftMutagenTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
   guard expressionStart < trimmedEnd else {
     return nil
   }
   return String(decoding: bytes[expressionStart..<trimmedEnd], as: UTF8.self)
+}
+
+private func swiftMutagenStoreLocationExpressionMatches(
+  _ expression: String,
+  expected: String
+) -> Bool {
+  if expression == expected {
+    return true
+  }
+  guard expected.utf8.count >= 8 else {
+    return false
+  }
+  return expression.hasPrefix(expected)
 }
 
 private func swiftMutagenStoreUsageComparisonSnippet(_ snippet: String) -> (operatorText: String, rhsText: String)? {

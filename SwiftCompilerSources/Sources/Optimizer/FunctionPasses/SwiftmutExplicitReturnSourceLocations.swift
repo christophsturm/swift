@@ -636,19 +636,43 @@ func swiftmutDefaultArgumentDeclarationScore(
 
   var score = 0
   if let functionIdentifier = swiftmutNearestFunctionIdentifier(in: signature),
-     swiftmutMangledNameContainsIdentifier(functionName, identifier: functionIdentifier) {
+     swiftmutDefaultArgumentMangledNameContainsFunctionIdentifier(functionName, identifier: functionIdentifier) {
     score += 2
   }
   if let typeIdentifier = swiftmutNearestTypeIdentifier(in: signature),
-     swiftmutMangledNameContainsIdentifier(functionName, identifier: typeIdentifier) {
+     swiftmutDefaultArgumentMangledNameContainsTypeIdentifier(functionName, identifier: typeIdentifier) {
     score += 1
   }
   let signatureBytes = Array(signature.utf8)
-  if swiftmutASCIIContains(signatureBytes, start: 0, end: signatureBytes.count, pattern: "init("),
+  if swiftmutNearestFunctionIdentifier(in: signature) == "init",
+     swiftmutASCIIContains(signatureBytes, start: 0, end: signatureBytes.count, pattern: "init("),
      functionName.contains("cf") {
     score += 1
   }
   return score
+}
+
+func swiftmutDefaultArgumentMangledNameContainsFunctionIdentifier(
+  _ functionName: String,
+  identifier: String
+) -> Bool {
+  if identifier == "init" {
+    return functionName.contains("cf")
+  }
+  if functionName.contains("\(identifier.count)\(identifier)") {
+    return true
+  }
+  if identifier.count <= 3 {
+    return false
+  }
+  return swiftmutMangledNameContainsIdentifier(functionName, identifier: identifier)
+}
+
+func swiftmutDefaultArgumentMangledNameContainsTypeIdentifier(
+  _ functionName: String,
+  identifier: String
+) -> Bool {
+  functionName.contains("\(identifier.count)\(identifier)")
 }
 
 func swiftmutNearestFunctionIdentifier(in signature: String) -> String? {

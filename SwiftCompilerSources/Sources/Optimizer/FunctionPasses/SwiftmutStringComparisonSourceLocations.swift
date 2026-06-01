@@ -24,7 +24,8 @@ func swiftmutFindStringComparisonValueSourceLocation(
     mutation: mutation,
     config: config
   ), ordinal.count <= 200,
-    let text = swiftmutRead(path) else {
+    let text = swiftmutRead(path),
+    let expectation = swiftmutStringComparisonExpectation(for: apply) else {
     return nil
   }
 
@@ -33,6 +34,7 @@ func swiftmutFindStringComparisonValueSourceLocation(
     path: path,
     preferredLine: preferredLine,
     expectedCount: ordinal.count,
+    expectation: expectation,
     mutation: mutation,
     config: config
   )
@@ -52,6 +54,7 @@ func swiftmutStringComparisonApplyOrdinalAndCount(
   guard swiftmutIsStringComparisonApply(apply, mutation: mutation) else {
     return nil
   }
+  let expectation = swiftmutStringComparisonExpectation(for: apply)
 
   var ordinal = 0
   var count = 0
@@ -60,6 +63,7 @@ func swiftmutStringComparisonApplyOrdinalAndCount(
     for instruction in block.instructions {
       guard let candidate = instruction as? ApplyInst,
             swiftmutIsStringComparisonApply(candidate, mutation: mutation),
+            expectation == swiftmutStringComparisonExpectation(for: candidate),
             swiftmutValueReplacementMutations(
               for: candidate,
               valueType: candidate.type,
@@ -89,11 +93,30 @@ func swiftmutIsStringComparisonApply(_ apply: ApplyInst, mutation: SwiftmutMutat
   return apply.callee.description.contains("_stringCompareWithSmolCheck")
 }
 
+func swiftmutStringComparisonExpectation(for apply: ApplyInst) -> String? {
+  guard apply.arguments.count >= 3 else {
+    return nil
+  }
+  let argument = apply.arguments[2]
+  let text = argument.description + " " + (argument.definingInstruction?.description ?? "")
+  if text.contains("#_StringComparisonResult.equal") {
+    return "equal"
+  }
+  if text.contains("#_StringComparisonResult.less") {
+    return "less"
+  }
+  if text.contains("#_StringComparisonResult.greater") {
+    return "greater"
+  }
+  return nil
+}
+
 func swiftmutStringComparisonExpressionCandidates(
   in text: String,
   path: String,
   preferredLine: Int,
   expectedCount: Int,
+  expectation: String,
   mutation: SwiftmutMutation,
   config: SwiftmutConfig
 ) -> [(file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] {
@@ -113,7 +136,11 @@ func swiftmutStringComparisonExpressionCandidates(
           candidates.count <= expectedCount else {
       return
     }
-    let expressions = swiftmutStringComparisonExpressions(on: lineText, mutation: mutation)
+    let expressions = swiftmutStringComparisonExpressions(
+      on: lineText,
+      expectation: expectation,
+      mutation: mutation
+    )
     for expression in expressions {
       candidates.append((
         swiftmutTrimPackageRoot(path, config: config),
@@ -168,6 +195,7 @@ func swiftmutStringComparisonExpressionCandidates(
 
 func swiftmutStringComparisonExpressions(
   on line: String,
+  expectation: String,
   mutation: SwiftmutMutation
 ) -> [(column: Int, sourceOriginal: String, sourceMutated: String)] {
   let bytes = Array(line.utf8)
@@ -196,17 +224,73 @@ func swiftmutStringComparisonExpressions(
     }
 
     if let op = matchedOperator {
-      let expression = swiftmutSourceExpression(
-        in: bytes,
-        operatorStart: index,
-        operatorEnd: index + op.utf8.count,
-        mutatedOperator: op
-      )
-      expressions.append((index + 1, expression.original, swiftmutImplicitReturnSourceMutation(for: mutation)))
+      if swiftmutStringComparisonSourceOperator(op, matches: expectation) {
+        let expression = swiftmutStringComparisonSourceExpression(
+          in: bytes,
+          operatorStart: index,
+          operatorEnd: index + op.utf8.count
+        )
+        expressions.append((index + 1, expression.original, swiftmutImplicitReturnSourceMutation(for: mutation)))
+      }
       index += op.utf8.count
     } else {
       index += 1
     }
   }
   return expressions
+}
+
+func swiftmutStringComparisonSourceOperator(_ op: String, matches expectation: String) -> Bool {
+  switch expectation {
+  case "equal":
+    return op == "==" || op == "!="
+  case "less":
+    return op == "<" || op == ">="
+  case "greater":
+    return op == ">" || op == "<="
+  default:
+    return false
+  }
+}
+
+func swiftmutStringComparisonSourceExpression(
+  in bytes: [UInt8],
+  operatorStart: Int,
+  operatorEnd: Int
+) -> (original: String, mutated: String) {
+  var leftStart = operatorStart
+  while leftStart > 0 && swiftmutIsHorizontalWhitespace(bytes[leftStart - 1]) {
+    leftStart -= 1
+  }
+  while leftStart > 0 && swiftmutIsExpressionByte(bytes[leftStart - 1]) {
+    leftStart -= 1
+  }
+
+  var rightEnd = swiftmutSkipHorizontalWhitespace(bytes, from: operatorEnd)
+  if rightEnd < bytes.count && bytes[rightEnd] == 34 {
+    rightEnd = swiftmutStringLiteralEnd(bytes: bytes, start: rightEnd)
+  } else {
+    while rightEnd < bytes.count && swiftmutIsExpressionByte(bytes[rightEnd]) {
+      rightEnd += 1
+    }
+  }
+
+  let original = String(decoding: bytes[leftStart..<rightEnd], as: UTF8.self)
+  return (original, original)
+}
+
+func swiftmutStringLiteralEnd(bytes: [UInt8], start: Int) -> Int {
+  var index = start + 1
+  var escaped = false
+  while index < bytes.count {
+    if escaped {
+      escaped = false
+    } else if bytes[index] == 92 {
+      escaped = true
+    } else if bytes[index] == 34 {
+      return index + 1
+    }
+    index += 1
+  }
+  return start
 }

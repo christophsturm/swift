@@ -40,9 +40,14 @@ func swiftmutIsGeneratedInvalidLocationFunction(_ function: Function) -> Bool {
   let name = function.name.string
   return name.contains("__derived_")
     || name.contains("CodingKeys")
+    || swiftmutIsGeneratedHashValueFunctionName(name)
     || swiftmutIsGeneratedDerivedEnumFunctionName(name)
     || swiftmutIsGeneratedRawRepresentableFunctionName(name)
     || name.hasSuffix("TW")
+}
+
+func swiftmutIsGeneratedHashValueFunctionName(_ name: String) -> Bool {
+  name.contains("9hashValueSivg")
 }
 
 func swiftmutIsGeneratedDerivedEnumFunctionName(_ name: String) -> Bool {

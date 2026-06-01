@@ -65,6 +65,7 @@ swift_compiler_sources(Optimizer
   SwiftmutObservability.swift
   SwiftmutOperatorSourceLocations.swift
   SwiftmutOperatorText.swift
+  SwiftmutOperatorValueApplySourceLocations.swift
   SwiftmutReturnSourceLocations.swift
   SwiftmutReturnText.swift
   SwiftmutRuntimeChoice.swift

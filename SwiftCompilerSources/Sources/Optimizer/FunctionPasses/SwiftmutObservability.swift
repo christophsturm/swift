@@ -99,6 +99,7 @@ func swiftmutLogValueApplySourceLocationMiss(
   functionName: String,
   config: SwiftmutConfig
 ) {
+  let snippet = swiftmutQuotedSourceSnippetPrefix(apply.location.description) ?? ""
   swiftmutLogEvent(
     "valueApplySourceLocationMiss",
     config: config,
@@ -108,6 +109,8 @@ func swiftmutLogValueApplySourceLocationMiss(
       ("function", functionName),
       ("functionLocation", apply.parentFunction.location.description),
       ("applyLocation", apply.location.description),
+      ("applySnippet", snippet),
+      ("applySnippetMappable", swiftmutDescribedValueSnippetLooksMappable(snippet) ? "true" : "false"),
       ("applyType", apply.type.description),
       ("callee", apply.callee.description),
       ("mutator", mutation.mutator),

@@ -281,7 +281,7 @@ func swiftmutDescribedValueSnippetLooksMappable(_ snippet: String) -> Bool {
     return false
   }
   let first = bytes[start]
-  return (first >= 65 && first <= 90) || (first >= 97 && first <= 122) || first == 95
+  return (first >= 65 && first <= 90) || (first >= 97 && first <= 122) || first == 95 || first == 36
 }
 
 func swiftmutDescribedValueSnippetPrefixes(_ snippet: String) -> [String] {
@@ -332,6 +332,14 @@ func swiftmutDescribedValueExpression(
   )
 
   if let expression = swiftmutDescribedOperatorValueExpression(
+    bytes: bytes,
+    matchStart: matchStart,
+    lineEnd: lineEnd,
+    mutation: mutation
+  ) {
+    return expression
+  }
+  if let expression = swiftmutDescribedLogicalOperatorRHSValueExpression(
     bytes: bytes,
     matchStart: matchStart,
     lineEnd: lineEnd,
@@ -821,6 +829,39 @@ func swiftmutDescribedSnippetStartsWithOperator(bytes: [UInt8], start: Int, end:
     return true
   }
   return bytes[index] == 60 || bytes[index] == 62
+}
+
+func swiftmutDescribedLogicalOperatorRHSValueExpression(
+  bytes: [UInt8],
+  matchStart: Int,
+  lineEnd: Int,
+  mutation: SwiftmutMutation
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard matchStart + 1 < lineEnd,
+        (bytes[matchStart] == 38 || bytes[matchStart] == 124),
+        bytes[matchStart + 1] == bytes[matchStart] else {
+    return nil
+  }
+
+  let expressionStart = swiftmutSkipHorizontalWhitespace(bytes, from: matchStart + 2)
+  let expressionEnd = swiftmutTrimTrailingElseKeyword(
+    bytes: bytes,
+    end: swiftmutDescribedOperatorExpressionEnd(
+      bytes: bytes,
+      start: expressionStart,
+      lineEnd: lineEnd
+    )
+  )
+  guard expressionStart < expressionEnd,
+        swiftmutReturnValueIsEligible(bytes: bytes, start: expressionStart, mutation: mutation) else {
+    return nil
+  }
+
+  let sourceOriginal = String(decoding: bytes[expressionStart..<expressionEnd], as: UTF8.self)
+  return (
+    expressionStart + 1,
+    sourceOriginal,
+    swiftmutImplicitReturnSourceMutation(for: mutation))
 }
 
 func swiftmutDescribedOperatorExpressionEnd(

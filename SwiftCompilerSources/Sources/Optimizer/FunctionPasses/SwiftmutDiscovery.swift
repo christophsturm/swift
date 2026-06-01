@@ -52,6 +52,10 @@ func swiftmutDiscoverVoidCallSites(
         stats.sourceLocationMisses += 1
         continue
       }
+      guard swiftmutSourceOriginalIsComplete(location.sourceOriginal) else {
+        stats.sourceLocationMisses += 1
+        continue
+      }
 
       let displayMutation = mutation.withSource(
         original: location.sourceOriginal,
@@ -186,6 +190,10 @@ func swiftmutDiscoverConditionSites(
         }
         continue
       }
+      guard swiftmutSourceOriginalIsComplete(location.sourceOriginal) else {
+        stats.sourceLocationMisses += 1
+        continue
+      }
       if sourceLocation == nil {
         sourceLocation = location
       } else if !swiftmutSourceLocationMatchesSite(location, sourceLocation!) {
@@ -291,6 +299,11 @@ func swiftmutDiscoverReturnSites(
         stats.nonStatementSourceLocations += 1
         continue
       }
+      guard swiftmutSourceOriginalIsComplete(location.sourceOriginal) else {
+        stats.missingSourceLocations += 1
+        swiftmutRecordReturnSourceLocationMiss(returnType, in: function, stats: &stats)
+        continue
+      }
       if sourceLocation == nil {
         sourceLocation = location
       } else if !swiftmutSourceLocationMatchesSite(location, sourceLocation!) {
@@ -374,6 +387,10 @@ func swiftmutDiscoverReturnBranchSites(
         mutation: mutation,
         config: config
       ) else {
+        stats.sourceLocationMisses += 1
+        continue
+      }
+      guard swiftmutSourceOriginalIsComplete(location.sourceOriginal) else {
         stats.sourceLocationMisses += 1
         continue
       }
@@ -466,6 +483,9 @@ func swiftmutDiscoverArithmeticSites(
         ) else {
           continue
         }
+        guard swiftmutSourceOriginalIsComplete(location.sourceOriginal) else {
+          continue
+        }
         if sourceLocation == nil {
           sourceLocation = location
         } else if !swiftmutSourceLocationMatchesSite(location, sourceLocation!) {
@@ -547,6 +567,10 @@ func swiftmutDiscoverScalarValueSites(
           mutation: mutation,
           config: config
         ) else {
+          stats.sourceLocationMisses += 1
+          continue
+        }
+        guard swiftmutSourceOriginalIsComplete(location.sourceOriginal) else {
           stats.sourceLocationMisses += 1
           continue
         }
@@ -652,7 +676,7 @@ func swiftmutDiscoverValueApplySites(
           }
           continue
         }
-        guard swiftmutValueApplySourceOriginalIsComplete(location.sourceOriginal) else {
+        guard swiftmutSourceOriginalIsComplete(location.sourceOriginal) else {
           stats.sourceLocationMisses += 1
           continue
         }
@@ -759,6 +783,10 @@ func swiftmutDiscoverAssignmentValueSites(
               config: config
             )
           }
+          continue
+        }
+        guard swiftmutSourceOriginalIsComplete(location.sourceOriginal) else {
+          stats.sourceLocationMisses += 1
           continue
         }
         if sourceLocation == nil {

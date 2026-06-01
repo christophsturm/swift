@@ -22,6 +22,80 @@ func swiftmutSourceLocationMatchesSite(
     && candidate.sourceOriginal == site.sourceOriginal
 }
 
+func swiftmutSourceOriginalIsComplete(_ sourceOriginal: String) -> Bool {
+  let bytes = Array(sourceOriginal.utf8)
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard start < end else {
+    return false
+  }
+  if bytes[start] == 60 || bytes[start] == 62 {
+    return false
+  }
+  if swiftmutDescribedSnippetStartsWithOperator(bytes: bytes, start: start, end: end) {
+    return false
+  }
+  if swiftmutASCIIHasExactPrefix(bytes, start: start, prefix: "import ") {
+    return false
+  }
+  switch bytes[start] {
+  case 41, 93, 125:
+    return false
+  default:
+    break
+  }
+  switch bytes[end - 1] {
+  case 40, 91, 123:
+    return false
+  default:
+    break
+  }
+  return swiftmutSourceOriginalDelimitersAreBalanced(bytes: bytes, start: start, end: end)
+}
+
+func swiftmutSourceOriginalDelimitersAreBalanced(bytes: [UInt8], start: Int, end: Int) -> Bool {
+  var parenDepth = 0
+  var bracketDepth = 0
+  var braceDepth = 0
+  var quote: UInt8?
+  var escaped = false
+  var index = start
+  while index < end {
+    let byte = bytes[index]
+    if let activeQuote = quote {
+      if escaped {
+        escaped = false
+      } else if byte == 92 {
+        escaped = true
+      } else if byte == activeQuote {
+        quote = nil
+      }
+      index += 1
+      continue
+    }
+    if byte == 34 || byte == 39 {
+      quote = byte
+    } else if byte == 40 {
+      parenDepth += 1
+    } else if byte == 41 {
+      parenDepth -= 1
+    } else if byte == 91 {
+      bracketDepth += 1
+    } else if byte == 93 {
+      bracketDepth -= 1
+    } else if byte == 123 {
+      braceDepth += 1
+    } else if byte == 125 {
+      braceDepth -= 1
+    }
+    if parenDepth < 0 || bracketDepth < 0 || braceDepth < 0 {
+      return false
+    }
+    index += 1
+  }
+  return quote == nil && parenDepth == 0 && bracketDepth == 0 && braceDepth == 0
+}
+
 func swiftmutMetamutantReturnMutations(
   for returnInst: ReturnInst,
   config: SwiftmutConfig

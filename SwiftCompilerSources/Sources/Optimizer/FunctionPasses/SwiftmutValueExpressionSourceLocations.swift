@@ -161,7 +161,16 @@ func swiftmutFindValueExpressionSourceLocation(
   ) {
     return anchored
   }
-  if let anchored = swiftmutFindUniqueExplicitReturnSourceLocation(
+  if let anchored = swiftmutFindCalleeOrdinalValueExpressionSourceLocation(
+    for: apply,
+    path: path,
+    preferredLine: preferredLine,
+    mutation: mutation,
+    config: config
+  ) {
+    return anchored
+  }
+  if let anchored = swiftmutFindUniqueExplicitReturnValueExpressionSourceLocation(
     path: path,
     preferredLine: preferredLine,
     mutation: mutation,
@@ -170,15 +179,6 @@ func swiftmutFindValueExpressionSourceLocation(
     return anchored
   }
   if let anchored = swiftmutFindUniqueImplicitReturnSourceLocation(
-    path: path,
-    preferredLine: preferredLine,
-    mutation: mutation,
-    config: config
-  ) {
-    return anchored
-  }
-  if let anchored = swiftmutFindCalleeOrdinalValueExpressionSourceLocation(
-    for: apply,
     path: path,
     preferredLine: preferredLine,
     mutation: mutation,
@@ -376,6 +376,90 @@ func swiftmutFindStandaloneValueExpressionSourceLocation(
     expression.column,
     expression.sourceOriginal,
     expression.sourceMutated)
+}
+
+func swiftmutFindUniqueExplicitReturnValueExpressionSourceLocation(
+  path: String,
+  preferredLine: Int,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard preferredLine > 0,
+        let text = swiftmutRead(path) else {
+    return nil
+  }
+
+  if let exactLine = swiftmutAbsoluteSourceLine(path: path, line: preferredLine),
+     let expression = swiftmutExplicitReturnValueExpression(exactLine, mutation: mutation) {
+    return (
+      swiftmutTrimPackageRoot(path, config: config),
+      preferredLine,
+      expression.column,
+      expression.sourceOriginal,
+      expression.sourceMutated)
+  }
+
+  var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  var braceDepth = 0
+  var sawOpeningBrace = false
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard line >= preferredLine,
+          line <= preferredLine + 120,
+          matches.count < 2,
+          let expression = swiftmutExplicitReturnValueExpression(lineText, mutation: mutation) else {
+      return
+    }
+    matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
+  }
+
+  func updateBraceDepth(_ lineText: String) {
+    for byte in lineText.utf8 {
+      if byte == 123 {
+        braceDepth += 1
+        sawOpeningBrace = true
+      } else if byte == 125 {
+        braceDepth -= 1
+      }
+    }
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      let lineText = String(text[lineStart..<index])
+      inspectLine(lineText, line: currentLine)
+      if currentLine >= preferredLine {
+        updateBraceDepth(lineText)
+        if sawOpeningBrace && braceDepth <= 0 {
+          break
+        }
+        if currentLine >= preferredLine + 120 {
+          break
+        }
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine >= preferredLine {
+    inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
+  }
+
+  guard matches.count == 1,
+        let match = matches.first else {
+    return nil
+  }
+  return (
+    swiftmutTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    match.sourceOriginal,
+    match.sourceMutated)
 }
 
 func swiftmutValueApplyOrdinal(

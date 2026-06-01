@@ -388,15 +388,15 @@ func swiftmutDefaultArgumentSnippetLooksMappable(
   _ snippet: String,
   functionName: String
 ) -> Bool {
+  guard swiftmutFunctionNameLooksDefaultArgumentThunk(functionName) else {
+    return false
+  }
   let bytes = Array(snippet.utf8)
   guard bytes.count >= 4 else {
     return false
   }
   for byte in bytes where byte == 10 || byte == 13 {
     return true
-  }
-  guard swiftmutFunctionNameLooksDefaultArgumentThunk(functionName) else {
-    return false
   }
   for byte in bytes where byte == 41 || byte == 44 {
     return true

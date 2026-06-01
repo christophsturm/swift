@@ -403,6 +403,9 @@ func swiftmutLineLooksLikeImplicitReturnExpression(
   if swiftmutPropertyDeclarationKeyword(bytes: bytes, start: start, end: end) != nil {
     return false
   }
+  if swiftmutLineContainsTopLevelAssignmentOperator(bytes: bytes, start: start, end: end) {
+    return false
+  }
   for index in start..<end {
     if bytes[index] == 59 {
       return false

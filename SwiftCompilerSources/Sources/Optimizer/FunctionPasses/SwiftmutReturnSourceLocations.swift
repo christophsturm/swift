@@ -29,14 +29,6 @@ func swiftmutReturnSourceLocation(
       if swiftmutReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
         return candidate
       }
-      if let anchored = swiftmutFindAssignmentReturnSourceLocation(
-        path: matchedPath,
-        preferredLine: fileNameAndPosition.line,
-        mutation: mutation,
-        config: config
-      ) {
-        return anchored
-      }
       if let anchored = swiftmutFindDescribedExplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
@@ -102,14 +94,6 @@ func swiftmutReturnSourceLocation(
         mutation.sourceMutated)
       if swiftmutReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
         return candidate
-      }
-      if let anchored = swiftmutFindAssignmentReturnSourceLocation(
-        path: matchedPath,
-        preferredLine: fileNameAndPosition.line,
-        mutation: mutation,
-        config: config
-      ) {
-        return anchored
       }
       if let anchored = swiftmutFindDescribedExplicitReturnSourceLocation(
         path: matchedPath,
@@ -232,14 +216,6 @@ func swiftmutReturnSourceLocation(
     if swiftmutReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
       return candidate
     }
-    if let anchored = swiftmutFindAssignmentReturnSourceLocation(
-      path: path,
-      preferredLine: line,
-      mutation: mutation,
-      config: config
-    ) {
-      return anchored
-    }
     if let anchored = swiftmutFindDescribedExplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
@@ -314,14 +290,6 @@ func swiftmutReturnSourceLocation(
       mutation.sourceMutated)
     if swiftmutReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
       return candidate
-    }
-    if let anchored = swiftmutFindAssignmentReturnSourceLocation(
-      path: path,
-      preferredLine: line,
-      mutation: mutation,
-      config: config
-    ) {
-      return anchored
     }
     if let anchored = swiftmutFindDescribedExplicitReturnSourceLocation(
       path: path,

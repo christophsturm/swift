@@ -555,50 +555,6 @@ func swiftmutIsIdentifierByte(_ byte: UInt8) -> Bool {
   swiftmutIsIdentifierStartByte(byte) || (byte >= 48 && byte <= 57)
 }
 
-func swiftmutAssignmentReturnExpression(
-  _ line: String,
-  mutation: SwiftmutMutation
-) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
-  let bytes = Array(line.utf8)
-  let lineStart = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
-  let lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
-  guard lineStart < lineEnd,
-        !swiftmutLineStartsWithAssignmentReturnBlockedPrefix(bytes: bytes, start: lineStart) else {
-    return nil
-  }
-
-  guard let equals = swiftmutFirstAssignmentOperator(bytes: bytes, start: lineStart, end: lineEnd) else {
-    guard let compound = swiftmutCompoundAssignmentValueSource(
-      bytes: bytes,
-      lineStart: lineStart,
-      lineEnd: lineEnd,
-      targetNames: []
-    ), swiftmutReturnValueIsEligible(bytes: bytes, start: compound.valueStart, mutation: mutation) else {
-      return nil
-    }
-    return (
-      compound.column,
-      compound.sourceOriginal,
-      compound.assignmentPrefix + swiftmutImplicitReturnSourceMutation(for: mutation))
-  }
-
-  let valueStart = swiftmutSkipHorizontalWhitespace(bytes, from: equals + 1)
-  var valueEnd = lineEnd
-  if valueEnd > valueStart && bytes[valueEnd - 1] == 44 {
-    valueEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: valueEnd - 1)
-  }
-  guard valueStart < valueEnd,
-        swiftmutReturnValueIsEligible(bytes: bytes, start: valueStart, mutation: mutation) else {
-    return nil
-  }
-
-  let sourceOriginal = String(decoding: bytes[valueStart..<valueEnd], as: UTF8.self)
-  return (
-    valueStart + 1,
-    sourceOriginal,
-    swiftmutImplicitReturnSourceMutation(for: mutation))
-}
-
 func swiftmutLineStartsWithAssignmentReturnBlockedPrefix(bytes: [UInt8], start: Int) -> Bool {
   [
     "if ", "if(", "guard ", "guard(", "while ", "while(", "for ", "for(",
@@ -610,15 +566,17 @@ func swiftmutFirstAssignmentOperator(bytes: [UInt8], start: Int, end: Int) -> In
   guard start < end else {
     return nil
   }
-  for index in start..<end where bytes[index] == 61 {
+  return swiftmutFirstTopLevelIndex(bytes, start: start, end: end) { index in
+    guard bytes[index] == 61 else {
+      return false
+    }
     let before = index > start ? bytes[index - 1] : 0
     let after = index + 1 < end ? bytes[index + 1] : 0
     if swiftmutIsAssignmentOperatorNeighbor(before) || swiftmutIsAssignmentOperatorNeighbor(after) {
-      continue
+      return false
     }
-    return index
+    return true
   }
-  return nil
 }
 
 private func swiftmutIsAssignmentOperatorNeighbor(_ byte: UInt8) -> Bool {
@@ -628,6 +586,11 @@ private func swiftmutIsAssignmentOperatorNeighbor(_ byte: UInt8) -> Bool {
   default:
     return false
   }
+}
+
+func swiftmutLineContainsTopLevelAssignmentOperator(bytes: [UInt8], start: Int, end: Int) -> Bool {
+  swiftmutFirstAssignmentOperator(bytes: bytes, start: start, end: end) != nil
+    || swiftmutFirstCompoundAssignmentOperator(bytes: bytes, start: start, end: end) != nil
 }
 
 struct SwiftmutCompoundAssignmentSource {

@@ -181,6 +181,15 @@ func swiftmutReturnSourceLocation(
      ) {
     return anchored
   }
+  if swiftmutFunctionNameLooksDefaultArgumentThunk(returnInst.parentFunction.name.string),
+     let anchored = swiftmutFindDescribedDefaultArgumentReturnSourceLocation(
+       functionName: returnInst.parentFunction.name.string,
+       locationDescription: returnInst.parentFunction.location.description,
+       mutation: mutation,
+       config: config
+     ) {
+    return anchored
+  }
 
   let returnLocation = returnInst.location.description
   for path in swiftmutSwiftSourcePaths(config: config) {

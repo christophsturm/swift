@@ -265,24 +265,35 @@ func swiftmutFindDescribedDefaultArgumentReturnSourceLocation(
   }
 
   let snippet = swiftmutDecodedSourceSnippet(rawSnippet)
-  guard swiftmutDefaultArgumentSnippetLooksMappable(snippet, functionName: functionName),
-        let expression = swiftmutDefaultArgumentSnippetExpression(snippet, mutation: mutation) else {
+  guard swiftmutDefaultArgumentSnippetLooksMappable(snippet, functionName: functionName) else {
     return nil
   }
 
-  var matches: [(path: String, line: Int, column: Int, score: Int)] = []
+  var matches: [(path: String, line: Int, column: Int, sourceOriginal: String, score: Int)] = []
   for path in swiftmutSwiftSourcePaths(config: config) {
     guard let text = swiftmutRead(path) else {
       continue
     }
     let fileMatches = swiftmutSourceSnippetMatches(snippet, in: text)
     for match in fileMatches {
+      guard let expression = swiftmutDefaultArgumentSourceExpression(
+        in: text,
+        matchOffset: match.offset,
+        mutation: mutation
+      ) else {
+        continue
+      }
       let score = swiftmutDefaultArgumentDeclarationScore(
         functionName: functionName,
         sourceText: text,
         line: match.line
       )
-      matches.append((path, match.line, match.column, score))
+      matches.append((
+        path,
+        match.line,
+        match.column + expression.columnOffset,
+        expression.text,
+        score))
     }
   }
 
@@ -300,7 +311,7 @@ func swiftmutFindDescribedDefaultArgumentReturnSourceLocation(
     swiftmutTrimPackageRoot(match.path, config: config),
     match.line,
     match.column,
-    expression,
+    match.sourceOriginal,
     swiftmutImplicitReturnSourceMutation(for: mutation))
 }
 
@@ -412,17 +423,48 @@ func swiftmutDefaultArgumentSnippetExpression(
   _ snippet: String,
   mutation: SwiftmutMutation
 ) -> String? {
-  let bytes = Array(snippet.utf8)
-  var index = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
-  guard index < bytes.count else {
+  swiftmutDefaultArgumentExpression(
+    bytes: Array(snippet.utf8),
+    from: 0,
+    mutation: mutation
+  )?.text
+}
+
+func swiftmutDefaultArgumentSourceExpression(
+  in sourceText: String,
+  matchOffset: Int,
+  mutation: SwiftmutMutation
+) -> (columnOffset: Int, text: String)? {
+  let bytes = Array(sourceText.utf8)
+  guard matchOffset >= 0,
+        matchOffset < bytes.count,
+        let expression = swiftmutDefaultArgumentExpression(
+          bytes: bytes,
+          from: matchOffset,
+          mutation: mutation
+        ) else {
+    return nil
+  }
+  return (expression.start - matchOffset, expression.text)
+}
+
+func swiftmutDefaultArgumentExpression(
+  bytes: [UInt8],
+  from offset: Int,
+  mutation: SwiftmutMutation
+) -> (start: Int, text: String)? {
+  let tokenStart = swiftmutSkipHorizontalWhitespace(bytes, from: offset)
+  let start = swiftmutDefaultArgumentExpressionStart(bytes: bytes, tokenStart: tokenStart)
+  guard start < bytes.count else {
     return nil
   }
 
-  let start = index
+  var index = start
   var inString = false
   var escaped = false
   var squareDepth = 0
   var parenDepth = 0
+  var braceDepth = 0
   while index < bytes.count {
     let byte = bytes[index]
     if inString {
@@ -443,6 +485,13 @@ func swiftmutDefaultArgumentSnippetExpression(
       squareDepth += 1
     } else if byte == 93 {
       squareDepth -= 1
+    } else if byte == 123 {
+      braceDepth += 1
+    } else if byte == 125 {
+      if braceDepth == 0 {
+        break
+      }
+      braceDepth -= 1
     } else if byte == 40 {
       parenDepth += 1
     } else if byte == 41 {
@@ -450,8 +499,12 @@ func swiftmutDefaultArgumentSnippetExpression(
         break
       }
       parenDepth -= 1
-    } else if squareDepth == 0 && parenDepth == 0 && (byte == 44 || byte == 10 || byte == 13) {
+    } else if squareDepth == 0 && parenDepth == 0 && braceDepth == 0
+                && (byte == 44 || byte == 10 || byte == 13) {
       break
+    }
+    if squareDepth < 0 || parenDepth < 0 || braceDepth < 0 {
+      return nil
     }
     index += 1
   }
@@ -465,18 +518,26 @@ func swiftmutDefaultArgumentSnippetExpression(
   guard swiftmutImplicitReturnExpressionIsEligible(
     bytes: expressionBytes,
     start: swiftmutSkipHorizontalWhitespace(expressionBytes, from: 0),
-    mutation: mutation,
-    allowsInlineBraces: true
-  ) else {
+      mutation: mutation,
+      allowsInlineBraces: true
+  ), swiftmutSourceOriginalIsComplete(expression) else {
     return nil
   }
-  return expression
+  return (start, expression)
+}
+
+func swiftmutDefaultArgumentExpressionStart(bytes: [UInt8], tokenStart: Int) -> Int {
+  var start = tokenStart
+  while start > 0 && swiftmutIsSourceExpressionPrefixByte(bytes[start - 1]) {
+    start -= 1
+  }
+  return start
 }
 
 func swiftmutSourceSnippetMatches(
   _ snippet: String,
   in text: String
-) -> [(line: Int, column: Int)] {
+) -> [(line: Int, column: Int, offset: Int)] {
   let source = Array(text.utf8)
   let pattern = Array(snippet.utf8)
   guard !pattern.isEmpty,
@@ -484,7 +545,7 @@ func swiftmutSourceSnippetMatches(
     return []
   }
 
-  var matches: [(line: Int, column: Int)] = []
+  var matches: [(line: Int, column: Int, offset: Int)] = []
   var index = 0
   while index + pattern.count <= source.count {
     var matched = true
@@ -493,7 +554,8 @@ func swiftmutSourceSnippetMatches(
       break
     }
     if matched {
-      matches.append(swiftmutSourceLineAndColumn(source, offset: index))
+      let location = swiftmutSourceLineAndColumn(source, offset: index)
+      matches.append((line: location.line, column: location.column, offset: index))
       if matches.count > 8 {
         return matches
       }
@@ -653,4 +715,3 @@ func swiftmutDeclarationIdentifier(after marker: String, in line: String) -> Str
   }
   return String(decoding: bytes[start..<index], as: UTF8.self)
 }
-

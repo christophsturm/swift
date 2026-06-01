@@ -164,6 +164,32 @@ func swiftmutReturnSourceLocation(
     }
   }
 
+  if let anchored = swiftmutFindDescribedStoredPropertyInitializerReturnSourceLocation(
+    functionName: returnInst.parentFunction.name.string,
+    locationDescription: returnInst.location.description,
+    mutation: mutation,
+    config: config
+  ) {
+    return anchored
+  }
+  if let definingInstruction = returnInst.returnedValue.definingInstruction,
+     let anchored = swiftmutFindDescribedStoredPropertyInitializerReturnSourceLocation(
+       functionName: returnInst.parentFunction.name.string,
+       locationDescription: definingInstruction.location.description,
+       mutation: mutation,
+       config: config
+     ) {
+    return anchored
+  }
+  if let anchored = swiftmutFindDescribedStoredPropertyInitializerReturnSourceLocation(
+    functionName: returnInst.parentFunction.name.string,
+    locationDescription: returnInst.parentFunction.location.description,
+    mutation: mutation,
+    config: config
+  ) {
+    return anchored
+  }
+
   if let anchored = swiftmutFindDescribedDefaultArgumentReturnSourceLocation(
     functionName: returnInst.parentFunction.name.string,
     locationDescription: returnInst.location.description,
@@ -378,7 +404,7 @@ func swiftmutPropertyGetterReturnSourceLocation(
   func inspectLine(_ lineText: String, line: Int) {
     guard lineRange.contains(line),
           matches.count < 2,
-          let property = swiftmutStoredPropertyDeclaration(lineText, mutation: mutation) else {
+          let property = swiftmutStoredPropertySourceLocation(lineText, mutation: mutation) else {
       return
     }
     guard swiftmutFunctionName(functionName, containsPropertyName: property.name) else {

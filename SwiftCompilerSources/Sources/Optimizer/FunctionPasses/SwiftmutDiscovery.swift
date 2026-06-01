@@ -568,6 +568,16 @@ func swiftmutDiscoverScalarValueSites(
           config: config
         ) else {
           stats.sourceLocationMisses += 1
+          if stats.sourceLocationMissSamples < 500 {
+            stats.sourceLocationMissSamples += 1
+            swiftmutLogScalarValueSourceLocationMiss(
+              value: structInst,
+              mutation: mutation,
+              moduleName: moduleName,
+              functionName: functionName,
+              config: config
+            )
+          }
           continue
         }
         guard swiftmutSourceOriginalIsComplete(location.sourceOriginal) else {

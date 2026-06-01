@@ -120,6 +120,30 @@ func swiftmutLogValueApplySourceLocationMiss(
     ])
 }
 
+func swiftmutLogScalarValueSourceLocationMiss(
+  value: StructInst,
+  mutation: SwiftmutMutation,
+  moduleName: String,
+  functionName: String,
+  config: SwiftmutConfig
+) {
+  swiftmutLogEvent(
+    "scalarValueSourceLocationMiss",
+    config: config,
+    fields: [
+      ("mode", swiftmutModeName(config.mode)),
+      ("module", moduleName),
+      ("function", functionName),
+      ("functionLocation", value.parentFunction.location.description),
+      ("valueLocation", value.location.description),
+      ("valueType", value.type.description),
+      ("mutator", mutation.mutator),
+      ("mutatedBuiltinName", mutation.mutatedBuiltinName),
+      ("sourceOriginal", mutation.sourceOriginal),
+      ("sourceMutated", mutation.sourceMutated)
+    ])
+}
+
 func swiftmutLogConditionSourceLocationMiss(
   branch: CondBranchInst,
   comparison: BuiltinInst?,

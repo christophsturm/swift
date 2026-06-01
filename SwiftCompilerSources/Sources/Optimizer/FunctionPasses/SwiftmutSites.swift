@@ -197,6 +197,7 @@ struct SwiftmutScalarValueDiscoveryStats {
   var mutationEligibleStructInstructions = 0
   var mutationAlternatives = 0
   var sourceLocationMisses = 0
+  var sourceLocationMissSamples = 0
 }
 
 struct SwiftmutScalarValueDiscoveryResult {

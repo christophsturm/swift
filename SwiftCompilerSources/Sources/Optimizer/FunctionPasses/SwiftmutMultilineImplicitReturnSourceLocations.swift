@@ -198,12 +198,39 @@ func swiftmutFirstLineLooksLikeImplicitReturnExpression(
   guard start < trimmedEnd else {
     return false
   }
-  return swiftmutLineLooksLikeImplicitReturnExpression(
+  return swiftmutFirstLineCanStartMultilineImplicitReturnExpression(
     bytes: bytes,
     start: start,
     end: trimmedEnd,
-    allowsInlineBraces: true
   ) && swiftmutReturnValueIsEligible(bytes: bytes, start: start, mutation: mutation)
+}
+
+func swiftmutFirstLineCanStartMultilineImplicitReturnExpression(
+  bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> Bool {
+  if bytes[start] == 125 || bytes[start] == 123 || bytes[start] == 47 {
+    return false
+  }
+  let blockedPrefixes = [
+    "return ", "let ", "var ", "if ", "if(", "guard ", "guard(",
+    "for ", "for(", "while ", "while(", "switch ", "switch(",
+    "case ", "default:", "do ", "catch ", "defer ", "throw ",
+    "self.", "_ = "
+  ]
+  for prefix in blockedPrefixes {
+    if swiftmutASCIIHasPrefix(bytes, start: start, prefix: prefix) {
+      return false
+    }
+  }
+  if swiftmutPropertyDeclarationKeyword(bytes: bytes, start: start, end: end) != nil {
+    return false
+  }
+  for index in start..<end where bytes[index] == 59 {
+    return false
+  }
+  return true
 }
 
 func swiftmutBodySliceContainsOneExpression(bytes: [UInt8], start: Int, end: Int) -> Bool {

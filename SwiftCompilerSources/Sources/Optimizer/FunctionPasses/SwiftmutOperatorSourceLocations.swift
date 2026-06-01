@@ -109,6 +109,9 @@ func swiftmutFindSourceOperator(
         preferredLine: preferredLine,
         maxPreferredLineDistance: 4
       ) {
+        guard position.line >= preferredLine else {
+          continue
+        }
         let sourceMutated = rule.sourceMutatedOverride.isEmpty
           ? position.sourceMutated
           : rule.sourceMutatedOverride

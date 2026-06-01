@@ -77,6 +77,7 @@ swift_compiler_sources(Optimizer
   SwiftmutStringInterpolationSourceLocations.swift
   SwiftmutText.swift
   SwiftmutValueApplyAssignmentSourceLocations.swift
+  SwiftmutValueApplySourceLocations.swift
   SwiftmutValueExpressionSourceLocations.swift
   TempLValueElimination.swift
   TempRValueElimination.swift

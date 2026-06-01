@@ -21,6 +21,18 @@ func swiftmutValueApplySourceLocation(
     for: apply.parentFunction,
     config: config
   )
+  if mutation.mutatedBuiltinName == "return_zero",
+     apply.callee.description.contains("-> Int"),
+     swiftmutFunctionNameLooksDefaultArgumentThunk(apply.parentFunction.name.string),
+     let anchored = swiftmutFindDescribedDefaultArgumentReturnSourceLocation(
+       functionName: apply.parentFunction.name.string,
+       locationDescription: apply.location.description,
+       mutation: mutation,
+       config: config
+     ),
+     !swiftmutDefaultArgumentValueApplySourceLooksLikeConstructor(anchored.sourceOriginal) {
+    return anchored
+  }
   if let fileNameAndPosition = apply.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
@@ -208,6 +220,26 @@ func swiftmutValueApplySourceLocation(
     }
   }
   return nil
+}
+
+func swiftmutDefaultArgumentValueApplySourceLooksLikeConstructor(_ sourceOriginal: String) -> Bool {
+  let bytes = Array(sourceOriginal.utf8)
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard start + 2 <= end,
+        bytes[end - 2] == 40,
+        bytes[end - 1] == 41,
+        swiftmutIsASCIIUppercase(bytes[start]) else {
+    return false
+  }
+  var index = start + 1
+  while index < end - 2 {
+    guard swiftmutIsASCIILetterNumberOrUnderscore(bytes[index]) || bytes[index] == 46 else {
+      return false
+    }
+    index += 1
+  }
+  return true
 }
 
 func swiftmutAssignmentValueSourceLocation(

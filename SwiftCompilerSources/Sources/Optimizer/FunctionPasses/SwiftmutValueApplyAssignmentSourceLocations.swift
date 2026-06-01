@@ -55,6 +55,17 @@ func swiftmutValueApplySourceLocation(
       }
       if let functionSourceLocation,
          functionSourceLocation.path == matchedPath,
+         let anchored = swiftmutFindLogicalRHSValueApplySourceLocation(
+           path: matchedPath,
+           functionLine: functionSourceLocation.line,
+           locationDescription: apply.location.description,
+           mutation: mutation,
+           config: config
+         ) {
+        return anchored
+      }
+      if let functionSourceLocation,
+         functionSourceLocation.path == matchedPath,
         let anchored = swiftmutFindDescribedValueExpressionSourceLocation(
            for: apply,
            path: matchedPath,
@@ -148,6 +159,15 @@ func swiftmutValueApplySourceLocation(
       for: apply,
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
+    if let anchored = swiftmutFindLogicalRHSValueApplySourceLocation(
+      path: functionSourceLocation.path,
+      functionLine: functionSourceLocation.line,
+      locationDescription: apply.location.description,
       mutation: mutation,
       config: config
     ) {

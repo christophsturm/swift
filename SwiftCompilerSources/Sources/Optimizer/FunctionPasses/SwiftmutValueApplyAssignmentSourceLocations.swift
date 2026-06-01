@@ -95,6 +95,17 @@ func swiftmutValueApplySourceLocation(
            preferredLine: functionSourceLocation.line,
            mutation: mutation,
            config: config
+      ) {
+        return anchored
+      }
+      if let functionSourceLocation,
+         functionSourceLocation.path == matchedPath,
+         let anchored = swiftmutFindDictionaryLiteralValueSourceLocation(
+           for: apply,
+           path: matchedPath,
+           functionLine: functionSourceLocation.line,
+           mutation: mutation,
+           config: config
          ) {
         return anchored
       }
@@ -172,6 +183,15 @@ func swiftmutValueApplySourceLocation(
       for: apply,
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
+    if let anchored = swiftmutFindDictionaryLiteralValueSourceLocation(
+      for: apply,
+      path: functionSourceLocation.path,
+      functionLine: functionSourceLocation.line,
       mutation: mutation,
       config: config
     ) {

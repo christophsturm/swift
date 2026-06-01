@@ -316,8 +316,12 @@ func swiftmutSourceExpression(
   while rightEnd < bytes.count && swiftmutIsHorizontalWhitespace(bytes[rightEnd]) {
     rightEnd += 1
   }
-  while rightEnd < bytes.count && swiftmutIsExpressionByte(bytes[rightEnd]) {
-    rightEnd += 1
+  if rightEnd < bytes.count && bytes[rightEnd] == 34 {
+    rightEnd = swiftmutStringLiteralEnd(bytes: bytes, start: rightEnd)
+  } else {
+    while rightEnd < bytes.count && swiftmutIsExpressionByte(bytes[rightEnd]) {
+      rightEnd += 1
+    }
   }
 
   let original = String(decoding: bytes[leftStart..<rightEnd], as: UTF8.self)
@@ -343,4 +347,3 @@ func swiftmutIsExpressionByte(_ byte: UInt8) -> Bool {
     return false
   }
 }
-

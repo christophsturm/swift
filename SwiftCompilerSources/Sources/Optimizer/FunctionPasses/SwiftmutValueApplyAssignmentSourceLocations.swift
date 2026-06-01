@@ -12,6 +12,24 @@
 import AST
 import SIL
 
+func swiftmutValueApplySourceOriginalIsComplete(_ sourceOriginal: String) -> Bool {
+  let bytes = Array(sourceOriginal.utf8)
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard start < end else {
+    return false
+  }
+  if swiftmutDescribedSnippetStartsWithOperator(bytes: bytes, start: start, end: end) {
+    return false
+  }
+  switch bytes[start] {
+  case 41, 93, 125:
+    return false
+  default:
+    return true
+  }
+}
+
 func swiftmutValueApplySourceLocation(
   for apply: ApplyInst,
   mutation: SwiftmutMutation,

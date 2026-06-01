@@ -56,7 +56,7 @@ func swiftmutAssignmentValueExpression(
   }
 
   let valueStart = swiftmutSkipHorizontalWhitespace(bytes, from: equals + 1)
-  var valueEnd = lineEnd
+  var valueEnd = swiftmutAssignmentValueEnd(bytes: bytes, start: valueStart, lineEnd: lineEnd)
   if valueEnd > valueStart && bytes[valueEnd - 1] == 44 {
     valueEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: valueEnd - 1)
   }
@@ -117,6 +117,17 @@ func swiftmutSignatureAssignmentValueExpression(
     valueStart + 1,
     sourceOriginal,
     swiftmutImplicitReturnSourceMutation(for: mutation))
+}
+
+func swiftmutAssignmentValueEnd(bytes: [UInt8], start: Int, lineEnd: Int) -> Int {
+  var valueEnd = lineEnd
+  if let elseIndex = swiftmutTopLevelASCIIIndex(bytes, start: start, end: valueEnd, pattern: " else") {
+    valueEnd = elseIndex
+  }
+  if let bodyStart = swiftmutTopLevelByteIndex(bytes, start: start, end: valueEnd, byte: 123) {
+    valueEnd = bodyStart
+  }
+  return swiftmutTrimTrailingHorizontalWhitespace(bytes, end: valueEnd)
 }
 
 private func swiftmutLabeledArgumentValueExpression(

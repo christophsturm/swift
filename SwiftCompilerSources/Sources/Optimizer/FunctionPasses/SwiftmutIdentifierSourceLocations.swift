@@ -254,6 +254,5 @@ func swiftmutSourceExpressionRange(
 }
 
 func swiftmutIsSourceExpressionPrefixByte(_ byte: UInt8) -> Bool {
-  swiftmutIsASCIILetterNumberOrUnderscore(byte) || byte == 46 || byte == 63 || byte == 33
+  swiftmutIsASCIILetterNumberOrUnderscore(byte) || byte == 36 || byte == 46 || byte == 63 || byte == 33
 }
-

@@ -652,6 +652,10 @@ func swiftmutDiscoverValueApplySites(
           }
           continue
         }
+        guard swiftmutValueApplySourceOriginalIsComplete(location.sourceOriginal) else {
+          stats.sourceLocationMisses += 1
+          continue
+        }
         if sourceLocation == nil {
           sourceLocation = location
         } else if !swiftmutSourceLocationMatchesSite(location, sourceLocation!) {

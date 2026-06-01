@@ -65,7 +65,8 @@ func swiftmutFindDescribedValueExpressionSourceLocation(
               matchStart: matchStart,
               lineEnd: end,
               identifiers: identifiers,
-              mutation: mutation
+              mutation: mutation,
+              allowsInfix: true
             ) else {
         continue
       }
@@ -228,7 +229,8 @@ func swiftmutFindUniqueDescribedValueExpressionSourceLocation(
               matchStart: matchStart,
               lineEnd: end,
               identifiers: identifiers,
-              mutation: mutation
+              mutation: mutation,
+              allowsInfix: false
             ) else {
         continue
       }
@@ -320,7 +322,8 @@ func swiftmutDescribedValueExpression(
   matchStart: Int,
   lineEnd: Int,
   identifiers: [String],
-  mutation: SwiftmutMutation
+  mutation: SwiftmutMutation,
+  allowsInfix: Bool
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
   let expressionSearchStart = swiftmutDescribedValueExpressionSearchStart(
     bytes: bytes,
@@ -345,6 +348,15 @@ func swiftmutDescribedValueExpression(
     return expression
   }
   if let expression = swiftmutDescribedCatchPatternValueExpression(
+    bytes: bytes,
+    matchStart: matchStart,
+    lineEnd: lineEnd,
+    mutation: mutation
+  ) {
+    return expression
+  }
+  if allowsInfix,
+     let expression = swiftmutDescribedInfixValueExpression(
     bytes: bytes,
     matchStart: matchStart,
     lineEnd: lineEnd,
@@ -547,6 +559,131 @@ func swiftmutDescribedLineHasCatchBeforeExpression(
   return false
 }
 
+func swiftmutDescribedInfixValueExpression(
+  bytes: [UInt8],
+  matchStart: Int,
+  lineEnd: Int,
+  mutation: SwiftmutMutation
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let expressionStart = swiftmutDescribedValuePayloadStart(
+    bytes: bytes,
+    start: matchStart,
+    end: lineEnd
+  )
+  guard expressionStart < lineEnd,
+        !swiftmutDescribedSnippetStartsWithOperator(bytes: bytes, start: expressionStart, end: lineEnd),
+        let comparison = swiftmutFirstDescribedInfixComparison(
+          bytes: bytes,
+          start: expressionStart,
+          end: lineEnd
+        ) else {
+    return nil
+  }
+
+  let expressionEnd = swiftmutTrimTrailingElseKeyword(
+    bytes: bytes,
+    end: swiftmutDescribedInfixExpressionEnd(
+      bytes: bytes,
+      start: comparison.end,
+      lineEnd: lineEnd
+    )
+  )
+  guard expressionStart < comparison.start,
+        comparison.end < expressionEnd,
+        swiftmutReturnValueIsEligible(bytes: bytes, start: expressionStart, mutation: mutation) else {
+    return nil
+  }
+
+  let sourceOriginal = String(decoding: bytes[expressionStart..<expressionEnd], as: UTF8.self)
+  return (
+    expressionStart + 1,
+    sourceOriginal,
+    swiftmutImplicitReturnSourceMutation(for: mutation))
+}
+
+func swiftmutFirstDescribedInfixComparison(
+  bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> (start: Int, end: Int)? {
+  guard let index = swiftmutFirstTopLevelIndex(bytes, start: start, end: end, matches: { index in
+    guard index + 1 < end else {
+      return false
+    }
+    if bytes[index] == 61 && bytes[index + 1] == 61 {
+      return true
+    }
+    return bytes[index] == 33 && bytes[index + 1] == 61
+  }) else {
+    return nil
+  }
+  return (index, index + 2)
+}
+
+func swiftmutDescribedInfixExpressionEnd(bytes: [UInt8], start: Int, lineEnd: Int) -> Int {
+  var index = start
+  var parenDepth = 0
+  var bracketDepth = 0
+  var quote: UInt8?
+  var escaped = false
+
+  while index < lineEnd {
+    let byte = bytes[index]
+    if let activeQuote = quote {
+      if escaped {
+        escaped = false
+      } else if byte == 92 {
+        escaped = true
+      } else if byte == activeQuote {
+        quote = nil
+      }
+      index += 1
+      continue
+    }
+    if byte == 34 || byte == 39 {
+      quote = byte
+    } else if byte == 40 {
+      parenDepth += 1
+    } else if byte == 41 {
+      if parenDepth == 0 {
+        break
+      }
+      parenDepth -= 1
+    } else if byte == 91 {
+      bracketDepth += 1
+    } else if byte == 93 {
+      if bracketDepth == 0 {
+        break
+      }
+      bracketDepth -= 1
+    } else if parenDepth == 0 && bracketDepth == 0 {
+      if byte == 123 || byte == 125 || byte == 44 {
+        break
+      }
+      if index + 1 < lineEnd,
+         (byte == 38 || byte == 124),
+         bytes[index + 1] == byte {
+        break
+      }
+    }
+    index += 1
+  }
+  return swiftmutTrimTrailingHorizontalWhitespace(bytes, end: index)
+}
+
+func swiftmutTrimTrailingElseKeyword(bytes: [UInt8], end: Int) -> Int {
+  let trimmedEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: end)
+  guard trimmedEnd >= 5,
+        bytes[trimmedEnd - 4] == 101,
+        bytes[trimmedEnd - 3] == 108,
+        bytes[trimmedEnd - 2] == 115,
+        bytes[trimmedEnd - 1] == 101,
+        swiftmutIsHorizontalWhitespace(bytes[trimmedEnd - 5]) else {
+    return trimmedEnd
+  }
+  return swiftmutTrimTrailingHorizontalWhitespace(bytes, end: trimmedEnd - 4)
+}
+
 func swiftmutDescribedOperatorValueExpression(
   bytes: [UInt8],
   matchStart: Int,
@@ -573,7 +710,8 @@ func swiftmutDescribedOperatorValueExpression(
     start: matchStart,
     lineEnd: lineEnd
   )
-  guard expressionEnd > matchStart else {
+  guard expressionEnd > matchStart,
+        !swiftmutDescribedSnippetStartsWithOperator(bytes: bytes, start: expressionStart, end: expressionEnd) else {
     return nil
   }
 

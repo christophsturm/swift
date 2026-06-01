@@ -110,6 +110,13 @@ func swiftmutSourceLocation(
     functionLocation: function.location.description,
     locationDescription: branch.location.description,
     mutation: mutation,
+    config: config
+  ) ?? swiftmutFindOrdinalDescribedConditionSourceLocation(
+    moduleName: moduleName,
+    function: function,
+    branch: branch,
+    locationDescription: branch.location.description,
+    mutation: mutation,
     config: config)
 }
 
@@ -468,4 +475,3 @@ func swiftmutSourceLineLooksLikeArgumentLabel(bytes: [UInt8], start: Int, end: I
   }
   return true
 }
-

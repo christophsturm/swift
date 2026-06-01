@@ -281,6 +281,14 @@ func swiftmutReturnSourceLocation(
     ) {
       return anchored
     }
+    if let anchored = swiftmutFindMultilineImplicitReturnSourceLocation(
+      path: path,
+      functionLine: line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
     if let anchored = swiftmutFindPropertyGetterReturnSourceLocation(
       functionName: returnInst.parentFunction.name.string,
       path: path,
@@ -335,6 +343,14 @@ func swiftmutReturnSourceLocation(
     if let anchored = swiftmutFindUniqueImplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
+    if let anchored = swiftmutFindMultilineImplicitReturnSourceLocation(
+      path: path,
+      functionLine: line,
       mutation: mutation,
       config: config
     ) {

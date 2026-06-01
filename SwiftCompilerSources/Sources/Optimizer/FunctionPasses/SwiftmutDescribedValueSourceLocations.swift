@@ -387,6 +387,15 @@ func swiftmutDescribedValueExpression(
     )
   }
 
+  if let expression = swiftmutDescribedIdentifierValueExpression(
+    bytes: bytes,
+    matchStart: matchStart,
+    lineEnd: lineEnd,
+    mutation: mutation
+  ) {
+    return expression
+  }
+
   guard let tokenRange = swiftmutFirstCallLikeSourceIdentifier(
     bytes: bytes,
     start: expressionSearchStart,
@@ -405,6 +414,48 @@ func swiftmutDescribedValueExpression(
     expressionRange: expressionRange,
     mutation: mutation
   )
+}
+
+func swiftmutDescribedIdentifierValueExpression(
+  bytes: [UInt8],
+  matchStart: Int,
+  lineEnd: Int,
+  mutation: SwiftmutMutation
+) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard matchStart < lineEnd,
+        swiftmutIsASCIIIdentifierStart(bytes[matchStart]) else {
+    return nil
+  }
+
+  var tokenEnd = matchStart + 1
+  while tokenEnd < lineEnd && swiftmutIsASCIILetterNumberOrUnderscore(bytes[tokenEnd]) {
+    tokenEnd += 1
+  }
+  if tokenEnd < lineEnd && !swiftmutIsDescribedIdentifierTerminator(bytes[tokenEnd]) {
+    return nil
+  }
+  guard matchStart == 0 || !swiftmutIsASCIILetterNumberOrUnderscore(bytes[matchStart - 1]),
+        let expressionRange = swiftmutSourceExpressionRange(
+          around: (matchStart, tokenEnd),
+          in: bytes,
+          lineEnd: lineEnd
+        ),
+        swiftmutReturnValueIsEligible(bytes: bytes, start: expressionRange.start, mutation: mutation) else {
+    return nil
+  }
+  return swiftmutDescribedValueExpressionResult(
+    bytes: bytes,
+    expressionRange: expressionRange,
+    mutation: mutation
+  )
+}
+
+func swiftmutIsDescribedIdentifierTerminator(_ byte: UInt8) -> Bool {
+  swiftmutIsHorizontalWhitespace(byte)
+    || byte == 41
+    || byte == 44
+    || byte == 93
+    || byte == 123
 }
 
 func swiftmutDescribedOptionalBindingValueExpression(

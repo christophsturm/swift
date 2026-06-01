@@ -33,6 +33,14 @@ func swiftmutValueApplySourceLocation(
      !swiftmutDefaultArgumentValueApplySourceLooksLikeConstructor(anchored.sourceOriginal) {
     return anchored
   }
+  if let anchored = swiftmutFindDefaultArgumentValueApplySourceLocation(
+    functionName: apply.parentFunction.name.string,
+    locationDescription: apply.location.description,
+    mutation: mutation,
+    config: config
+  ) {
+    return anchored
+  }
   if let fileNameAndPosition = apply.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {

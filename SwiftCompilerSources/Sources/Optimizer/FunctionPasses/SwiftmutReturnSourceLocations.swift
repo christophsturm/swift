@@ -315,6 +315,14 @@ func swiftmutReturnSourceLocation(
     ) {
       return anchored
     }
+    if let anchored = swiftmutFindTrailingExplicitReturnSourceLocation(
+      path: path,
+      functionLine: line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
     if let anchored = swiftmutFindUniqueImplicitReturnSourceLocation(
       path: path,
       preferredLine: line,

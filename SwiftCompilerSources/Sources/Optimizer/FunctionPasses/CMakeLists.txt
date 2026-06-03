@@ -78,6 +78,7 @@ swift_compiler_sources(Optimizer
   SwiftmutStringDescriptionSourceLocations.swift
   SwiftmutStringInterpolationSourceLocations.swift
   SwiftmutText.swift
+  SwiftmutTrailingExplicitReturnSourceLocations.swift
   SwiftmutValueApplyAssignmentSourceLocations.swift
   SwiftmutValueApplySourceLocations.swift
   SwiftmutValueExpressionSourceLocations.swift

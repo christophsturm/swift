@@ -41,6 +41,7 @@ swift_compiler_sources(Optimizer
   Swiftmut.swift
   SwiftmutAssignmentSourceLocations.swift
   SwiftmutAssignmentText.swift
+  SwiftmutClosureArgumentReturnSourceLocations.swift
   SwiftmutConfig.swift
   SwiftmutDefaultArgumentReturnSourceLocations.swift
   SwiftmutDefaultArgumentValueApplySourceLocations.swift

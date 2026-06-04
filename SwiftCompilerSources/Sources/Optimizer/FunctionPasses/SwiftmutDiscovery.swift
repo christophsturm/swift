@@ -653,6 +653,9 @@ func swiftmutDiscoverValueApplySites(
         continue
       }
       stats.valueApplyInstructions += 1
+      guard swiftmutValueApplyCanBypassOriginalApply(apply) else {
+        continue
+      }
 
       let mutations = swiftmutValueReplacementMutations(
         for: apply,
@@ -737,6 +740,24 @@ func swiftmutDiscoverValueApplySites(
   }
 
   return SwiftmutValueApplyDiscoveryResult(sites: sites, stats: stats)
+}
+
+private func swiftmutValueApplyCanBypassOriginalApply(_ apply: ApplyInst) -> Bool {
+  for argument in apply.argumentOperands {
+    guard let convention = apply.convention(of: argument) else {
+      return false
+    }
+    switch convention {
+    case .directGuaranteed, .directUnowned, .packGuaranteed:
+      continue
+    case .indirectInout, .indirectInoutAliasable, .packInout,
+         .indirectIn, .indirectInGuaranteed, .indirectInCXX,
+         .directOwned, .packOwned,
+         .indirectOut, .packOut:
+      return false
+    }
+  }
+  return true
 }
 
 func swiftmutDiscoverAssignmentValueSites(

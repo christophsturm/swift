@@ -263,6 +263,9 @@ func swiftmutDiscoverReturnSites(
     stats.terminators += 1
     let returnType = returnInst.returnedValue.type
     swiftmutRecordReturnType(returnType, in: function, stats: &stats)
+    guard returnType.isTrivial(in: function) else {
+      continue
+    }
 
     let mutations = swiftmutMetamutantReturnMutations(for: returnInst, config: config)
     guard !mutations.isEmpty else {
@@ -653,6 +656,9 @@ func swiftmutDiscoverValueApplySites(
         continue
       }
       stats.valueApplyInstructions += 1
+      guard apply.type.isTrivial(in: function) else {
+        continue
+      }
       guard swiftmutValueApplyCanBypassOriginalApply(apply) else {
         continue
       }
@@ -749,6 +755,9 @@ private func swiftmutValueApplyCanBypassOriginalApply(_ apply: ApplyInst) -> Boo
     }
     switch convention {
     case .directGuaranteed, .directUnowned, .packGuaranteed:
+      guard argument.value.ownership != .owned else {
+        return false
+      }
       continue
     case .indirectInout, .indirectInoutAliasable, .packInout,
          .indirectIn, .indirectInGuaranteed, .indirectInCXX,

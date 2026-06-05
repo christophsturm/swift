@@ -20,6 +20,14 @@ func swiftmutReturnSourceLocation(
   if let fileNameAndPosition = returnInst.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
+      if let anchored = swiftmutFindUniqueExplicitReturnValueExpressionSourceLocation(
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
+      ) {
+        return anchored
+      }
       let candidate = (
         swiftmutTrimPackageRoot(matchedPath, config: config),
         fileNameAndPosition.line,
@@ -94,6 +102,14 @@ func swiftmutReturnSourceLocation(
      let fileNameAndPosition = definingInstruction.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
+      if let anchored = swiftmutFindUniqueExplicitReturnValueExpressionSourceLocation(
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
+      ) {
+        return anchored
+      }
       let candidate = (
         swiftmutTrimPackageRoot(matchedPath, config: config),
         fileNameAndPosition.line,
@@ -230,6 +246,14 @@ func swiftmutReturnSourceLocation(
           let line = swiftmutPreferredLine(in: returnLocation, path: path) else {
       continue
     }
+    if let anchored = swiftmutFindUniqueExplicitReturnValueExpressionSourceLocation(
+      path: path,
+      preferredLine: line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
     let candidate = (
       swiftmutTrimPackageRoot(path, config: config),
       line,
@@ -312,6 +336,14 @@ func swiftmutReturnSourceLocation(
     guard location.contains(path),
           let line = swiftmutPreferredLine(in: location, path: path) else {
       continue
+    }
+    if let anchored = swiftmutFindUniqueExplicitReturnValueExpressionSourceLocation(
+      path: path,
+      preferredLine: line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
     }
     let candidate = (
       swiftmutTrimPackageRoot(path, config: config),

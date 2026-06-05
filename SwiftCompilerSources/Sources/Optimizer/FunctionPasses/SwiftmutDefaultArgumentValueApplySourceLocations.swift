@@ -31,12 +31,11 @@ func swiftmutFindDefaultArgumentValueApplySourceLocation(
       continue
     }
     for match in swiftmutSourceSnippetMatches(snippet, in: text) {
-      guard let sourceLine = swiftmutSourceLine(text, line: match.line),
-            let expression = swiftmutDefaultArgumentValueApplyExpression(
-              line: sourceLine,
-              matchColumn: match.column,
-              mutation: mutation
-            ) else {
+      guard let expression = swiftmutDefaultArgumentSourceExpression(
+        in: text,
+        matchOffset: match.offset,
+        mutation: mutation
+      ) else {
         continue
       }
       let score = swiftmutDefaultArgumentDeclarationScore(
@@ -50,8 +49,8 @@ func swiftmutFindDefaultArgumentValueApplySourceLocation(
       matches.append((
         path,
         match.line,
-        expression.column,
-        expression.sourceOriginal,
+        match.column + expression.columnOffset,
+        expression.text,
         score))
     }
   }
@@ -67,7 +66,11 @@ func swiftmutFindDefaultArgumentValueApplySourceLocation(
   let bestMatches = matches.filter { $0.score == bestScore }
   guard bestMatches.count == 1,
         let match = bestMatches.first else {
-    return nil
+    return swiftmutFindOrdinalDefaultArgumentReturnSourceLocation(
+      functionName: functionName,
+      mutation: mutation,
+      config: config
+    )
   }
 
   return (

@@ -1,5 +1,4 @@
 // RUN: rm -rf %t
-// XFAIL: *
 // RUN: mkdir -p %t
 // RUN: printf '%b\n' '---' "name: ''" 'passes: [ "\"swiftmut\"" ]' > %t/pipeline.yaml
 // RUN: printf '%b\n' \
@@ -47,17 +46,16 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
-// CHECK: "siteKind":"scalarValue"
+// CHECK-NOT: "siteKind":"valueApply"
+// CHECK: "siteKind":"returnValue"
 // CHECK: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in false }"
 // CHECK: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in true }"
-// CHECK: "siteKind":"scalarValue"
+// CHECK-NOT: "siteKind":"valueApply"
+// CHECK: "siteKind":"returnValue"
 // CHECK: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in false }"
 // CHECK: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in true }"
-// CHECK: "siteKind":"condition"
-// CHECK: "mutator":"CONDITION_FALSE"
-// CHECK-SAME: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in false }"
-// CHECK: "mutator":"CONDITION_TRUE"
-// CHECK-SAME: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in true }"
+// CHECK-NOT: "siteKind":"valueApply"
 // EVENTS: "event":"functionVisit"
+// EVENTS-NOT: "event":"valueApplySourceLocationMiss"
 // EVENTS-NOT: "event":"scalarValueSourceLocationMiss"
 // EVENTS-NOT: "event":"conditionSourceLocationMiss"

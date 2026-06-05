@@ -695,6 +695,13 @@ func swiftmutDiscoverValueApplySites(
           }
           continue
         }
+        if swiftmutValueApplyLocationConflictsWithClosureArgumentPredicate(
+          location,
+          mutation: mutation,
+          config: config
+        ) {
+          continue
+        }
         guard swiftmutSourceOriginalIsComplete(location.sourceOriginal) else {
           stats.sourceLocationMisses += 1
           continue
@@ -767,6 +774,29 @@ private func swiftmutValueApplyCanBypassOriginalApply(_ apply: ApplyInst) -> Boo
     }
   }
   return true
+}
+
+private func swiftmutValueApplyLocationConflictsWithClosureArgumentPredicate(
+  _ location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String),
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> Bool {
+  guard let replacement = swiftmutClosureArgumentReturnReplacement(for: mutation),
+        location.line > 0 else {
+    return false
+  }
+  let path = location.file.hasPrefix("/")
+    ? location.file
+    : config.packageRoot + "/" + location.file
+  guard let sourceLine = swiftmutAbsoluteSourceLine(path: path, line: location.line),
+        let closureArgument = swiftmutClosureArgumentReturnExpression(
+          sourceLine,
+          replacement: replacement,
+          mutation: mutation
+        ) else {
+    return false
+  }
+  return location.sourceOriginal != closureArgument.sourceOriginal
 }
 
 func swiftmutDiscoverAssignmentValueSites(

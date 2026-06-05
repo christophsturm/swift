@@ -44,6 +44,17 @@ func swiftmutValueApplySourceLocation(
   if let fileNameAndPosition = apply.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
+      if let functionSourceLocation,
+         functionSourceLocation.path == matchedPath,
+         let anchored = swiftmutFindLogicalRHSValueApplySourceLocation(
+           path: matchedPath,
+           functionLine: functionSourceLocation.line,
+           locationDescription: apply.location.description,
+           mutation: mutation,
+           config: config
+         ) {
+        return anchored
+      }
       if let anchored = swiftmutFindValueExpressionSourceLocation(
         for: apply,
         path: matchedPath,
@@ -56,17 +67,6 @@ func swiftmutValueApplySourceLocation(
       if let functionSourceLocation,
          functionSourceLocation.path == matchedPath,
          let anchored = swiftmutFindOperatorValueApplySourceLocation(
-           path: matchedPath,
-           functionLine: functionSourceLocation.line,
-           locationDescription: apply.location.description,
-           mutation: mutation,
-           config: config
-         ) {
-        return anchored
-      }
-      if let functionSourceLocation,
-         functionSourceLocation.path == matchedPath,
-         let anchored = swiftmutFindLogicalRHSValueApplySourceLocation(
            path: matchedPath,
            functionLine: functionSourceLocation.line,
            locationDescription: apply.location.description,
@@ -166,19 +166,19 @@ func swiftmutValueApplySourceLocation(
   }
 
   if let functionSourceLocation {
-    if let anchored = swiftmutFindValueExpressionSourceLocation(
-      for: apply,
+    if let anchored = swiftmutFindLogicalRHSValueApplySourceLocation(
       path: functionSourceLocation.path,
-      preferredLine: functionSourceLocation.line,
+      functionLine: functionSourceLocation.line,
+      locationDescription: apply.location.description,
       mutation: mutation,
       config: config
     ) {
       return anchored
     }
-    if let anchored = swiftmutFindLogicalRHSValueApplySourceLocation(
+    if let anchored = swiftmutFindValueExpressionSourceLocation(
+      for: apply,
       path: functionSourceLocation.path,
-      functionLine: functionSourceLocation.line,
-      locationDescription: apply.location.description,
+      preferredLine: functionSourceLocation.line,
       mutation: mutation,
       config: config
     ) {

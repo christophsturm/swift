@@ -58,16 +58,16 @@ func swiftmutFindLogicalRHSValueApplySourceLocation(
     if text[index] == "\n" {
       let lineText = String(text[lineStart..<index])
       if currentLine >= functionLine {
-        if sawOpeningBrace && braceDepth > 0 {
+        if braceDepth > 0 {
           inspectLine(lineText, line: currentLine)
           if matches.count >= 2 {
             break
           }
         }
-        updateBraceDepth(lineText)
-        if sawOpeningBrace && braceDepth <= 0 {
-          break
-        }
+      }
+      updateBraceDepth(lineText)
+      if currentLine >= functionLine && sawOpeningBrace && braceDepth <= 0 {
+        break
       }
       currentLine += 1
       lineStart = text.index(after: index)
@@ -75,7 +75,7 @@ func swiftmutFindLogicalRHSValueApplySourceLocation(
     index = text.index(after: index)
   }
 
-  if index == text.endIndex && currentLine >= functionLine && sawOpeningBrace && braceDepth > 0 {
+  if index == text.endIndex && currentLine >= functionLine && braceDepth > 0 {
     inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
   }
 
@@ -94,9 +94,12 @@ func swiftmutFindLogicalRHSValueApplySourceLocation(
 func swiftmutLogicalRHSSnippetLooksMappable(_ snippet: String) -> Bool {
   let bytes = Array(snippet.utf8)
   let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
-  return start + 2 < bytes.count
-    && (bytes[start] == 38 || bytes[start] == 124)
-    && bytes[start + 1] == bytes[start]
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard start < end else {
+    return false
+  }
+  return swiftmutLogicalRHSOperatorIndex(bytes: bytes, start: start, end: end) != nil
+    || swiftmutIsASCIIIdentifierStart(bytes[start])
 }
 
 func swiftmutLogicalRHSValueExpression(
@@ -107,15 +110,69 @@ func swiftmutLogicalRHSValueExpression(
   let bytes = Array(line.utf8)
   let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
   let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  let snippetBytes = Array(snippet.utf8)
   guard start < end,
-        let matchStart = swiftmutASCIIIndex(bytes, start: start, end: end, pattern: snippet),
-        let expression = swiftmutDescribedLogicalOperatorRHSValueExpression(
-          bytes: bytes,
-          matchStart: matchStart,
-          lineEnd: end,
-          mutation: mutation
-        ) else {
+        let matchStart = swiftmutASCIIIndex(bytes, start: start, end: end, pattern: snippet) else {
     return nil
   }
-  return (expression.column, expression.sourceOriginal)
+  if let operatorOffset = swiftmutLogicalRHSOperatorIndex(
+    bytes: snippetBytes,
+    start: 0,
+    end: snippetBytes.count
+  ),
+     let expression = swiftmutDescribedLogicalOperatorRHSValueExpression(
+       bytes: bytes,
+       matchStart: matchStart + operatorOffset,
+       lineEnd: end,
+       mutation: mutation
+     ) {
+    return (expression.column, expression.sourceOriginal)
+  }
+  guard swiftmutLogicalRHSOperatorPrecedes(bytes: bytes, expressionStart: matchStart) else {
+    return nil
+  }
+  let expressionEnd = swiftmutTrimTrailingElseKeyword(
+    bytes: bytes,
+    end: swiftmutDescribedOperatorExpressionEnd(
+      bytes: bytes,
+      start: matchStart,
+      lineEnd: end
+    )
+  )
+  guard matchStart < expressionEnd,
+        swiftmutReturnValueIsEligible(bytes: bytes, start: matchStart, mutation: mutation) else {
+    return nil
+  }
+  return (
+    matchStart + 1,
+    String(decoding: bytes[matchStart..<expressionEnd], as: UTF8.self))
+}
+
+func swiftmutLogicalRHSOperatorIndex(bytes: [UInt8], start: Int, end: Int) -> Int? {
+  var index = swiftmutSkipHorizontalWhitespace(bytes, from: start)
+  while index + 1 < end {
+    if (bytes[index] == 38 || bytes[index] == 124),
+       bytes[index + 1] == bytes[index] {
+      return index
+    }
+    index += 1
+  }
+  return nil
+}
+
+func swiftmutLogicalRHSOperatorPrecedes(bytes: [UInt8], expressionStart: Int) -> Bool {
+  var index = expressionStart
+  while index > 0 {
+    let previous = bytes[index - 1]
+    if swiftmutIsHorizontalWhitespace(previous) {
+      index -= 1
+      continue
+    }
+    guard index >= 2 else {
+      return false
+    }
+    let operatorByte = bytes[index - 1]
+    return (operatorByte == 38 || operatorByte == 124) && bytes[index - 2] == operatorByte
+  }
+  return false
 }

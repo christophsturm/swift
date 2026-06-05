@@ -324,6 +324,8 @@ func swiftmutSourceExpression(
     }
   }
 
+  rightEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: rightEnd)
+
   let original = String(decoding: bytes[leftStart..<rightEnd], as: UTF8.self)
   let mutatedPrefix = String(decoding: bytes[leftStart..<operatorStart], as: UTF8.self)
   let mutatedSuffix = String(decoding: bytes[operatorEnd..<rightEnd], as: UTF8.self)

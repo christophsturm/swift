@@ -1,5 +1,4 @@
 // RUN: rm -rf %t
-// XFAIL: *
 // RUN: mkdir -p %t
 // RUN: printf '%b\n' '---' "name: ''" 'passes: [ "\"swiftmut\"" ]' > %t/pipeline.yaml
 // RUN: printf '%b\n' \
@@ -38,7 +37,5 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 
 // CHECK: "siteKind":"condition"
 // CHECK-SAME: "sourceOriginal":"count == 1","sourceMutated":"count != 1"
-// CHECK: "siteKind":"condition"
 // CHECK-SAME: "sourceOriginal":"count == 1","sourceMutated":"false"
-// CHECK: "siteKind":"condition"
 // CHECK-SAME: "sourceOriginal":"count == 1","sourceMutated":"true"

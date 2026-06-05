@@ -119,12 +119,18 @@ func swiftmutMultilineCallPrefix(from snippet: String) -> String? {
   let bytes = Array(snippet.utf8)
   let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
   let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
-  guard start < end,
-        let open = swiftmutASCIIIndex(bytes, start: start, end: end, pattern: "("),
-        open > start else {
+  guard start < end else {
     return nil
   }
-  let prefix = String(decoding: bytes[start...open], as: UTF8.self)
+  let prefix: String
+  if let open = swiftmutASCIIIndex(bytes, start: start, end: end, pattern: "(") {
+    guard open > start else {
+      return nil
+    }
+    prefix = String(decoding: bytes[start...open], as: UTF8.self)
+  } else {
+    prefix = String(decoding: bytes[start..<end], as: UTF8.self)
+  }
   guard prefix.count >= 5 else {
     return nil
   }

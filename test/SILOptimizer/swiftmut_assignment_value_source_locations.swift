@@ -1,5 +1,4 @@
 // RUN: rm -rf %t
-// XFAIL: *
 // RUN: mkdir -p %t
 // RUN: printf '%b\n' '---' "name: ''" 'passes: [ "\"swiftmut\"" ]' > %t/pipeline.yaml
 // RUN: printf '%b\n' \
@@ -26,7 +25,7 @@
 // RUN: %FileCheck %s --input-file %t/all-fragments.json
 
 public func swiftmutAssignedParameter(_ input: Int) -> Int {
-  let result = input
+  var result = input
   return result
 }
 

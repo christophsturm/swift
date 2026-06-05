@@ -64,7 +64,15 @@ func swiftmutIsGeneratedRawRepresentableFunctionName(_ name: String) -> Bool {
 }
 
 func swiftmutIsGeneratedSpecializationFunctionName(_ name: String) -> Bool {
-  name.contains("Tf4")
+  swiftmutIsMangledFunctionName(name)
+    && (name.contains("FTf")
+      || name.contains("Tf2")
+      || name.contains("Tf3")
+      || name.contains("Tf4"))
+}
+
+func swiftmutIsMangledFunctionName(_ name: String) -> Bool {
+  name.hasPrefix("$s") || name.hasPrefix("@$s")
 }
 
 func swiftmutFindSourceOperator(

@@ -21,7 +21,8 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutOperatorValueApplySourceLocations -external-pass-pipeline-filename %t/pipeline.yaml %s -o /dev/null
-// RUN: find %t/fragments -type f -name '*.json' -print -exec %FileCheck %s --input-file {} ';'
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
+// RUN: %FileCheck %s --input-file %t/all-fragments.json
 
 @_silgen_name("__swiftmut_visit")
 public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {

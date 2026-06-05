@@ -28,5 +28,15 @@ public func swiftmutClosureArgumentSplit(_ text: String) -> [Substring] {
   text.split(whereSeparator: \.isNewline)
 }
 
+public func swiftmutClosureArgumentSplitInFor(_ text: String) -> Int {
+  var count = 0
+  for line in text.split(whereSeparator: \.isNewline) {
+    count += line.count
+  }
+  return count
+}
+
+// CHECK: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in false }"
+// CHECK: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in true }"
 // CHECK: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in false }"
 // CHECK: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in true }"

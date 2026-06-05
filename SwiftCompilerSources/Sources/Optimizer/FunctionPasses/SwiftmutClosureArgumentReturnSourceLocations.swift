@@ -106,8 +106,7 @@ func swiftmutClosureArgumentReturnExpression(
   let bytes = Array(line.utf8)
   let lineStart = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
   let lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
-  guard lineStart < lineEnd,
-        !swiftmutLineStartsWithAssignmentReturnBlockedPrefix(bytes: bytes, start: lineStart) else {
+  guard lineStart < lineEnd else {
     return nil
   }
 
@@ -119,6 +118,9 @@ func swiftmutClosureArgumentReturnExpression(
     mutation: mutation
   ) {
     return keyPath
+  }
+  guard !swiftmutLineStartsWithAssignmentReturnBlockedPrefix(bytes: bytes, start: lineStart) else {
+    return nil
   }
   return swiftmutSortedByFunctionArgumentExpression(
     bytes: bytes,

@@ -39,7 +39,13 @@ func swiftmutVoidCallSourceLocation(
           sourceMutated: candidate.4
         )
       }
-      if let anchored = swiftmutFindUniqueVoidCallSourceLocation(
+      if let functionSourceLocation,
+         functionSourceLocation.path == matchedPath,
+         fileNameAndPosition.line > functionSourceLocation.line {
+        return .nonStatement
+      }
+      if let anchored = swiftmutFindCalleeOrdinalVoidCallSourceLocation(
+        for: apply,
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
@@ -53,13 +59,16 @@ func swiftmutVoidCallSourceLocation(
           sourceMutated: anchored.sourceMutated
         )
       }
-      if let anchored = swiftmutFindCalleeOrdinalVoidCallSourceLocation(
-        for: apply,
-        path: matchedPath,
-        preferredLine: fileNameAndPosition.line,
-        mutation: mutation,
-        config: config
-      ) {
+      if swiftmutMutationEligibleVoidCallCount(in: apply.parentFunction, config: config) == 1,
+         let functionSourceLocation,
+         functionSourceLocation.path == matchedPath,
+         fileNameAndPosition.line <= functionSourceLocation.line,
+         let anchored = swiftmutFindUniqueVoidCallSourceLocation(
+           path: matchedPath,
+           preferredLine: fileNameAndPosition.line,
+           mutation: mutation,
+           config: config
+         ) {
         return .found(
           file: anchored.file,
           line: anchored.line,
@@ -105,7 +114,13 @@ func swiftmutVoidCallSourceLocation(
     let fallbackPath = fallback.file.hasPrefix("/") || config.packageRoot.isEmpty
       ? fallback.file
       : config.packageRoot + "/" + fallback.file
-    if let anchored = swiftmutFindUniqueVoidCallSourceLocation(
+    if let functionSourceLocation,
+       functionSourceLocation.path == fallbackPath,
+       fallback.line > functionSourceLocation.line {
+      return .nonStatement
+    }
+    if let anchored = swiftmutFindCalleeOrdinalVoidCallSourceLocation(
+      for: apply,
       path: fallbackPath,
       preferredLine: fallback.line,
       mutation: mutation,
@@ -119,13 +134,16 @@ func swiftmutVoidCallSourceLocation(
         sourceMutated: anchored.sourceMutated
       )
     }
-    if let anchored = swiftmutFindCalleeOrdinalVoidCallSourceLocation(
-      for: apply,
-      path: fallbackPath,
-      preferredLine: fallback.line,
-      mutation: mutation,
-      config: config
-    ) {
+    if swiftmutMutationEligibleVoidCallCount(in: apply.parentFunction, config: config) == 1,
+       let functionSourceLocation,
+       functionSourceLocation.path == fallbackPath,
+       fallback.line <= functionSourceLocation.line,
+       let anchored = swiftmutFindUniqueVoidCallSourceLocation(
+         path: fallbackPath,
+         preferredLine: fallback.line,
+         mutation: mutation,
+         config: config
+       ) {
       return .found(
         file: anchored.file,
         line: anchored.line,
@@ -154,23 +172,6 @@ func swiftmutVoidCallSourceLocation(
     return .nonStatement
   }
 
-  if let functionSourceLocation,
-     let anchored = swiftmutFindCalleeOrdinalVoidCallSourceLocation(
-       for: apply,
-       path: functionSourceLocation.path,
-       preferredLine: functionSourceLocation.line,
-       mutation: mutation,
-       config: config
-     ) {
-    return .found(
-      file: anchored.file,
-      line: anchored.line,
-      column: anchored.column,
-      sourceOriginal: anchored.sourceOriginal,
-      sourceMutated: anchored.sourceMutated
-    )
-  }
-
   return .missing
 }
 
@@ -183,7 +184,7 @@ func swiftmutFindCalleeOrdinalVoidCallSourceLocation(
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   let identifiers = swiftmutSourceExpressionIdentifiers(for: apply)
   guard !identifiers.isEmpty,
-        let ordinal = swiftmutVoidCallOrdinal(for: apply, matchingAnyOf: identifiers, config: config),
+        let ordinal = swiftmutVoidCallOrdinalAndCount(for: apply, matchingAnyOf: identifiers, config: config),
         let text = swiftmutRead(path) else {
     return nil
   }
@@ -196,19 +197,21 @@ func swiftmutFindCalleeOrdinalVoidCallSourceLocation(
     mutation: mutation,
     config: config
   )
-  guard ordinal > 0,
-        ordinal <= candidates.count else {
+  guard candidates.count == ordinal.count,
+        ordinal.ordinal > 0,
+        ordinal.ordinal <= candidates.count else {
     return nil
   }
-  return candidates[ordinal - 1]
+  return candidates[ordinal.ordinal - 1]
 }
 
-func swiftmutVoidCallOrdinal(
+func swiftmutVoidCallOrdinalAndCount(
   for apply: ApplyInst,
   matchingAnyOf identifiers: [String],
   config: SwiftmutConfig
-) -> Int? {
+) -> (ordinal: Int, count: Int)? {
   var ordinal = 0
+  var count = 0
   for block in apply.parentFunction.blocks {
     for instruction in block.instructions {
       guard let candidate = instruction as? ApplyInst,
@@ -217,13 +220,31 @@ func swiftmutVoidCallOrdinal(
             swiftmutSourceCalleeIdentifiers(for: candidate).contains(where: { identifiers.contains($0) }) else {
         continue
       }
-      ordinal += 1
+      count += 1
       if candidate === apply {
-        return ordinal
+        ordinal = count
       }
     }
   }
-  return nil
+  guard ordinal > 0 else {
+    return nil
+  }
+  return (ordinal, count)
+}
+
+func swiftmutMutationEligibleVoidCallCount(in function: Function, config: SwiftmutConfig) -> Int {
+  var count = 0
+  for block in function.blocks {
+    for instruction in block.instructions {
+      guard let apply = instruction as? ApplyInst,
+            apply.type.isVoid,
+            swiftmutVoidCallMutation(for: apply, config: config) != nil else {
+        continue
+      }
+      count += 1
+    }
+  }
+  return count
 }
 
 func swiftmutCalleeVoidCallSourceCandidates(
@@ -242,6 +263,8 @@ func swiftmutCalleeVoidCallSourceCandidates(
   var currentLine = 1
   var lineStart = text.startIndex
   var index = text.startIndex
+  var braceDepth = 0
+  var sawOpeningBrace = false
 
   func inspectLine(_ lineText: String, line: Int) {
     guard line >= preferredLine,
@@ -261,10 +284,25 @@ func swiftmutCalleeVoidCallSourceCandidates(
     ))
   }
 
+  func updateBraceDepth(_ lineText: String) {
+    for byte in lineText.utf8 {
+      if byte == 123 {
+        braceDepth += 1
+        sawOpeningBrace = true
+      } else if byte == 125 {
+        braceDepth -= 1
+      }
+    }
+  }
+
   while index < text.endIndex {
     if text[index] == "\n" {
-      inspectLine(String(text[lineStart..<index]), line: currentLine)
-      if currentLine >= lastLine {
+      let lineText = String(text[lineStart..<index])
+      inspectLine(lineText, line: currentLine)
+      if currentLine >= preferredLine {
+        updateBraceDepth(lineText)
+      }
+      if currentLine >= lastLine || (sawOpeningBrace && braceDepth <= 0) {
         break
       }
       currentLine += 1
@@ -274,7 +312,8 @@ func swiftmutCalleeVoidCallSourceCandidates(
   }
 
   if index == text.endIndex && currentLine <= lastLine {
-    inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
+    let lineText = String(text[lineStart..<text.endIndex])
+    inspectLine(lineText, line: currentLine)
   }
   return candidates
 }
@@ -296,6 +335,8 @@ func swiftmutFindUniqueVoidCallSourceLocation(
   var currentLine = 1
   var lineStart = text.startIndex
   var index = text.startIndex
+  var braceDepth = 0
+  var sawOpeningBrace = false
 
   func inspectLine(_ lineText: String, line: Int) {
     guard line >= firstLine,
@@ -309,11 +350,25 @@ func swiftmutFindUniqueVoidCallSourceLocation(
     matches.append((line, start + 1))
   }
 
+  func updateBraceDepth(_ lineText: String) {
+    for byte in lineText.utf8 {
+      if byte == 123 {
+        braceDepth += 1
+        sawOpeningBrace = true
+      } else if byte == 125 {
+        braceDepth -= 1
+      }
+    }
+  }
+
   while index < text.endIndex {
     if text[index] == "\n" {
       let lineText = String(text[lineStart..<index])
       inspectLine(lineText, line: currentLine)
-      if currentLine >= lastLine || matches.count >= 2 {
+      if currentLine >= firstLine {
+        updateBraceDepth(lineText)
+      }
+      if currentLine >= lastLine || matches.count >= 2 || (sawOpeningBrace && braceDepth <= 0) {
         break
       }
       currentLine += 1

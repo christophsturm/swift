@@ -21,7 +21,8 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutVoidCallSourceLocations -external-pass-pipeline-filename %t/pipeline.yaml %s -o /dev/null
-// RUN: find %t/fragments -type f -name '*.json' -print -exec %FileCheck %s --input-file {} ';'
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
+// RUN: %FileCheck %s --input-file %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
 
 @_silgen_name("swiftmutExternalRecordVoidCall")
@@ -35,16 +36,23 @@ public func swiftmutVoidCallExpressionPosition(_ input: Int) {
   let _: Void = swiftmutRecordVoidCall(input)
 }
 
+public func swiftmutVoidCallExpressionBeforeStatement(_ input: Int) {
+  let _: Void = swiftmutRecordVoidCall(input)
+  swiftmutRecordVoidCall(input + 1)
+}
+
 @_silgen_name("__swiftmut_visit")
 public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
-// CHECK: "sourceLocation":{"file":"swiftmut_void_call_source_locations.swift","line":31,"column":3}
+// CHECK: "sourceLocation":{"file":"swiftmut_void_call_source_locations.swift","line":32,"column":3}
 // CHECK-SAME: "siteKind":"voidCall"
 // CHECK-SAME: "resultKind":"statement"
 // CHECK-SAME: "sourceOriginal":"call","sourceMutated":"/* removed */"
-// CHECK-NOT: "line":35
+// CHECK-NOT: "line":36
+// CHECK-NOT: "line":40
+// CHECK-NOT: "line":41
 
 // EVENTS: "event":"metamutantDiscovery"
 // EVENTS-SAME: "function":"$s31SwiftmutVoidCallSourceLocations08swiftmutbC9StatementyySiF"
@@ -56,3 +64,8 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 // EVENTS-SAME: "voidCallSites":"0"
 // EVENTS-SAME: "voidCallMutationEligibleApplyInstructions":"1"
 // EVENTS-SAME: "voidCallNonStatementSourceLocations":"1"
+// EVENTS: "event":"metamutantDiscovery"
+// EVENTS-SAME: "function":"$s31SwiftmutVoidCallSourceLocations08swiftmutbC25ExpressionBeforeStatementyySiF"
+// EVENTS-SAME: "voidCallSites":"0"
+// EVENTS-SAME: "voidCallMutationEligibleApplyInstructions":"2"
+// EVENTS-SAME: "voidCallNonStatementSourceLocations":"2"

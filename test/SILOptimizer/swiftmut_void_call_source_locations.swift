@@ -1,0 +1,58 @@
+// RUN: rm -rf %t
+// RUN: mkdir -p %t
+// RUN: printf '%b\n' '---' "name: ''" 'passes: [ "\"swiftmut\"" ]' > %t/pipeline.yaml
+// RUN: printf '%b\n' \
+// RUN:   '{' \
+// RUN:   '  "mode": "metamutant",' \
+// RUN:   '  "manifestPath": "%t/mutants.jsonl",' \
+// RUN:   '  "manifestFragmentsDirectory": "%t/fragments",' \
+// RUN:   '  "compilerEventsPath": "%t/compiler-events.jsonl",' \
+// RUN:   '  "packageRoot": "%S",' \
+// RUN:   '  "excludePaths": [],' \
+// RUN:   '  "sourceFiles": ["%s"],' \
+// RUN:   '  "enabledMutators": ["VOID_METHOD_CALLS"],' \
+// RUN:   '  "conditionMutationRules": [],' \
+// RUN:   '  "arithmeticMutationRules": [],' \
+// RUN:   '  "contextualArithmeticMutationRules": [],' \
+// RUN:   '  "returnMutationRules": [],' \
+// RUN:   '  "voidCallMutationRules": [' \
+// RUN:   '    "VOID_METHOD_CALLS|remove_void_call|call|/* removed */|noop"' \
+// RUN:   '  ],' \
+// RUN:   '  "sourceMutationDisplayRules": []' \
+// RUN:   '}' > %t/config.json
+// RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutVoidCallSourceLocations -external-pass-pipeline-filename %t/pipeline.yaml %s -o /dev/null
+// RUN: find %t/fragments -type f -name '*.json' -print -exec %FileCheck %s --input-file {} ';'
+// RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
+
+@_silgen_name("swiftmutExternalRecordVoidCall")
+public func swiftmutRecordVoidCall(_ value: Int)
+
+public func swiftmutVoidCallStatement(_ input: Int) {
+  swiftmutRecordVoidCall(input)
+}
+
+public func swiftmutVoidCallExpressionPosition(_ input: Int) {
+  let _: Void = swiftmutRecordVoidCall(input)
+}
+
+@_silgen_name("__swiftmut_visit")
+public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
+  0
+}
+
+// CHECK: "sourceLocation":{"file":"swiftmut_void_call_source_locations.swift","line":31,"column":3}
+// CHECK-SAME: "siteKind":"voidCall"
+// CHECK-SAME: "resultKind":"statement"
+// CHECK-SAME: "sourceOriginal":"call","sourceMutated":"/* removed */"
+// CHECK-NOT: "line":35
+
+// EVENTS: "event":"metamutantDiscovery"
+// EVENTS-SAME: "function":"$s31SwiftmutVoidCallSourceLocations08swiftmutbC9StatementyySiF"
+// EVENTS-SAME: "voidCallSites":"1"
+// EVENTS-SAME: "voidCallMutationEligibleApplyInstructions":"1"
+// EVENTS-SAME: "voidCallNonStatementSourceLocations":"0"
+// EVENTS: "event":"metamutantDiscovery"
+// EVENTS-SAME: "function":"$s31SwiftmutVoidCallSourceLocations08swiftmutbC18ExpressionPositionyySiF"
+// EVENTS-SAME: "voidCallSites":"0"
+// EVENTS-SAME: "voidCallMutationEligibleApplyInstructions":"1"
+// EVENTS-SAME: "voidCallNonStatementSourceLocations":"1"

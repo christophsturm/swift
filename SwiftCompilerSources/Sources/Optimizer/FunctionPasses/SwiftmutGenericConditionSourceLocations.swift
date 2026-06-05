@@ -443,7 +443,7 @@ func swiftmutSourceLineLooksLikeVoidCallStatement(_ line: String) -> Bool {
     "let ", "var ", "return ", "if ", "if(", "guard ", "guard(",
     "while ", "while(", "for ", "for(", "switch ", "catch ",
     "public ", "private ", "internal ", "fileprivate ", "open ",
-    "static ", "func ", "init(", "deinit", ".", "}", ")", "]"
+    "static ", "func ", "init(", "deinit", "@", "//", "/*", ".", "}", ")", "]"
   ]
   for prefix in nonStatementPrefixes {
     if swiftmutASCIIHasPrefix(bytes, start: start, prefix: prefix) {

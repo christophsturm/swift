@@ -53,6 +53,21 @@ func swiftmutVoidCallSourceLocation(
           sourceMutated: anchored.sourceMutated
         )
       }
+      if let anchored = swiftmutFindCalleeOrdinalVoidCallSourceLocation(
+        for: apply,
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
+      ) {
+        return .found(
+          file: anchored.file,
+          line: anchored.line,
+          column: anchored.column,
+          sourceOriginal: anchored.sourceOriginal,
+          sourceMutated: anchored.sourceMutated
+        )
+      }
       if let functionSourceLocation,
          functionSourceLocation.path == matchedPath,
          let anchored = swiftmutFindCalleeOrdinalVoidCallSourceLocation(
@@ -91,6 +106,21 @@ func swiftmutVoidCallSourceLocation(
       ? fallback.file
       : config.packageRoot + "/" + fallback.file
     if let anchored = swiftmutFindUniqueVoidCallSourceLocation(
+      path: fallbackPath,
+      preferredLine: fallback.line,
+      mutation: mutation,
+      config: config
+    ) {
+      return .found(
+        file: anchored.file,
+        line: anchored.line,
+        column: anchored.column,
+        sourceOriginal: anchored.sourceOriginal,
+        sourceMutated: anchored.sourceMutated
+      )
+    }
+    if let anchored = swiftmutFindCalleeOrdinalVoidCallSourceLocation(
+      for: apply,
       path: fallbackPath,
       preferredLine: fallback.line,
       mutation: mutation,
@@ -260,7 +290,7 @@ func swiftmutFindUniqueVoidCallSourceLocation(
     return nil
   }
 
-  let firstLine = preferredLine > 8 ? preferredLine - 8 : 1
+  let firstLine = preferredLine
   let lastLine = preferredLine + 40
   var matches: [(line: Int, column: Int)] = []
   var currentLine = 1
@@ -433,4 +463,3 @@ func swiftmutFindUniqueExplicitConditionSourceLocation(
     match.sourceOriginal,
     mutation.sourceMutated)
 }
-

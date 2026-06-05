@@ -1,5 +1,4 @@
 // RUN: rm -rf %t
-// XFAIL: *
 // RUN: mkdir -p %t
 // RUN: printf '%b\n' '---' "name: ''" 'passes: [ "\"swiftmut\"" ]' > %t/pipeline.yaml
 // RUN: printf '%b\n' \

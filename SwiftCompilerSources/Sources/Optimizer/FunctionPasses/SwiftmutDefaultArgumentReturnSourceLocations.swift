@@ -33,9 +33,6 @@ func swiftmutFindOrdinalDefaultArgumentReturnSourceLocation(
         sourceText: text,
         line: expression.line
       )
-      guard score > 0 else {
-        continue
-      }
       matches.append((
         path,
         expression.line,
@@ -49,7 +46,9 @@ func swiftmutFindOrdinalDefaultArgumentReturnSourceLocation(
     return nil
   }
   let bestScore = matches.map { $0.score }.max() ?? 0
-  let bestMatches = matches.filter { $0.score == bestScore }
+  let bestMatches = bestScore > 0
+    ? matches.filter { $0.score == bestScore }
+    : matches
   guard bestMatches.count == 1,
         let match = bestMatches.first else {
     return nil
@@ -68,10 +67,16 @@ func swiftmutDefaultArgumentThunkSourceParameterIndex(_ functionName: String) ->
     return nil
   }
   var index = 0
-  while index + 3 < bytes.count {
+  while index + 2 < bytes.count {
     if bytes[index] == 102,
-       bytes[index + 1] == 65,
-       swiftmutIsASCIIDigit(bytes[index + 2]) {
+       bytes[index + 1] == 65 {
+      if bytes[index + 2] == 95 {
+        return 0
+      }
+      guard swiftmutIsASCIIDigit(bytes[index + 2]) else {
+        index += 1
+        continue
+      }
       var number = 0
       var cursor = index + 2
       while cursor < bytes.count && swiftmutIsASCIIDigit(bytes[cursor]) {

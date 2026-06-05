@@ -57,7 +57,11 @@ func swiftmutFindDefaultArgumentValueApplySourceLocation(
   }
 
   guard !matches.isEmpty else {
-    return nil
+    return swiftmutFindOrdinalDefaultArgumentReturnSourceLocation(
+      functionName: functionName,
+      mutation: mutation,
+      config: config
+    )
   }
   let bestScore = matches.map { $0.score }.max() ?? 0
   let bestMatches = matches.filter { $0.score == bestScore }

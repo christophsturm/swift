@@ -44,6 +44,41 @@ func swiftmutFindClosureArgumentReturnSourceLocation(
   )
 }
 
+func swiftmutFindClosureArgumentConditionSourceLocation(
+  path: String,
+  preferredLine: Int,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard mutation.sourceOriginal == "condition",
+        let replacement = swiftmutClosureArgumentConditionReplacement(for: mutation),
+        preferredLine > 0,
+        let text = swiftmutRead(path) else {
+    return nil
+  }
+
+  if let exact = swiftmutClosureArgumentReturnSourceLocation(
+    in: text,
+    path: path,
+    lineRange: preferredLine...preferredLine,
+    replacement: replacement,
+    mutation: mutation,
+    config: config
+  ) {
+    return exact
+  }
+
+  let firstLine = preferredLine > 2 ? preferredLine - 2 : 1
+  return swiftmutClosureArgumentReturnSourceLocation(
+    in: text,
+    path: path,
+    lineRange: firstLine...(preferredLine + 2),
+    replacement: replacement,
+    mutation: mutation,
+    config: config
+  )
+}
+
 func swiftmutClosureArgumentReturnSourceLocation(
   in text: String,
   path: String,
@@ -199,6 +234,17 @@ func swiftmutClosureArgumentReturnReplacement(for mutation: SwiftmutMutation) ->
   case "return_false":
     return "false"
   case "return_true":
+    return "true"
+  default:
+    return nil
+  }
+}
+
+func swiftmutClosureArgumentConditionReplacement(for mutation: SwiftmutMutation) -> String? {
+  switch mutation.mutatedBuiltinName {
+  case "condition_false":
+    return "false"
+  case "condition_true":
     return "true"
   default:
     return nil

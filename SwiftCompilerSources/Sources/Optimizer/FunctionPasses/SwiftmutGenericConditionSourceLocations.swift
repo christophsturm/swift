@@ -68,6 +68,22 @@ func swiftmutSourceLocation(
     return located
   }
 
+  if mutation.sourceOriginal == "condition" {
+    for path in swiftmutSwiftSourcePaths(config: config) {
+      guard function.location.description.contains(path),
+            let line = swiftmutPreferredLine(in: function.location.description, path: path),
+            let located = swiftmutFindClosureArgumentConditionSourceLocation(
+              path: path,
+              preferredLine: line,
+              mutation: mutation,
+              config: config
+            ) else {
+        continue
+      }
+      return located
+    }
+  }
+
   if let comparison = instruction as? BuiltinInst,
      swiftmutIsComparisonBuiltin(comparison),
      let ordinal = swiftmutComparisonOrdinalAndCount(for: comparison, in: function),

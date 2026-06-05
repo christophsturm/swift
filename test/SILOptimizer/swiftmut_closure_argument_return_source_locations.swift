@@ -3,15 +3,18 @@
 // RUN: printf '%b\n' '---' "name: ''" 'passes: [ "\"swiftmut\"" ]' > %t/pipeline.yaml
 // RUN: printf '%b\n' \
 // RUN:   '{' \
-// RUN:   '  "mode": "discover",' \
+// RUN:   '  "mode": "metamutant",' \
 // RUN:   '  "manifestPath": "%t/mutants.jsonl",' \
 // RUN:   '  "manifestFragmentsDirectory": "%t/fragments",' \
 // RUN:   '  "compilerEventsPath": "%t/compiler-events.jsonl",' \
 // RUN:   '  "packageRoot": "%S",' \
 // RUN:   '  "excludePaths": [],' \
 // RUN:   '  "sourceFiles": ["%s"],' \
-// RUN:   '  "enabledMutators": ["FALSE_RETURNS", "TRUE_RETURNS"],' \
-// RUN:   '  "conditionMutationRules": [],' \
+// RUN:   '  "enabledMutators": ["FALSE_RETURNS", "TRUE_RETURNS", "CONDITION_FALSE", "CONDITION_TRUE"],' \
+// RUN:   '  "conditionMutationRules": [' \
+// RUN:   '    "COMPARISON|CONDITION_FALSE|condition_false|condition|false",' \
+// RUN:   '    "COMPARISON|CONDITION_TRUE|condition_true|condition|true"' \
+// RUN:   '  ],' \
 // RUN:   '  "arithmeticMutationRules": [],' \
 // RUN:   '  "contextualArithmeticMutationRules": [],' \
 // RUN:   '  "returnMutationRules": [' \
@@ -22,7 +25,7 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutClosureArgumentReturnSourceLocations -external-pass-pipeline-filename %t/pipeline.yaml %s -o /dev/null
-// RUN: %FileCheck %s --input-file %t/mutants.jsonl
+// RUN: find %t/fragments -type f -name '*.json' -print -exec %FileCheck %s --input-file {} ';'
 // RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
 
 public func swiftmutClosureArgumentSplit(_ text: String) -> [Substring] {
@@ -37,9 +40,22 @@ public func swiftmutClosureArgumentSplitInFor(_ text: String) -> Int {
   return count
 }
 
+@_silgen_name("__swiftmut_visit")
+public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
+  0
+}
+
+// CHECK: "siteKind":"scalarValue"
 // CHECK: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in false }"
 // CHECK: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in true }"
+// CHECK: "siteKind":"scalarValue"
 // CHECK: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in false }"
 // CHECK: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in true }"
+// CHECK: "siteKind":"condition"
+// CHECK: "mutator":"CONDITION_FALSE"
+// CHECK-SAME: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in false }"
+// CHECK: "mutator":"CONDITION_TRUE"
+// CHECK-SAME: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in true }"
 // EVENTS: "event":"functionVisit"
 // EVENTS-NOT: "event":"scalarValueSourceLocationMiss"
+// EVENTS-NOT: "event":"conditionSourceLocationMiss"

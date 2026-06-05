@@ -641,6 +641,14 @@ func swiftmutScalarValueSourceLocation(
       ) {
         return returned
       }
+      if let anchored = swiftmutFindClosureArgumentReturnSourceLocation(
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
+      ) {
+        return anchored
+      }
       if let functionSourceLocation,
          functionSourceLocation.path == matchedPath,
          let anchored = swiftmutFindOrdinalScalarValueSourceLocation(
@@ -667,6 +675,14 @@ func swiftmutScalarValueSourceLocation(
     }
     if let anchored = swiftmutFindReturnedScalarValueSourceLocation(
       for: value,
+      path: functionSourceLocation.path,
+      preferredLine: functionSourceLocation.line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
+    if let anchored = swiftmutFindClosureArgumentReturnSourceLocation(
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,
       mutation: mutation,

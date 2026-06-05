@@ -23,6 +23,7 @@
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutClosureArgumentReturnSourceLocations -external-pass-pipeline-filename %t/pipeline.yaml %s -o /dev/null
 // RUN: %FileCheck %s --input-file %t/mutants.jsonl
+// RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
 
 public func swiftmutClosureArgumentSplit(_ text: String) -> [Substring] {
   text.split(whereSeparator: \.isNewline)
@@ -40,3 +41,5 @@ public func swiftmutClosureArgumentSplitInFor(_ text: String) -> Int {
 // CHECK: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in true }"
 // CHECK: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in false }"
 // CHECK: "sourceOriginal":"\\.isNewline","sourceMutated":"{ _ in true }"
+// EVENTS: "event":"functionVisit"
+// EVENTS-NOT: "event":"scalarValueSourceLocationMiss"

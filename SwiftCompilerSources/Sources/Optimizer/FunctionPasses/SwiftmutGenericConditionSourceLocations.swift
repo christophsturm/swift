@@ -38,10 +38,45 @@ func swiftmutSourceLocation(
   mutation: SwiftmutMutation,
   config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let completeExpressionLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
+  if let comparison = instruction as? BuiltinInst,
+     swiftmutIsComparisonBuiltin(comparison),
+     let ordinal = swiftmutComparisonOrdinalAndCount(for: comparison, in: function),
+     ordinal.count <= 12,
+     let located = swiftmutFindOrdinalSourceOperator(
+       moduleName: moduleName,
+       functionLocation: function.location.description,
+       ordinal: ordinal.ordinal,
+       expectedCount: ordinal.count,
+       mutation: mutation,
+       config: config) {
+    completeExpressionLocation = located
+  } else if let located = swiftmutFindSourceOperator(
+    moduleName: moduleName,
+    functionLocation: function.location.description,
+    mutation: mutation,
+    config: config) {
+    completeExpressionLocation = located
+  } else if let located = swiftmutFindDescribedSourceOperator(
+    moduleName: moduleName,
+    functionLocation: function.location.description,
+    locationDescription: instruction.location.description,
+    mutation: mutation,
+    config: config) {
+    completeExpressionLocation = located
+  } else {
+    completeExpressionLocation = nil
+  }
+
   if let fileNameAndPosition = instruction.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     guard let matchedPath = swiftmutIncludedSourcePath(path, config: config) else {
       return nil
+    }
+    if let completeExpressionLocation,
+       completeExpressionLocation.file == swiftmutTrimPackageRoot(matchedPath, config: config),
+       completeExpressionLocation.line == fileNameAndPosition.line {
+      return completeExpressionLocation
     }
     return (
       swiftmutTrimPackageRoot(matchedPath, config: config),
@@ -51,21 +86,8 @@ func swiftmutSourceLocation(
       "")
   }
 
-  if let located = swiftmutFindSourceOperator(
-    moduleName: moduleName,
-    functionLocation: function.location.description,
-    mutation: mutation,
-    config: config) {
-    return located
-  }
-
-  if let located = swiftmutFindDescribedSourceOperator(
-    moduleName: moduleName,
-    functionLocation: function.location.description,
-    locationDescription: instruction.location.description,
-    mutation: mutation,
-    config: config) {
-    return located
+  if let completeExpressionLocation {
+    return completeExpressionLocation
   }
 
   if mutation.sourceOriginal == "condition" {
@@ -82,19 +104,6 @@ func swiftmutSourceLocation(
       }
       return located
     }
-  }
-
-  if let comparison = instruction as? BuiltinInst,
-     swiftmutIsComparisonBuiltin(comparison),
-     let ordinal = swiftmutComparisonOrdinalAndCount(for: comparison, in: function),
-     ordinal.count <= 12 {
-    return swiftmutFindOrdinalSourceOperator(
-      moduleName: moduleName,
-      functionLocation: function.location.description,
-      ordinal: ordinal.ordinal,
-      expectedCount: ordinal.count,
-      mutation: mutation,
-      config: config)
   }
 
   return nil

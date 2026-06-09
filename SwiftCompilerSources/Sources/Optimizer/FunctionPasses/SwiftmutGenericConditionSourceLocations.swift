@@ -641,6 +641,9 @@ func swiftmutGenericConditionExpression(
   }
   range.start = swiftmutSkipHorizontalWhitespace(bytes, from: range.start)
   range.end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: range.end)
+  if range.end > range.start && bytes[range.end - 1] == 44 {
+    return nil
+  }
   guard range.start < range.end else {
     return nil
   }
@@ -662,7 +665,70 @@ func swiftmutGenericConditionExpressionCandidates(
   if let expression = swiftmutGenericConditionExpression(line) {
     return [expression]
   }
-  return swiftmutOptionalBindingBooleanConditionExpressions(line)
+  let optionalBindingExpressions = swiftmutOptionalBindingBooleanConditionExpressions(line)
+  if !optionalBindingExpressions.isEmpty {
+    return optionalBindingExpressions
+  }
+  return []
+}
+
+func swiftmutGenericConditionClauseExpression(
+  _ line: String,
+  needle: String?
+) -> (column: Int, sourceOriginal: String)? {
+  if let needle, !line.contains(needle) {
+    return nil
+  }
+  let bytes = Array(line.utf8)
+  var start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  var end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard start < end else {
+    return nil
+  }
+
+  let handledPrefixes = ["if ", "if(", "guard ", "guard(", "while ", "while(", "for ", "for("]
+  for prefix in handledPrefixes where swiftmutASCIIHasPrefix(bytes, start: start, prefix: prefix) {
+    return nil
+  }
+  let excludedPrefixes = [
+    "public ", "private ", "internal ", "fileprivate ", "open ", "static ",
+    "func ", "init(", "deinit", "struct ", "class ", "enum ", "protocol ",
+    "extension ", "import ", "@"
+  ]
+  for prefix in excludedPrefixes where swiftmutASCIIHasPrefix(bytes, start: start, prefix: prefix) {
+    return nil
+  }
+
+  if start + 1 < end
+      && (bytes[start] == 38 || bytes[start] == 124)
+      && bytes[start + 1] == bytes[start] {
+    start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 2)
+  }
+  guard !swiftmutConditionClauseLooksLikeBinding(bytes: bytes, start: start, end: end) else {
+    return nil
+  }
+
+  if let elseIndex = swiftmutTopLevelASCIIIndex(bytes, start: start, end: end, pattern: " else ") {
+    end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: elseIndex)
+  } else if let elseIndex = swiftmutTopLevelASCIIIndex(bytes, start: start, end: end, pattern: " else") {
+    end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: elseIndex)
+  }
+  while end > start {
+    let byte = bytes[end - 1]
+    if byte == 44 || byte == 123 || byte == 125 {
+      end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: end - 1)
+      continue
+    }
+    break
+  }
+  guard start < end,
+        !swiftmutTopLevelASCIIContains(bytes, start: start, end: end, pattern: " = "),
+        swiftmutSourceExpressionIsSingleLineComplete(bytes: bytes, start: start, end: end) else {
+    return nil
+  }
+  return (
+    start + 1,
+    String(decoding: bytes[start..<end], as: UTF8.self))
 }
 
 func swiftmutOptionalBindingBooleanConditionExpressions(

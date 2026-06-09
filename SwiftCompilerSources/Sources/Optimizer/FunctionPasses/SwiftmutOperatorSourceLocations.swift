@@ -331,7 +331,7 @@ func swiftmutFindDescribedGenericConditionInFunctionBody(
           let expression = swiftmutDescribedGenericConditionExpression(
             lineText,
             needle: needle
-          ) else {
+          ) ?? swiftmutGenericConditionClauseExpression(lineText, needle: needle) else {
       return
     }
     matches.append((line, expression.column, expression.sourceOriginal))

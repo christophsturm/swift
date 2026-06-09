@@ -45,15 +45,30 @@ public func swiftmutGuardOptionalBinding(_ value: String?) -> Int {
   return text.count
 }
 
+public struct SwiftmutLongGenericConditionSubject {
+  public let functionName: String
+  public let sourceName: String
+}
+
+public func swiftmutMultilineGuardConditionClauses(_ subject: SwiftmutLongGenericConditionSubject) -> Bool {
+  guard subject.functionName.hasPrefix("$s"),
+        !subject.functionName.contains("cfu_"),
+        subject.sourceName.hasSuffix("Scope") else {
+    return false
+  }
+  return true
+}
+
 @_silgen_name("__swiftmut_visit")
 public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
-// CHECK: "sourceLocation":{"file":"swiftmut_guard_condition_source_locations.swift","line":35,"column":9}
-// CHECK-SAME: "siteKind":"condition"
-// CHECK-SAME: "sourceOriginal":"includeDetails, !trimmed.isEmpty","sourceMutated":"false"
-// CHECK-SAME: "sourceOriginal":"includeDetails, !trimmed.isEmpty","sourceMutated":"true"
+// CHECK-DAG: "siteKind":"condition"{{.*}}"sourceOriginal":"subject.functionName.hasPrefix(\"$s\")","sourceMutated":"false"{{.*}}"sourceOriginal":"subject.functionName.hasPrefix(\"$s\")","sourceMutated":"true"
+// CHECK-DAG: "siteKind":"condition"{{.*}}"sourceOriginal":"!subject.functionName.contains(\"cfu_\")","sourceMutated":"false"{{.*}}"sourceOriginal":"!subject.functionName.contains(\"cfu_\")","sourceMutated":"true"
+// CHECK-DAG: "siteKind":"condition"{{.*}}"sourceOriginal":"subject.sourceName.hasSuffix(\"Scope\")","sourceMutated":"false"{{.*}}"sourceOriginal":"subject.sourceName.hasSuffix(\"Scope\")","sourceMutated":"true"
+// CHECK-DAG: "sourceLocation":{"file":"swiftmut_guard_condition_source_locations.swift","line":35,"column":9}
+// CHECK-DAG: "sourceOriginal":"includeDetails, !trimmed.isEmpty","sourceMutated":"false"{{.*}}"sourceOriginal":"includeDetails, !trimmed.isEmpty","sourceMutated":"true"
 // OPTIONAL: "sourceLocation":{"file":"swiftmut_guard_condition_source_locations.swift","line":42,"column":27}
 // OPTIONAL-SAME: "siteKind":"condition"
 // OPTIONAL-SAME: "sourceOriginal":"!text.isEmpty","sourceMutated":"false"
@@ -63,3 +78,6 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 // EVENTS-SAME: "conditionSourceLocationMisses":"0"
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutGuardConditionSourceLocations","function":"$s37SwiftmutGuardConditionSourceLocations08swiftmutB15OptionalBinding
 // EVENTS-SAME: "conditionSourceLocationMisses":"0"
+// EVENTS: "event":"metamutantDiscovery","module":"SwiftmutGuardConditionSourceLocations","function":"$s37SwiftmutGuardConditionSourceLocations017swiftmutMultilinebC7Clauses
+// EVENTS-SAME: "conditionSourceLocationMisses":"0"
+// EVENTS-SAME: "conditionGenericNonExplicitSourceLocations":"0"

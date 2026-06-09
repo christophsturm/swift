@@ -438,14 +438,6 @@ func swiftmutBranchSourceLocation(
           let line = swiftmutPreferredLine(in: location, path: path) else {
       continue
     }
-    if let anchored = swiftmutFindUniqueExplicitConditionSourceLocation(
-      path: path,
-      preferredLine: line,
-      mutation: mutation,
-      config: config
-    ) {
-      return anchored
-    }
     if let ordinal = swiftmutGenericConditionBranchOrdinal(branch),
        let sourceLocation = swiftmutFindGenericConditionSourceLocationByBranchOrdinal(
         path: path,
@@ -462,6 +454,14 @@ func swiftmutBranchSourceLocation(
       config: config
     ) {
       return sourceLocation
+    }
+    if let anchored = swiftmutFindUniqueExplicitConditionSourceLocation(
+      path: path,
+      preferredLine: line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
     }
     return nil
   }

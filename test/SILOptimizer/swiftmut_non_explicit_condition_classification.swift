@@ -82,6 +82,10 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 // CHECK-SAME: "siteKind":"condition"
 // CHECK-SAME: "sourceOriginal":"result.timedOut","sourceMutated":"false"
 // CHECK-SAME: "sourceOriginal":"result.timedOut","sourceMutated":"true"
+// CHECK: "sourceLocation":{"file":"swiftmut_non_explicit_condition_classification.swift","line":60,"column":6}
+// CHECK-SAME: "siteKind":"condition"
+// CHECK-SAME: "sourceOriginal":"result.exitCode == 0","sourceMutated":"false"
+// CHECK-SAME: "sourceOriginal":"result.exitCode == 0","sourceMutated":"true"
 // CHECK: "sourceLocation":{"file":"swiftmut_non_explicit_condition_classification.swift","line":61,"column":8}
 // CHECK-SAME: "siteKind":"condition"
 // CHECK-SAME: "sourceOriginal":"mode == .buildOnly","sourceMutated":"false"
@@ -96,6 +100,6 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutNonExplicitConditionClassification","function":"$s42SwiftmutNonExplicitConditionClassification16swiftmutClassify
 // EVENTS-SAME: "conditionBranches":"7"
-// EVENTS-SAME: "conditionSites":"5"
+// EVENTS-SAME: "conditionSites":"4"
 // EVENTS-SAME: "conditionSourceLocationMisses":"0"
-// EVENTS-SAME: "conditionGenericNonExplicitSourceLocations":"4"
+// EVENTS-SAME: "conditionGenericNonExplicitSourceLocations":"0"

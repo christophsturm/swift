@@ -411,15 +411,6 @@ func swiftmutBranchSourceLocation(
       ) {
         return sourceLocation
       }
-      let fallback = (
-        swiftmutTrimPackageRoot(matchedPath, config: config),
-        fileNameAndPosition.line,
-        fileNameAndPosition.column,
-        mutation.sourceOriginal,
-        mutation.sourceMutated)
-      if swiftmutGenericConditionSourceIsExplicit(file: fallback.0, line: fallback.1, config: config) {
-        return fallback
-      }
       if let ordinal = swiftmutGenericConditionBranchOrdinal(branch),
          let sourceLocation = swiftmutFindGenericConditionSourceLocationByBranchOrdinal(
           path: matchedPath,
@@ -430,7 +421,14 @@ func swiftmutBranchSourceLocation(
          ) {
         return sourceLocation
       }
-      return fallback
+      if let sourceLocation = swiftmutFindDescribedBranchGenericConditionSourceLocation(
+        branch,
+        mutation: mutation,
+        config: config
+      ) {
+        return sourceLocation
+      }
+      return nil
     }
   }
 
@@ -458,14 +456,44 @@ func swiftmutBranchSourceLocation(
        ) {
       return sourceLocation
     }
-    return (
-      swiftmutTrimPackageRoot(path, config: config),
-      line,
-      1,
-      mutation.sourceOriginal,
-      mutation.sourceMutated)
+    if let sourceLocation = swiftmutFindDescribedBranchGenericConditionSourceLocation(
+      branch,
+      mutation: mutation,
+      config: config
+    ) {
+      return sourceLocation
+    }
+    return nil
   }
   return nil
+}
+
+func swiftmutFindDescribedBranchGenericConditionSourceLocation(
+  _ branch: CondBranchInst,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let function = branch.parentFunction
+  let functionLocation = function.location.description
+  if let sourceLocation = swiftmutFindDescribedGenericConditionSourceLocation(
+    moduleName: "",
+    functionLocation: functionLocation,
+    locationDescription: branch.location.description,
+    mutation: mutation,
+    config: config
+  ) {
+    return sourceLocation
+  }
+  guard let conditionLocation = branch.condition.definingInstruction?.location.description,
+        conditionLocation != branch.location.description else {
+    return nil
+  }
+  return swiftmutFindDescribedGenericConditionSourceLocation(
+    moduleName: "",
+    functionLocation: functionLocation,
+    locationDescription: conditionLocation,
+    mutation: mutation,
+    config: config)
 }
 
 func swiftmutGenericConditionBranchOrdinal(_ branch: CondBranchInst) -> Int? {

@@ -172,6 +172,35 @@ func swiftmutLogConditionSourceLocationMiss(
     ])
 }
 
+func swiftmutLogGenericConditionNonExplicitSourceLocation(
+  branch: CondBranchInst,
+  mutation: SwiftmutMutation,
+  location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String),
+  moduleName: String,
+  functionName: String,
+  config: SwiftmutConfig
+) {
+  swiftmutLogEvent(
+    "genericConditionNonExplicitSourceLocation",
+    config: config,
+    fields: [
+      ("mode", swiftmutModeName(config.mode)),
+      ("module", moduleName),
+      ("function", functionName),
+      ("functionLocation", branch.parentFunction.location.description),
+      ("branchLocation", branch.location.description),
+      ("conditionLocation", branch.condition.definingInstruction?.location.description ?? "<no defining instruction>"),
+      ("conditionType", branch.condition.type.description),
+      ("file", location.file),
+      ("line", "\(location.line)"),
+      ("column", "\(location.column)"),
+      ("sourceOriginal", location.sourceOriginal),
+      ("sourceMutated", location.sourceMutated),
+      ("mutator", mutation.mutator),
+      ("mutatedBuiltinName", mutation.mutatedBuiltinName)
+    ])
+}
+
 func swiftmutLogReturnSourceLocationMiss(
   returnInst: ReturnInst,
   mutation: SwiftmutMutation,

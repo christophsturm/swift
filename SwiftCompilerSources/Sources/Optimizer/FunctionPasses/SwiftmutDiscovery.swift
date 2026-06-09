@@ -103,6 +103,7 @@ func swiftmutDiscoverConditionSites(
   var sites: [SwiftmutConditionSite] = []
   var stats = SwiftmutConditionDiscoveryStats()
   var localOrdinal = 1
+  var emittedSourceAnchors: Set<String> = []
   let functionName = function.name.string
 
   for block in function.blocks {
@@ -158,6 +159,16 @@ func swiftmutDiscoverConditionSites(
         if let location,
            !swiftmutGenericConditionSourceLocationIsExplicit(location, config: config) {
           stats.genericNonExplicitSourceLocations += 1
+          if swiftmutGenericConditionNonExplicitSourceLocationSamples < 500 {
+            swiftmutGenericConditionNonExplicitSourceLocationSamples += 1
+            swiftmutLogGenericConditionNonExplicitSourceLocation(
+              branch: branch,
+              mutation: mutation,
+              location: location,
+              moduleName: moduleName,
+              functionName: functionName,
+              config: config)
+          }
           continue
         }
       }
@@ -223,6 +234,16 @@ func swiftmutDiscoverConditionSites(
     guard let location = sourceLocation, !alternatives.isEmpty else {
       continue
     }
+    let sourceAnchor = [
+      location.file,
+      "\(location.line)",
+      "\(location.column)",
+      location.sourceOriginal
+    ].joined(separator: "\u{1f}")
+    guard !emittedSourceAnchors.contains(sourceAnchor) else {
+      continue
+    }
+    emittedSourceAnchors.insert(sourceAnchor)
 
     let siteID = swiftmutStableSiteID(
       packageRoot: config.packageRoot,

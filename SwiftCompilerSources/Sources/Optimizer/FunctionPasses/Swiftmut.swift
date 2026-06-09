@@ -21,6 +21,7 @@ import SIL
 var swiftmutNextOrdinal = 1
 var swiftmutHasTruncatedDiscoveryOutput = false
 var swiftmutConditionSourceLocationMissSamples = 0
+var swiftmutGenericConditionNonExplicitSourceLocationSamples = 0
 
 let swiftmut = FunctionPass(name: "swiftmut") {
   (function: Function, context: FunctionPassContext) in

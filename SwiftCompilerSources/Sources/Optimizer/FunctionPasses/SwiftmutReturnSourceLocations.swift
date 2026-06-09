@@ -17,16 +17,48 @@ func swiftmutReturnSourceLocation(
   mutation: SwiftmutMutation,
   config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let functionName = returnInst.parentFunction.name.string
+
+  func usableReturnSourceLocation(
+    _ location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String),
+    path: String
+  ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+    if swiftmutReturnSourceLocationIsUsableForFunction(
+      location,
+      functionName: functionName,
+      path: path,
+      mutation: mutation,
+      config: config
+    ) {
+      return location
+    }
+    return nil
+  }
+
+  func computedPropertyReturnSourceLocation(
+    path: String
+  ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+    swiftmutFindComputedPropertyReturnSourceLocation(
+      functionName: functionName,
+      path: path,
+      mutation: mutation,
+      config: config
+    )
+  }
+
   if let fileNameAndPosition = returnInst.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
+      if let anchored = computedPropertyReturnSourceLocation(path: matchedPath) {
+        return anchored
+      }
       if let anchored = swiftmutFindUniqueExplicitReturnValueExpressionSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableReturnSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
       let candidate = (
         swiftmutTrimPackageRoot(matchedPath, config: config),
@@ -34,7 +66,13 @@ func swiftmutReturnSourceLocation(
         fileNameAndPosition.column,
         mutation.sourceOriginal,
         mutation.sourceMutated)
-      if swiftmutReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
+      if swiftmutReturnSourceLocationCandidateIsUsable(
+        candidate,
+        functionName: functionName,
+        path: matchedPath,
+        mutation: mutation,
+        config: config
+      ) {
         return candidate
       }
       if let anchored = swiftmutFindClosureArgumentReturnSourceLocation(
@@ -42,8 +80,8 @@ func swiftmutReturnSourceLocation(
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableReturnSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
       if let anchored = swiftmutFindDescribedExplicitReturnSourceLocation(
         path: matchedPath,
@@ -51,49 +89,49 @@ func swiftmutReturnSourceLocation(
         locationDescription: returnInst.location.description,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableReturnSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
       if let anchored = swiftmutFindUniqueExplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableReturnSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
       if let anchored = swiftmutFindNearestPriorExplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableReturnSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
       if let anchored = swiftmutFindNearestPriorImplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableReturnSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
       if let anchored = swiftmutFindUniqueImplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableReturnSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
       if let anchored = swiftmutFindPropertyGetterReturnSourceLocation(
-        functionName: returnInst.parentFunction.name.string,
+        functionName: functionName,
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableReturnSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
     }
   }
@@ -102,13 +140,16 @@ func swiftmutReturnSourceLocation(
      let fileNameAndPosition = definingInstruction.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
+      if let anchored = computedPropertyReturnSourceLocation(path: matchedPath) {
+        return anchored
+      }
       if let anchored = swiftmutFindUniqueExplicitReturnValueExpressionSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableReturnSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
       let candidate = (
         swiftmutTrimPackageRoot(matchedPath, config: config),
@@ -116,7 +157,13 @@ func swiftmutReturnSourceLocation(
         fileNameAndPosition.column,
         mutation.sourceOriginal,
         mutation.sourceMutated)
-      if swiftmutReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
+      if swiftmutReturnSourceLocationCandidateIsUsable(
+        candidate,
+        functionName: functionName,
+        path: matchedPath,
+        mutation: mutation,
+        config: config
+      ) {
         return candidate
       }
       if let anchored = swiftmutFindClosureArgumentReturnSourceLocation(
@@ -124,8 +171,8 @@ func swiftmutReturnSourceLocation(
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableReturnSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
       if let anchored = swiftmutFindDescribedExplicitReturnSourceLocation(
         path: matchedPath,
@@ -133,55 +180,55 @@ func swiftmutReturnSourceLocation(
         locationDescription: returnInst.location.description,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableReturnSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
       if let anchored = swiftmutFindUniqueExplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableReturnSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
       if let anchored = swiftmutFindNearestPriorExplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableReturnSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
       if let anchored = swiftmutFindNearestPriorImplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableReturnSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
       if let anchored = swiftmutFindUniqueImplicitReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableReturnSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
       if let anchored = swiftmutFindPropertyGetterReturnSourceLocation(
-        functionName: returnInst.parentFunction.name.string,
+        functionName: functionName,
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableReturnSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
     }
   }
 
   if let anchored = swiftmutFindDescribedStoredPropertyInitializerReturnSourceLocation(
-    functionName: returnInst.parentFunction.name.string,
+    functionName: functionName,
     locationDescription: returnInst.location.description,
     mutation: mutation,
     config: config
@@ -190,7 +237,7 @@ func swiftmutReturnSourceLocation(
   }
   if let definingInstruction = returnInst.returnedValue.definingInstruction,
      let anchored = swiftmutFindDescribedStoredPropertyInitializerReturnSourceLocation(
-       functionName: returnInst.parentFunction.name.string,
+       functionName: functionName,
        locationDescription: definingInstruction.location.description,
        mutation: mutation,
        config: config
@@ -198,7 +245,7 @@ func swiftmutReturnSourceLocation(
     return anchored
   }
   if let anchored = swiftmutFindDescribedStoredPropertyInitializerReturnSourceLocation(
-    functionName: returnInst.parentFunction.name.string,
+    functionName: functionName,
     locationDescription: returnInst.parentFunction.location.description,
     mutation: mutation,
     config: config
@@ -207,7 +254,7 @@ func swiftmutReturnSourceLocation(
   }
 
   if let anchored = swiftmutFindDescribedDefaultArgumentReturnSourceLocation(
-    functionName: returnInst.parentFunction.name.string,
+    functionName: functionName,
     locationDescription: returnInst.location.description,
     mutation: mutation,
     config: config
@@ -216,16 +263,16 @@ func swiftmutReturnSourceLocation(
   }
   if let definingInstruction = returnInst.returnedValue.definingInstruction,
      let anchored = swiftmutFindDescribedDefaultArgumentReturnSourceLocation(
-       functionName: returnInst.parentFunction.name.string,
+       functionName: functionName,
        locationDescription: definingInstruction.location.description,
        mutation: mutation,
        config: config
      ) {
     return anchored
   }
-  if swiftmutFunctionNameLooksDefaultArgumentThunk(returnInst.parentFunction.name.string),
+  if swiftmutFunctionNameLooksDefaultArgumentThunk(functionName),
      let anchored = swiftmutFindDescribedDefaultArgumentReturnSourceLocation(
-       functionName: returnInst.parentFunction.name.string,
+       functionName: functionName,
        locationDescription: returnInst.parentFunction.location.description,
        mutation: mutation,
        config: config
@@ -233,7 +280,7 @@ func swiftmutReturnSourceLocation(
     return anchored
   }
   if let anchored = swiftmutFindOrdinalDefaultArgumentReturnSourceLocation(
-    functionName: returnInst.parentFunction.name.string,
+    functionName: functionName,
     mutation: mutation,
     config: config
   ) {
@@ -246,13 +293,16 @@ func swiftmutReturnSourceLocation(
           let line = swiftmutPreferredLine(in: returnLocation, path: path) else {
       continue
     }
+    if let anchored = computedPropertyReturnSourceLocation(path: path) {
+      return anchored
+    }
     if let anchored = swiftmutFindUniqueExplicitReturnValueExpressionSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
     }
     let candidate = (
       swiftmutTrimPackageRoot(path, config: config),
@@ -260,7 +310,13 @@ func swiftmutReturnSourceLocation(
       1,
       mutation.sourceOriginal,
       mutation.sourceMutated)
-    if swiftmutReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
+    if swiftmutReturnSourceLocationCandidateIsUsable(
+      candidate,
+      functionName: functionName,
+      path: path,
+      mutation: mutation,
+      config: config
+    ) {
       return candidate
     }
     if let anchored = swiftmutFindClosureArgumentReturnSourceLocation(
@@ -268,8 +324,8 @@ func swiftmutReturnSourceLocation(
       preferredLine: line,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
     }
     if let anchored = swiftmutFindDescribedExplicitReturnSourceLocation(
       path: path,
@@ -277,57 +333,57 @@ func swiftmutReturnSourceLocation(
       locationDescription: returnLocation,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
     }
     if let anchored = swiftmutFindUniqueExplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
     }
     if let anchored = swiftmutFindNearestPriorExplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
     }
     if let anchored = swiftmutFindNearestPriorImplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
     }
     if let anchored = swiftmutFindUniqueImplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
     }
     if let anchored = swiftmutFindMultilineImplicitReturnSourceLocation(
       path: path,
       functionLine: line,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
     }
     if let anchored = swiftmutFindPropertyGetterReturnSourceLocation(
-      functionName: returnInst.parentFunction.name.string,
+      functionName: functionName,
       path: path,
       preferredLine: line,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
     }
   }
 
@@ -337,13 +393,16 @@ func swiftmutReturnSourceLocation(
           let line = swiftmutPreferredLine(in: location, path: path) else {
       continue
     }
+    if let anchored = computedPropertyReturnSourceLocation(path: path) {
+      return anchored
+    }
     if let anchored = swiftmutFindUniqueExplicitReturnValueExpressionSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
     }
     let candidate = (
       swiftmutTrimPackageRoot(path, config: config),
@@ -351,7 +410,13 @@ func swiftmutReturnSourceLocation(
       1,
       mutation.sourceOriginal,
       mutation.sourceMutated)
-    if swiftmutReturnSourceLocationIsUsable(candidate, mutation: mutation, config: config) {
+    if swiftmutReturnSourceLocationCandidateIsUsable(
+      candidate,
+      functionName: functionName,
+      path: path,
+      mutation: mutation,
+      config: config
+    ) {
       return candidate
     }
     if let anchored = swiftmutFindClosureArgumentReturnSourceLocation(
@@ -359,8 +424,8 @@ func swiftmutReturnSourceLocation(
       preferredLine: line,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
     }
     if let anchored = swiftmutFindDescribedExplicitReturnSourceLocation(
       path: path,
@@ -368,247 +433,52 @@ func swiftmutReturnSourceLocation(
       locationDescription: returnInst.location.description,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
     }
     if let anchored = swiftmutFindUniqueExplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
     }
     if let anchored = swiftmutFindTrailingExplicitReturnSourceLocation(
       path: path,
       functionLine: line,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
     }
     if let anchored = swiftmutFindUniqueImplicitReturnSourceLocation(
       path: path,
       preferredLine: line,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
     }
     if let anchored = swiftmutFindMultilineImplicitReturnSourceLocation(
       path: path,
       functionLine: line,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
     }
     if let anchored = swiftmutFindPropertyGetterReturnSourceLocation(
-      functionName: returnInst.parentFunction.name.string,
+      functionName: functionName,
       path: path,
       preferredLine: line,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
     }
   }
   return nil
-}
-
-func swiftmutFindPropertyGetterReturnSourceLocation(
-  functionName: String,
-  path: String,
-  preferredLine: Int,
-  mutation: SwiftmutMutation,
-  config: SwiftmutConfig
-) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  guard preferredLine > 0,
-        mutation.sourceOriginal == "return",
-        let text = swiftmutRead(path) else {
-    return nil
-  }
-
-  if let exact = swiftmutPropertyGetterReturnSourceLocation(
-    in: text,
-    functionName: functionName,
-    path: path,
-    lineRange: preferredLine...preferredLine,
-    mutation: mutation,
-    config: config
-  ) {
-    return exact
-  }
-
-  let firstLine = preferredLine > 1 ? preferredLine - 1 : 1
-  return swiftmutPropertyGetterReturnSourceLocation(
-    in: text,
-    functionName: functionName,
-    path: path,
-    lineRange: firstLine...(preferredLine + 2),
-    mutation: mutation,
-    config: config
-  )
-}
-
-func swiftmutPropertyGetterReturnSourceLocation(
-  in text: String,
-  functionName: String,
-  path: String,
-  lineRange: ClosedRange<Int>,
-  mutation: SwiftmutMutation,
-  config: SwiftmutConfig
-) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  var matches: [(line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
-  var currentLine = 1
-  var lineStart = text.startIndex
-  var index = text.startIndex
-
-  func inspectLine(_ lineText: String, line: Int) {
-    guard lineRange.contains(line),
-          matches.count < 2,
-          let property = swiftmutStoredPropertySourceLocation(lineText, mutation: mutation) else {
-      return
-    }
-    guard swiftmutFunctionName(functionName, containsPropertyName: property.name) else {
-      return
-    }
-    matches.append((line, property.column, property.sourceOriginal, property.sourceMutated))
-  }
-
-  while index < text.endIndex {
-    if text[index] == "\n" {
-      inspectLine(String(text[lineStart..<index]), line: currentLine)
-      if currentLine >= lineRange.upperBound || matches.count >= 2 {
-        break
-      }
-      currentLine += 1
-      lineStart = text.index(after: index)
-    }
-    index = text.index(after: index)
-  }
-
-  if index == text.endIndex && currentLine <= lineRange.upperBound {
-    inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
-  }
-
-  guard matches.count == 1,
-        let match = matches.first else {
-    return nil
-  }
-  return (
-    swiftmutTrimPackageRoot(path, config: config),
-    match.line,
-    match.column,
-    match.sourceOriginal,
-    match.sourceMutated)
-}
-
-func swiftmutStoredPropertyDeclaration(
-  _ line: String,
-  mutation: SwiftmutMutation
-) -> (name: String, column: Int, sourceOriginal: String, sourceMutated: String)? {
-  let bytes = Array(line.utf8)
-  let lineStart = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
-  let lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
-  guard lineStart < lineEnd,
-        !swiftmutASCIIHasPrefix(bytes, start: lineStart, prefix: "case "),
-        !swiftmutASCIIHasPrefix(bytes, start: lineStart, prefix: "func "),
-        !swiftmutASCIIHasPrefix(bytes, start: lineStart, prefix: "init"),
-        !swiftmutASCIIHasPrefix(bytes, start: lineStart, prefix: "return "),
-        !swiftmutASCIIHasPrefix(bytes, start: lineStart, prefix: "//") else {
-    return nil
-  }
-
-  guard let keyword = swiftmutPropertyDeclarationKeyword(bytes: bytes, start: lineStart, end: lineEnd) else {
-    return nil
-  }
-  let nameStart = swiftmutSkipHorizontalWhitespace(bytes, from: keyword.end)
-  if nameStart < lineEnd && bytes[nameStart] == 40 {
-    return nil
-  }
-  guard nameStart < lineEnd,
-        swiftmutIsASCIIIdentifierStart(bytes[nameStart]) else {
-    return nil
-  }
-  var nameEnd = nameStart + 1
-  while nameEnd < lineEnd && swiftmutIsASCIILetterNumberOrUnderscore(bytes[nameEnd]) {
-    nameEnd += 1
-  }
-  var afterName = swiftmutSkipHorizontalWhitespace(bytes, from: nameEnd)
-  guard afterName < lineEnd,
-        bytes[afterName] == 58 else {
-    return nil
-  }
-  afterName = swiftmutSkipHorizontalWhitespace(bytes, from: afterName + 1)
-  guard afterName < lineEnd else {
-    return nil
-  }
-  for index in afterName..<lineEnd {
-    if bytes[index] == 123 {
-      return nil
-    }
-  }
-
-  let name = String(decoding: bytes[nameStart..<nameEnd], as: UTF8.self)
-  return (
-    name,
-    nameStart + 1,
-    name,
-    swiftmutImplicitReturnSourceMutation(for: mutation))
-}
-
-func swiftmutFunctionName(_ functionName: String, containsPropertyName propertyName: String) -> Bool {
-  guard !propertyName.isEmpty else {
-    return false
-  }
-  return swiftmutMangledNameContainsIdentifier(functionName, identifier: propertyName)
-}
-
-func swiftmutPropertyDeclarationKeyword(bytes: [UInt8], start: Int, end: Int) -> (start: Int, end: Int)? {
-  var index = start
-  while index < end {
-    let tokenStart = swiftmutSkipHorizontalWhitespace(bytes, from: index)
-    guard tokenStart < end else {
-      return nil
-    }
-    var tokenEnd = tokenStart
-    while tokenEnd < end && swiftmutIsASCIILetterNumberOrUnderscore(bytes[tokenEnd]) {
-      tokenEnd += 1
-    }
-    guard tokenEnd > tokenStart else {
-      return nil
-    }
-    let token = String(decoding: bytes[tokenStart..<tokenEnd], as: UTF8.self)
-    if token == "let" || token == "var" {
-      return (tokenStart, tokenEnd)
-    }
-    if !swiftmutIsPropertyDeclarationModifier(token) {
-      return nil
-    }
-    index = swiftmutSkipPropertyDeclarationModifierSuffix(bytes: bytes, from: tokenEnd, end: end)
-  }
-  return nil
-}
-
-func swiftmutSkipPropertyDeclarationModifierSuffix(bytes: [UInt8], from index: Int, end: Int) -> Int {
-  guard index + 5 <= end,
-        bytes[index] == 40,
-        swiftmutASCIIHasExactPrefix(bytes, start: index, prefix: "(set)") else {
-    return index
-  }
-  return index + 5
-}
-
-func swiftmutIsPropertyDeclarationModifier(_ token: String) -> Bool {
-  switch token {
-  case "public", "private", "internal", "fileprivate", "open", "package",
-       "static", "class", "final", "lazy", "weak", "unowned", "nonisolated",
-       "isolated", "mutating", "nonmutating":
-    return true
-  default:
-    return false
-  }
 }
 
 func swiftmutScalarValueSourceLocation(

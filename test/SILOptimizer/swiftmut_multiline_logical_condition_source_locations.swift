@@ -61,11 +61,7 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
-// CHECK: "siteKind":"condition"
-// CHECK-SAME: "sourceOriginal":"yield.conditionComparisonBranches > 0","sourceMutated":"yield.conditionComparisonBranches >= 0"
-// CHECK-SAME: "sourceOriginal":"yield.conditionComparisonBranches > 0","sourceMutated":"yield.conditionComparisonBranches <= 0"
-// CHECK-SAME: "sourceOriginal":"yield.conditionComparisonBranches > 0","sourceMutated":"false"
-// CHECK-SAME: "sourceOriginal":"yield.conditionComparisonBranches > 0","sourceMutated":"true"
+// CHECK-DAG: "siteKind":"condition"{{.*}}"sourceOriginal":"yield.conditionComparisonBranches > 0","sourceMutated":"yield.conditionComparisonBranches >= 0"{{.*}}"sourceOriginal":"yield.conditionComparisonBranches > 0","sourceMutated":"yield.conditionComparisonBranches <= 0"{{.*}}"sourceOriginal":"yield.conditionComparisonBranches > 0","sourceMutated":"false"{{.*}}"sourceOriginal":"yield.conditionComparisonBranches > 0","sourceMutated":"true"
 // CHECK-DAG: "siteKind":"condition"{{.*}}"sourceOriginal":"yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten > 0","sourceMutated":"yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten >= 0"{{.*}}"sourceOriginal":"yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten > 0","sourceMutated":"yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten <= 0"{{.*}}"sourceOriginal":"yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten > 0","sourceMutated":"false"{{.*}}"sourceOriginal":"yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten > 0","sourceMutated":"true"
 
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutMultilineLogicalConditionSourceLocations","function":"$s48SwiftmutMultilineLogicalConditionSourceLocations08swiftmutbcD0

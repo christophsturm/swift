@@ -187,8 +187,7 @@ func swiftmutDiscoverConditionSites(
         resolvedLocation = nil
       }
       guard let location = resolvedLocation else {
-        if comparison != nil,
-           let functionSourceLocation = swiftmutFunctionSourceLocation(for: function, config: config),
+        if let functionSourceLocation = swiftmutFunctionSourceLocation(for: function, config: config),
            !swiftmutFunctionBodyContainsExplicitCondition(
              path: functionSourceLocation.path,
              preferredLine: functionSourceLocation.line,

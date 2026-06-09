@@ -10,12 +10,13 @@
 // RUN:   '  "packageRoot": "%S",' \
 // RUN:   '  "excludePaths": [],' \
 // RUN:   '  "sourceFiles": ["%s"],' \
-// RUN:   '  "enabledMutators": ["FALSE_RETURNS"],' \
+// RUN:   '  "enabledMutators": ["FALSE_RETURNS", "PRIMITIVE_RETURNS"],' \
 // RUN:   '  "conditionMutationRules": [],' \
 // RUN:   '  "arithmeticMutationRules": [],' \
 // RUN:   '  "contextualArithmeticMutationRules": [],' \
 // RUN:   '  "returnMutationRules": [' \
-// RUN:   '    "boolToFalse|FALSE_RETURNS|return_false|return|return false|false"' \
+// RUN:   '    "boolToFalse|FALSE_RETURNS|return_false|return|return false|false",' \
+// RUN:   '    "integerToZero|PRIMITIVE_RETURNS|return_zero|return|return 0|0"' \
 // RUN:   '  ],' \
 // RUN:   '  "voidCallMutationRules": [],' \
 // RUN:   '  "sourceMutationDisplayRules": []' \
@@ -27,4 +28,27 @@ public struct SwiftmutFeatureFlag {
   public let isEnabled = true
 }
 
+public struct SwiftmutCoverageFileSummary {
+  public let totalLines: Int
+  public let missedLines: Int
+
+  public static func summaries(for lines: [SwiftmutCoverageLine]) -> [SwiftmutCoverageFileSummary] {
+    Dictionary(grouping: lines, by: \.file)
+      .map { file, lines in
+        SwiftmutCoverageFileSummary(totalLines: lines.count, missedLines: file.count)
+      }
+      .sorted { $0.totalLines < $1.totalLines }
+  }
+}
+
+public struct SwiftmutCoverageLine {
+  public let file: String
+}
+
 // CHECK: "sourceOriginal":"true","sourceMutated":"false"
+// CHECK-NOT: V10totalLinesSivg{{.*}}"sourceOriginal":"Dictionary(grouping: lines, by: \\.file)"
+// CHECK-NOT: V11missedLinesSivg{{.*}}"sourceOriginal":"Dictionary(grouping: lines, by: \\.file)"
+// CHECK: V10totalLinesSivg
+// CHECK-SAME: "sourceOriginal":"totalLines","sourceMutated":"0"
+// CHECK: V11missedLinesSivg
+// CHECK-SAME: "sourceOriginal":"missedLines","sourceMutated":"0"

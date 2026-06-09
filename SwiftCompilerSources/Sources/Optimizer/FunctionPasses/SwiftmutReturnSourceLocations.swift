@@ -52,6 +52,15 @@ func swiftmutReturnSourceLocation(
       if let anchored = computedPropertyReturnSourceLocation(path: matchedPath) {
         return anchored
       }
+      if let anchored = swiftmutFindPropertyGetterReturnSourceLocation(
+        functionName: functionName,
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
+      ), let usable = usableReturnSourceLocation(anchored, path: matchedPath) {
+        return usable
+      }
       if let anchored = swiftmutFindUniqueExplicitReturnValueExpressionSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
@@ -142,6 +151,15 @@ func swiftmutReturnSourceLocation(
     if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
       if let anchored = computedPropertyReturnSourceLocation(path: matchedPath) {
         return anchored
+      }
+      if let anchored = swiftmutFindPropertyGetterReturnSourceLocation(
+        functionName: functionName,
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
+      ), let usable = usableReturnSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
       if let anchored = swiftmutFindUniqueExplicitReturnValueExpressionSourceLocation(
         path: matchedPath,
@@ -296,6 +314,15 @@ func swiftmutReturnSourceLocation(
     if let anchored = computedPropertyReturnSourceLocation(path: path) {
       return anchored
     }
+    if let anchored = swiftmutFindPropertyGetterReturnSourceLocation(
+      functionName: functionName,
+      path: path,
+      preferredLine: line,
+      mutation: mutation,
+      config: config
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
+    }
     if let anchored = swiftmutFindUniqueExplicitReturnValueExpressionSourceLocation(
       path: path,
       preferredLine: line,
@@ -395,6 +422,15 @@ func swiftmutReturnSourceLocation(
     }
     if let anchored = computedPropertyReturnSourceLocation(path: path) {
       return anchored
+    }
+    if let anchored = swiftmutFindPropertyGetterReturnSourceLocation(
+      functionName: functionName,
+      path: path,
+      preferredLine: line,
+      mutation: mutation,
+      config: config
+    ), let usable = usableReturnSourceLocation(anchored, path: path) {
+      return usable
     }
     if let anchored = swiftmutFindUniqueExplicitReturnValueExpressionSourceLocation(
       path: path,

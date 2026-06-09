@@ -53,6 +53,7 @@ swift_compiler_sources(Optimizer
   SwiftmutExplicitReturnSourceLocations.swift
   SwiftmutFilesystem.swift
   SwiftmutGenericConditionSourceLocations.swift
+  SwiftmutGenericConditionSourceMutationText.swift
   SwiftmutIdentifierSourceLocations.swift
   SwiftmutImplicitReturnSourceLocations.swift
   SwiftmutInjection.swift

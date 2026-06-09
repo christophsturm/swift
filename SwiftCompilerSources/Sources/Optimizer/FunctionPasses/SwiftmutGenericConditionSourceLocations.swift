@@ -277,10 +277,10 @@ func swiftmutGenericConditionSourceMutated(
   guard mutation.sourceOriginal != "condition" else {
     return mutation.sourceMutated
   }
-  if let sourceMutated = swiftmutBooleanNegatedConditionSourceMutated(
+  if let sourceMutated = swiftmutGenericConditionSourceMutationText(
     sourceOriginal,
-    needle: nil,
-    mutation: mutation
+    mutation: mutation,
+    config: config
   ) {
     return sourceMutated
   }

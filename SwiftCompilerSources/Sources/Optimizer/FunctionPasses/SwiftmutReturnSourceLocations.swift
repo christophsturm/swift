@@ -649,6 +649,33 @@ func swiftmutScalarValueSourceLocation(
       ) {
         return anchored
       }
+      if let anchored = swiftmutFindDescribedScalarLiteralSourceLocation(
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        locationDescription: value.location.description,
+        mutation: mutation,
+        config: config
+      ) {
+        return anchored
+      }
+      if let anchored = swiftmutFindScalarLiteralSourceLocation(
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        preferredColumn: fileNameAndPosition.column,
+        mutation: mutation,
+        config: config
+      ) {
+        return anchored
+      }
+      if let anchored = swiftmutFindOrdinalScalarValueSourceLocation(
+        for: value,
+        path: matchedPath,
+        preferredLine: fileNameAndPosition.line,
+        mutation: mutation,
+        config: config
+      ) {
+        return anchored
+      }
     }
   }
 
@@ -672,6 +699,33 @@ func swiftmutScalarValueSourceLocation(
       return anchored
     }
     if let anchored = swiftmutFindClosureArgumentReturnSourceLocation(
+      path: functionSourceLocation.path,
+      preferredLine: functionSourceLocation.line,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
+    if let anchored = swiftmutFindDescribedScalarLiteralSourceLocation(
+      path: functionSourceLocation.path,
+      preferredLine: functionSourceLocation.line,
+      locationDescription: value.location.description,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
+    if let anchored = swiftmutFindScalarLiteralSourceLocation(
+      path: functionSourceLocation.path,
+      preferredLine: functionSourceLocation.line,
+      preferredColumn: 1,
+      mutation: mutation,
+      config: config
+    ) {
+      return anchored
+    }
+    if let anchored = swiftmutFindOrdinalScalarValueSourceLocation(
+      for: value,
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,
       mutation: mutation,
@@ -703,7 +757,8 @@ func swiftmutFindOrdinalScalarValueSourceLocation(
     ordinal: ordinal.ordinal,
     expectedCount: ordinal.count,
     mutation: mutation,
-    config: config
+    config: config,
+    requiresMultipleMatches: false
   )
 }
 

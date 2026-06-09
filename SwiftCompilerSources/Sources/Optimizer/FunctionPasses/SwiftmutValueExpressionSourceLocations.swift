@@ -115,6 +115,194 @@ func swiftmutQuotedSourceSnippetPrefix(_ description: String) -> String? {
   return String(decoding: bytes[1..<trimmedEnd], as: UTF8.self)
 }
 
+func swiftmutFindScalarLiteralSourceLocation(
+  path: String,
+  preferredLine: Int,
+  preferredColumn: Int,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard preferredLine > 0,
+        preferredColumn > 0,
+        let line = swiftmutAbsoluteSourceLine(path: path, line: preferredLine),
+        let token = swiftmutScalarLiteralToken(
+          in: line,
+          preferredColumn: preferredColumn,
+          mutation: mutation
+        ) else {
+    return nil
+  }
+  return (
+    swiftmutTrimPackageRoot(path, config: config),
+    preferredLine,
+    token.column,
+    token.sourceOriginal,
+    swiftmutImplicitReturnSourceMutation(for: mutation))
+}
+
+func swiftmutFindDescribedScalarLiteralSourceLocation(
+  path: String,
+  preferredLine: Int,
+  locationDescription: String,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard preferredLine > 0,
+        let snippet = swiftmutQuotedSourceSnippetPrefix(locationDescription),
+        let text = swiftmutRead(path) else {
+    return nil
+  }
+
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      if let match = swiftmutScalarLiteralToken(
+        in: String(text[lineStart..<index]),
+        sourceLine: currentLine,
+        preferredLine: preferredLine,
+        snippet: snippet,
+        mutation: mutation
+      ) {
+        return (
+          swiftmutTrimPackageRoot(path, config: config),
+          match.line,
+          match.column,
+          match.sourceOriginal,
+          swiftmutImplicitReturnSourceMutation(for: mutation))
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex,
+     let match = swiftmutScalarLiteralToken(
+       in: String(text[lineStart..<text.endIndex]),
+       sourceLine: currentLine,
+       preferredLine: preferredLine,
+       snippet: snippet,
+       mutation: mutation
+     ) {
+    return (
+      swiftmutTrimPackageRoot(path, config: config),
+      match.line,
+      match.column,
+      match.sourceOriginal,
+      swiftmutImplicitReturnSourceMutation(for: mutation))
+  }
+  return nil
+}
+
+func swiftmutScalarLiteralToken(
+  in lineText: String,
+  sourceLine: Int,
+  preferredLine: Int,
+  snippet: String,
+  mutation: SwiftmutMutation
+) -> (line: Int, column: Int, sourceOriginal: String)? {
+  guard sourceLine >= preferredLine,
+        sourceLine <= preferredLine + 120,
+        let column = swiftmutColumn(of: snippet, in: lineText) else {
+    return nil
+  }
+  guard let token = swiftmutScalarLiteralToken(
+    in: lineText,
+    preferredColumn: column,
+    mutation: mutation
+  ) else {
+    return nil
+  }
+  return (sourceLine, token.column, token.sourceOriginal)
+}
+
+func swiftmutColumn(of snippet: String, in line: String) -> Int? {
+  let bytes = Array(line.utf8)
+  let snippetBytes = Array(snippet.utf8)
+  guard !snippetBytes.isEmpty,
+        bytes.count >= snippetBytes.count else {
+    return nil
+  }
+  var index = 0
+  while index + snippetBytes.count <= bytes.count {
+    if swiftmutBytesMatch(bytes, start: index, pattern: snippetBytes) {
+      return index + 1
+    }
+    index += 1
+  }
+  return nil
+}
+
+func swiftmutScalarLiteralToken(
+  in line: String,
+  preferredColumn: Int,
+  mutation: SwiftmutMutation
+) -> (column: Int, sourceOriginal: String)? {
+  let bytes = Array(line.utf8)
+  var start = preferredColumn - 1
+  guard start >= 0,
+        start < bytes.count else {
+    return nil
+  }
+  start = swiftmutSkipHorizontalWhitespace(bytes, from: start)
+
+  switch mutation.mutatedBuiltinName {
+  case "return_false", "return_true":
+    return swiftmutBoolLiteralToken(bytes: bytes, start: start, mutation: mutation)
+  case "return_zero":
+    return swiftmutIntegerLiteralToken(bytes: bytes, start: start, mutation: mutation)
+  default:
+    return nil
+  }
+}
+
+func swiftmutBoolLiteralToken(
+  bytes: [UInt8],
+  start: Int,
+  mutation: SwiftmutMutation
+) -> (column: Int, sourceOriginal: String)? {
+  if mutation.mutatedBuiltinName == "return_false",
+     swiftmutIdentifierTokenMatches(bytes, index: start, end: bytes.count, tokenBytes: Array("true".utf8)) {
+    return (start + 1, "true")
+  }
+  if mutation.mutatedBuiltinName == "return_true",
+     swiftmutIdentifierTokenMatches(bytes, index: start, end: bytes.count, tokenBytes: Array("false".utf8)) {
+    return (start + 1, "false")
+  }
+  return nil
+}
+
+func swiftmutIntegerLiteralToken(
+  bytes: [UInt8],
+  start: Int,
+  mutation: SwiftmutMutation
+) -> (column: Int, sourceOriginal: String)? {
+  guard start < bytes.count,
+        swiftmutIsIntegerLiteralStart(bytes[start]) else {
+    return nil
+  }
+
+  var end = start + 1
+  while end < bytes.count && swiftmutIsIntegerLiteralBody(bytes[end]) {
+    end += 1
+  }
+
+  guard swiftmutReturnValueIsEligible(bytes: bytes, start: start, mutation: mutation) else {
+    return nil
+  }
+  return (start + 1, String(decoding: bytes[start..<end], as: UTF8.self))
+}
+
+func swiftmutIsIntegerLiteralStart(_ byte: UInt8) -> Bool {
+  (byte >= 48 && byte <= 57) || byte == 45
+}
+
+func swiftmutIsIntegerLiteralBody(_ byte: UInt8) -> Bool {
+  (byte >= 48 && byte <= 57) || byte == 95
+}
+
 func swiftmutFunctionSourceLocation(
   for function: Function,
   config: SwiftmutConfig
@@ -256,12 +444,13 @@ func swiftmutFindOrdinalValueExpressionSourceLocation(
   ordinal: Int,
   expectedCount: Int,
   mutation: SwiftmutMutation,
-  config: SwiftmutConfig
+  config: SwiftmutConfig,
+  requiresMultipleMatches: Bool = true
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
         ordinal > 0,
         ordinal <= expectedCount,
-        expectedCount > 1,
+        (!requiresMultipleMatches || expectedCount > 1),
         let text = swiftmutRead(path) else {
     return nil
   }

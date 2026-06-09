@@ -29,6 +29,7 @@
 // RUN: %FileCheck %s --input-file %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=NOCHAIN --input-file %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
+// RUN: %FileCheck %s --check-prefix=RUNTIME-SKIP --input-file %t/compiler-events.jsonl
 
 //--- Value.swift
 @inline(never)
@@ -78,6 +79,7 @@ public func swiftmutPrefixClassifierShape(_ text: String) -> Int {
 // NOCHAIN-NOT: "sourceOriginal":"text == \"import\""
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutBoolCallConditionOwnsValueApply","function":"{{.*}}swiftmutCheckySiSSF"
 // EVENTS-SAME: "conditionSites":"1"
+// RUNTIME-SKIP: "event":"functionSkip","reason":"generatedRuntimeSupport","module":"SwiftmutBoolCallConditionOwnsValueApply","function":"__swiftmut_visit"
 // EVENTS-SAME: "valueApplySites":"0"
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutBoolCallConditionOwnsValueApply","function":"{{.*}}swiftmutDirectPrefixCheckySiSSF"
 // EVENTS-SAME: "conditionSites":"1"

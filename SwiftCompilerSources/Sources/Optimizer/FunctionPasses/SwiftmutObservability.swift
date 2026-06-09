@@ -206,6 +206,14 @@ func swiftmutFunctionName(_ functionName: String, belongsToModule moduleName: St
   return functionName.hasPrefix("@\(mangledModulePrefix)")
 }
 
+func swiftmutIsRuntimeSupportFunctionName(_ functionName: String) -> Bool {
+  functionName == "__swiftmut_visit"
+    || functionName.hasPrefix("__swiftmut_visit_")
+    || functionName.contains("__swiftmut_parse_site")
+    || functionName.contains("__swiftmut_load_selection")
+    || functionName.contains("__SwiftmutRuntime")
+}
+
 func swiftmutClockMicroseconds() -> UInt64 {
   #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS) || os(Linux) || os(Android)
   var now = timeval()

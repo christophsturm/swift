@@ -59,6 +59,20 @@ let swiftmut = FunctionPass(name: "swiftmut") {
     }
   }
 
+  if swiftmutIsRuntimeSupportFunctionName(function.name.string) {
+    if shouldLogFunction {
+      swiftmutLogEvent(
+        "functionSkip",
+        config: config,
+        fields: [
+          ("reason", "generatedRuntimeSupport"),
+          ("module", moduleName),
+          ("function", function.name.string)
+        ])
+    }
+    return
+  }
+
   guard swiftmutFunctionName(function.name.string, belongsToModule: moduleName) else {
     if shouldLogFunction {
       swiftmutLogEvent(
@@ -245,4 +259,3 @@ let swiftmut = FunctionPass(name: "swiftmut") {
     context.notifyInstructionsChanged()
   }
 }
-

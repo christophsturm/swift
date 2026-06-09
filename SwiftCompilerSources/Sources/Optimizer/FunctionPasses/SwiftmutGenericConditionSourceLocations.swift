@@ -132,6 +132,15 @@ func swiftmutSourceLocation(
      ) {
     return located
   }
+  if let located = swiftmutFindBooleanNegatedConditionSourceLocation(
+    moduleName: moduleName,
+    functionLocation: function.location.description,
+    locationDescription: branch.location.description,
+    mutation: mutation,
+    config: config
+  ) {
+    return located
+  }
   if mutation.sourceOriginal == "condition",
      let located = swiftmutFindDescribedGenericConditionSourceLocation(
        moduleName: moduleName,

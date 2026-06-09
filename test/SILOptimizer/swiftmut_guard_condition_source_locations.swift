@@ -27,11 +27,14 @@
 // RUN: %FileCheck %s --input-file %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
 
-public func swiftmutGuardDetails(_ includeDetails: Bool, mutants: [Int]) -> Int {
-  guard includeDetails, !mutants.isEmpty else {
+import Foundation
+
+public func swiftmutGuardDetails(_ includeDetails: Bool, line: String) -> Int {
+  let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+  guard includeDetails, !trimmed.isEmpty else {
     return 0
   }
-  return mutants.count
+  return trimmed.count
 }
 
 @_silgen_name("__swiftmut_visit")
@@ -39,10 +42,10 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
-// CHECK: "sourceLocation":{"file":"swiftmut_guard_condition_source_locations.swift","line":31,"column":9}
+// CHECK: "sourceLocation":{"file":"swiftmut_guard_condition_source_locations.swift","line":34,"column":9}
 // CHECK-SAME: "siteKind":"condition"
-// CHECK-SAME: "sourceOriginal":"includeDetails, !mutants.isEmpty","sourceMutated":"false"
-// CHECK-SAME: "sourceOriginal":"includeDetails, !mutants.isEmpty","sourceMutated":"true"
+// CHECK-SAME: "sourceOriginal":"includeDetails, !trimmed.isEmpty","sourceMutated":"false"
+// CHECK-SAME: "sourceOriginal":"includeDetails, !trimmed.isEmpty","sourceMutated":"true"
 
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutGuardConditionSourceLocations","function":"$s37SwiftmutGuardConditionSourceLocations08swiftmutB7Details
 // EVENTS-SAME: "conditionSourceLocationMisses":"0"

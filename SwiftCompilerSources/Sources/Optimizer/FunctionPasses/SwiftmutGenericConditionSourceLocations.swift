@@ -252,6 +252,10 @@ func swiftmutMultilineGenericConditionSourceIsExplicit(
   return false
 }
 
+func swiftmutCanUseComparisonOrdinalSourceLocation(count: Int) -> Bool {
+  count > 0 && count <= 64
+}
+
 func swiftmutSourceLocation(
   for instruction: Instruction,
   function: Function,
@@ -263,7 +267,7 @@ func swiftmutSourceLocation(
   if let comparison = instruction as? BuiltinInst,
      swiftmutIsComparisonBuiltin(comparison),
      let ordinal = swiftmutComparisonOrdinalAndCount(for: comparison, in: function),
-     ordinal.count <= 12,
+     swiftmutCanUseComparisonOrdinalSourceLocation(count: ordinal.count),
      let located = swiftmutFindOrdinalSourceOperator(
        moduleName: moduleName,
        functionLocation: function.location.description,
@@ -348,6 +352,16 @@ func swiftmutSourceLocation(
        mutation: mutation,
        config: config
      ) {
+    return located
+  }
+  if let located = swiftmutFindOrdinalExplicitConditionSourceLocation(
+    moduleName: moduleName,
+    function: function,
+    branch: branch,
+    comparison: comparison,
+    mutation: mutation,
+    config: config
+  ) {
     return located
   }
   if let located = swiftmutFindBooleanNegatedConditionSourceLocation(

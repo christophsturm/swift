@@ -22,6 +22,33 @@ func swiftmutSourceLocationMatchesSite(
     && candidate.sourceOriginal == site.sourceOriginal
 }
 
+func swiftmutConditionSourceLocationMatchesSite(
+  _ candidate: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String),
+  _ site: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)
+) -> Bool {
+  if swiftmutSourceLocationMatchesSite(candidate, site) {
+    return true
+  }
+  return candidate.file == site.file
+    && candidate.line == site.line
+    && swiftmutNormalizedConditionSourceOriginal(candidate.sourceOriginal)
+      == swiftmutNormalizedConditionSourceOriginal(site.sourceOriginal)
+}
+
+func swiftmutNormalizedConditionSourceOriginal(_ sourceOriginal: String) -> String {
+  var text = sourceOriginal
+  while text.hasPrefix(" ") {
+    text.removeFirst()
+  }
+  if text.hasPrefix("if ") {
+    text.removeFirst(3)
+  }
+  while text.hasPrefix(" ") {
+    text.removeFirst()
+  }
+  return text
+}
+
 func swiftmutSourceOriginalIsComplete(_ sourceOriginal: String) -> Bool {
   let bytes = Array(sourceOriginal.utf8)
   let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)

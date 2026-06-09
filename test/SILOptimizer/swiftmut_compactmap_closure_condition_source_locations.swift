@@ -74,6 +74,11 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
-// CHECK: "siteKind":"condition"{{.*}}"sourceOriginal":"index < mutation.reportedSelections.count","sourceMutated":"index <= mutation.reportedSelections.count"{{.*}}"sourceOriginal":"index < mutation.reportedSelections.count","sourceMutated":"index >= mutation.reportedSelections.count"{{.*}}"sourceOriginal":"index < mutation.reportedSelections.count","sourceMutated":"false"{{.*}}"sourceOriginal":"index < mutation.reportedSelections.count","sourceMutated":"true"
+// CHECK-DAG: "line":51,"column":15
+// CHECK-DAG: "sourceOriginal":"ids.contains(mutation.id)","sourceMutated":"false"
+// CHECK-DAG: "sourceOriginal":"ids.contains(mutation.id)","sourceMutated":"true"
+// CHECK-DAG: "line":55,"column":12
+// CHECK-DAG: "sourceOriginal":"index < mutation.reportedSelections.count","sourceMutated":"false"
+// CHECK-DAG: "sourceOriginal":"index < mutation.reportedSelections.count","sourceMutated":"true"
 
-// EVENTS: "event":"metamutantDiscovery"{{.*}}"function":"{{.*}}filteringH7Mutants{{.*}}"{{.*}}"conditionSourceLocationMisses":"0"
+// EVENTS: "event":"metamutantDiscovery"{{.*}}"conditionBranches":"3"{{.*}}"conditionSites":"2"{{.*}}"conditionSourceLocationMisses":"0"

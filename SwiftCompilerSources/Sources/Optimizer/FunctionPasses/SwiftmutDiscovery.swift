@@ -225,7 +225,7 @@ func swiftmutDiscoverConditionSites(
       }
       if sourceLocation == nil {
         sourceLocation = location
-      } else if !swiftmutSourceLocationMatchesSite(location, sourceLocation!) {
+      } else if !swiftmutConditionSourceLocationMatchesSite(location, sourceLocation!) {
         continue
       }
       let displayMutation = mutation.withSource(

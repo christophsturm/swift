@@ -534,10 +534,14 @@ func swiftmutDescribedSourceOperatorNeedle(_ snippet: String) -> String? {
       if let needle = swiftmutSingleLineDescribedSourceOperatorNeedle(String(line)) {
         return needle
       }
+      if let needle = swiftmutTruncatedDescribedSourceOperatorNeedle(String(line)) {
+        return needle
+      }
     }
     return nil
   }
   return swiftmutSingleLineDescribedSourceOperatorNeedle(snippet)
+    ?? swiftmutTruncatedDescribedSourceOperatorNeedle(snippet)
 }
 
 func swiftmutSingleLineDescribedSourceOperatorNeedle(_ snippet: String) -> String? {
@@ -565,6 +569,58 @@ func swiftmutSingleLineDescribedSourceOperatorNeedle(_ snippet: String) -> Strin
   }
   let result = String(decoding: bytes[start..<end], as: UTF8.self)
   return swiftmutSourceOperatorNeedleContainsOperator(result) ? result : nil
+}
+
+func swiftmutTruncatedDescribedSourceOperatorNeedle(_ snippet: String) -> String? {
+  let bytes = Array(snippet.utf8)
+  var start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  var end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard start < end else {
+    return nil
+  }
+  if start + 1 < end
+      && (bytes[start] == 38 || bytes[start] == 124)
+      && bytes[start + 1] == bytes[start] {
+    start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 2)
+  }
+  if start < end && bytes[start] == 33 {
+    start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 1)
+  }
+  while end > start {
+    let byte = bytes[end - 1]
+    if byte == 44 || byte == 123 || byte == 125 {
+      end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: end - 1)
+      continue
+    }
+    break
+  }
+  guard end - start >= 8 else {
+    return nil
+  }
+  let result = String(decoding: bytes[start..<end], as: UTF8.self)
+  guard !swiftmutSourceOperatorNeedleContainsOperator(result),
+        swiftmutTruncatedOperatorNeedleLooksLikeExpressionPrefix(bytes, start: start, end: end) else {
+    return nil
+  }
+  return result
+}
+
+func swiftmutTruncatedOperatorNeedleLooksLikeExpressionPrefix(
+  _ bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> Bool {
+  var hasIdentifier = false
+  var hasSelector = false
+  for index in start..<end {
+    let byte = bytes[index]
+    if swiftmutIsIdentifierByte(byte) {
+      hasIdentifier = true
+    } else if byte == 46 || byte == 91 {
+      hasSelector = true
+    }
+  }
+  return hasIdentifier && hasSelector
 }
 
 func swiftmutDescribedGenericConditionNeedle(_ snippet: String) -> String? {

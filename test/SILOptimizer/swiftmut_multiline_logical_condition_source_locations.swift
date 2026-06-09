@@ -37,12 +37,20 @@ public struct SwiftmutDiscoveryCounters {
   public let conditionComparisonBranches: Int
   public let conditionGenericBranches: Int
   public let conditionMutationAlternatives: Int
+  public let conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten: Int
 }
 
 public func swiftmutMultilineLogicalCondition(_ yield: SwiftmutDiscoveryCounters) -> Int {
   if yield.conditionComparisonBranches > 0
       || yield.conditionGenericBranches > 0
       || yield.conditionMutationAlternatives > 0 {
+    return 1
+  }
+  return 0
+}
+
+public func swiftmutLongPrefixComparison(_ yield: SwiftmutDiscoveryCounters) -> Int {
+  if yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten > 0 {
     return 1
   }
   return 0
@@ -58,6 +66,7 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 // CHECK-SAME: "sourceOriginal":"yield.conditionComparisonBranches > 0","sourceMutated":"yield.conditionComparisonBranches <= 0"
 // CHECK-SAME: "sourceOriginal":"yield.conditionComparisonBranches > 0","sourceMutated":"false"
 // CHECK-SAME: "sourceOriginal":"yield.conditionComparisonBranches > 0","sourceMutated":"true"
+// CHECK-DAG: "siteKind":"condition"{{.*}}"sourceOriginal":"yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten > 0","sourceMutated":"yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten >= 0"{{.*}}"sourceOriginal":"yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten > 0","sourceMutated":"yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten <= 0"{{.*}}"sourceOriginal":"yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten > 0","sourceMutated":"false"{{.*}}"sourceOriginal":"yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten > 0","sourceMutated":"true"
 
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutMultilineLogicalConditionSourceLocations","function":"$s48SwiftmutMultilineLogicalConditionSourceLocations08swiftmutbcD0
 // EVENTS-SAME: "conditionSites":"1"

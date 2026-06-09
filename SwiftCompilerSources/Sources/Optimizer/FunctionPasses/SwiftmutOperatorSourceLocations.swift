@@ -383,7 +383,14 @@ func swiftmutFindDescribedGenericConditionInFunctionBody(
     match.line,
     match.column,
     match.sourceOriginal,
-    mutation.sourceMutated)
+    swiftmutBooleanNegatedConditionSourceMutated(
+      match.sourceOriginal,
+      needle: needle,
+      mutation: mutation
+    ) ?? swiftmutGenericConditionSourceMutated(
+      match.sourceOriginal,
+      mutation: mutation,
+      config: config))
 }
 
 func swiftmutFindDescribedGenericConditionInFile(
@@ -437,7 +444,14 @@ func swiftmutFindDescribedGenericConditionInFile(
     match.line,
     match.column,
     match.sourceOriginal,
-    mutation.sourceMutated)
+    swiftmutBooleanNegatedConditionSourceMutated(
+      match.sourceOriginal,
+      needle: needle,
+      mutation: mutation
+    ) ?? swiftmutGenericConditionSourceMutated(
+      match.sourceOriginal,
+      mutation: mutation,
+      config: config))
 }
 
 func swiftmutFindDescribedSourceOperatorInFile(

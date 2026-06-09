@@ -277,6 +277,13 @@ func swiftmutGenericConditionSourceMutated(
   guard mutation.sourceOriginal != "condition" else {
     return mutation.sourceMutated
   }
+  if let sourceMutated = swiftmutBooleanNegatedConditionSourceMutated(
+    sourceOriginal,
+    needle: nil,
+    mutation: mutation
+  ) {
+    return sourceMutated
+  }
   for rule in swiftmutSourceMutationDisplayRules(for: mutation, config: config) {
     let sourceMutated = rule.sourceMutatedOverride.isEmpty
       ? rule.sourceMutated

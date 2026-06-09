@@ -44,10 +44,12 @@ func swiftmutFindBooleanNegatedConditionSourceLocation(
       path: path,
       preferredLine: preferredLine,
       needle: needle,
+      mutation: mutation,
       config: config
     ) ?? swiftmutFindBooleanNegatedConditionInFile(
       path: path,
       needle: needle,
+      mutation: mutation,
       config: config
     )
     guard let result else { continue }
@@ -101,6 +103,7 @@ func swiftmutFindBooleanNegatedConditionInFunctionBody(
   path: String,
   preferredLine: Int,
   needle: String,
+  mutation: SwiftmutMutation,
   config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
@@ -118,7 +121,11 @@ func swiftmutFindBooleanNegatedConditionInFunctionBody(
   func inspectLine(_ lineText: String, line: Int) {
     guard line >= preferredLine,
           matches.count < 2,
-          let expression = swiftmutBooleanNegatedConditionExpression(lineText, needle: needle) else {
+          let expression = swiftmutBooleanNegatedConditionExpression(
+            lineText,
+            needle: needle,
+            mutation: mutation
+          ) else {
       return
     }
     matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
@@ -176,6 +183,7 @@ func swiftmutFindBooleanNegatedConditionInFunctionBody(
 func swiftmutFindBooleanNegatedConditionInFile(
   path: String,
   needle: String,
+  mutation: SwiftmutMutation,
   config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard let text = swiftmutRead(path) else {
@@ -189,7 +197,11 @@ func swiftmutFindBooleanNegatedConditionInFile(
 
   func inspectLine(_ lineText: String, line: Int) {
     guard matches.count < 2,
-          let expression = swiftmutBooleanNegatedConditionExpression(lineText, needle: needle) else {
+          let expression = swiftmutBooleanNegatedConditionExpression(
+            lineText,
+            needle: needle,
+            mutation: mutation
+          ) else {
       return
     }
     matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
@@ -225,19 +237,38 @@ func swiftmutFindBooleanNegatedConditionInFile(
 
 func swiftmutBooleanNegatedConditionExpression(
   _ line: String,
-  needle: String
+  needle: String,
+  mutation: SwiftmutMutation
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
   let negatedNeedle = "!" + needle
   guard line.contains(negatedNeedle),
         let expression = swiftmutDescribedGenericConditionExpression(line, needle: needle),
-        let sourceMutated = swiftmutRemoveFirstBooleanNegation(
-          negatedNeedle,
-          replacement: needle,
-          from: expression.sourceOriginal
+        let sourceMutated = swiftmutBooleanNegatedConditionSourceMutated(
+          expression.sourceOriginal,
+          needle: needle,
+          mutation: mutation
         ) else {
     return nil
   }
   return (expression.column, expression.sourceOriginal, sourceMutated)
+}
+
+func swiftmutBooleanNegatedConditionSourceMutated(
+  _ sourceOriginal: String,
+  needle: String?,
+  mutation: SwiftmutMutation
+) -> String? {
+  guard mutation.sourceOriginal == "==",
+        mutation.sourceMutated == "!=" else {
+    return nil
+  }
+  if let needle {
+    return swiftmutRemoveFirstBooleanNegation(
+      "!" + needle,
+      replacement: needle,
+      from: sourceOriginal)
+  }
+  return swiftmutRemoveFirstTopLevelBooleanNegation(from: sourceOriginal)
 }
 
 func swiftmutRemoveFirstBooleanNegation(
@@ -253,4 +284,17 @@ func swiftmutRemoveFirstBooleanNegation(
   let prefix = String(decoding: bytes[0..<index], as: UTF8.self)
   let suffix = String(decoding: bytes[(index + needleBytes.count)..<bytes.count], as: UTF8.self)
   return prefix + replacement + suffix
+}
+
+func swiftmutRemoveFirstTopLevelBooleanNegation(from expression: String) -> String? {
+  let bytes = Array(expression.utf8)
+  guard let index = swiftmutFirstTopLevelIndex(bytes, start: 0, end: bytes.count, matches: { index in
+    bytes[index] == 33 && (index + 1 >= bytes.count || bytes[index + 1] != 61)
+  }) else {
+    return nil
+  }
+  let valueStart = swiftmutSkipHorizontalWhitespace(bytes, from: index + 1)
+  let prefix = String(decoding: bytes[0..<index], as: UTF8.self)
+  let suffix = String(decoding: bytes[valueStart..<bytes.count], as: UTF8.self)
+  return prefix + suffix
 }

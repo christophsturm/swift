@@ -176,6 +176,16 @@ func swiftmutDiscoverConditionSites(
         resolvedLocation = nil
       }
       guard let location = resolvedLocation else {
+        if comparison != nil,
+           let functionSourceLocation = swiftmutFunctionSourceLocation(for: function, config: config),
+           !swiftmutFunctionBodyContainsExplicitCondition(
+             path: functionSourceLocation.path,
+             preferredLine: functionSourceLocation.line,
+             config: config
+           ) {
+          stats.genericNonExplicitSourceLocations += 1
+          continue
+        }
         stats.sourceLocationMisses += 1
         if swiftmutConditionSourceLocationMissSamples < 500 {
           swiftmutConditionSourceLocationMissSamples += 1

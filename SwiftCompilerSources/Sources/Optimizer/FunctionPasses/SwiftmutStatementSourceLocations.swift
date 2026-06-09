@@ -676,3 +676,65 @@ func swiftmutFindUniqueExplicitConditionSourceLocation(
       mutation: mutation,
       config: config))
 }
+
+func swiftmutFunctionBodyContainsExplicitCondition(
+  path: String,
+  preferredLine: Int,
+  config: SwiftmutConfig
+) -> Bool {
+  guard preferredLine > 0,
+        let text = swiftmutRead(path) else {
+    return false
+  }
+
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  var braceDepth = 0
+  var sawOpeningBrace = false
+
+  func inspectLine(_ lineText: String, line: Int) -> Bool {
+    guard line >= preferredLine,
+          line <= preferredLine + 120 else {
+      return false
+    }
+    return swiftmutGenericConditionExpression(lineText) != nil
+  }
+
+  func updateBraceDepth(_ lineText: String) {
+    for byte in lineText.utf8 {
+      if byte == 123 {
+        braceDepth += 1
+        sawOpeningBrace = true
+      } else if byte == 125 {
+        braceDepth -= 1
+      }
+    }
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      let lineText = String(text[lineStart..<index])
+      if currentLine >= preferredLine {
+        if inspectLine(lineText, line: currentLine) {
+          return true
+        }
+        updateBraceDepth(lineText)
+        if sawOpeningBrace && braceDepth <= 0 {
+          return false
+        }
+        if currentLine >= preferredLine + 120 {
+          return false
+        }
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine >= preferredLine {
+    return inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
+  }
+  return false
+}

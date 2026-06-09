@@ -41,8 +41,17 @@ func swiftmutMangledNameContainsIdentifierWords(
   guard words.count >= 2,
         let first = words.first,
         let last = words.last,
-        first.count >= 3,
         last.count >= 4 else {
+    return false
+  }
+  if first.count < 3,
+     words.count >= 3 {
+    let firstPair = words[0] + words[1]
+    if firstPair.count >= 4 {
+      return functionName.contains(firstPair) && functionName.contains(last)
+    }
+  }
+  guard first.count >= 3 else {
     return false
   }
   return functionName.contains(first) && functionName.contains(last)

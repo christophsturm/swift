@@ -490,6 +490,22 @@ func swiftmutScalarValueSourceLocation(
     for: value.parentFunction,
     config: config
   )
+
+  func usableScalarSourceLocation(
+    _ location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String),
+    path: String
+  ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+    if swiftmutSourceLineBelongsToFunction(
+      location.line,
+      path: path,
+      function: value.parentFunction,
+      config: config
+    ) {
+      return location
+    }
+    return nil
+  }
+
   if let fileNameAndPosition = value.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
@@ -499,8 +515,8 @@ func swiftmutScalarValueSourceLocation(
         mutation: mutation,
         config: config,
         requiresDirectValueExpression: true
-      ) {
-        return assignment
+      ), let usable = usableScalarSourceLocation(assignment, path: matchedPath) {
+        return usable
       }
       if let returned = swiftmutFindReturnedScalarValueSourceLocation(
         for: value,
@@ -508,16 +524,16 @@ func swiftmutScalarValueSourceLocation(
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config
-      ) {
-        return returned
+      ), let usable = usableScalarSourceLocation(returned, path: matchedPath) {
+        return usable
       }
       if let anchored = swiftmutFindClosureArgumentReturnSourceLocation(
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableScalarSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
       if let anchored = swiftmutFindDescribedScalarLiteralSourceLocation(
         path: matchedPath,
@@ -525,8 +541,8 @@ func swiftmutScalarValueSourceLocation(
         locationDescription: value.location.description,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableScalarSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
       if let anchored = swiftmutFindScalarLiteralSourceLocation(
         path: matchedPath,
@@ -534,8 +550,8 @@ func swiftmutScalarValueSourceLocation(
         preferredColumn: fileNameAndPosition.column,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableScalarSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
       if let anchored = swiftmutFindOrdinalScalarValueSourceLocation(
         for: value,
@@ -543,8 +559,8 @@ func swiftmutScalarValueSourceLocation(
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
         config: config
-      ) {
-        return anchored
+      ), let usable = usableScalarSourceLocation(anchored, path: matchedPath) {
+        return usable
       }
     }
   }
@@ -556,8 +572,8 @@ func swiftmutScalarValueSourceLocation(
       mutation: mutation,
       config: config,
       requiresDirectValueExpression: true
-    ) {
-      return anchored
+    ), let usable = usableScalarSourceLocation(anchored, path: functionSourceLocation.path) {
+      return usable
     }
     if let anchored = swiftmutFindReturnedScalarValueSourceLocation(
       for: value,
@@ -565,16 +581,16 @@ func swiftmutScalarValueSourceLocation(
       preferredLine: functionSourceLocation.line,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableScalarSourceLocation(anchored, path: functionSourceLocation.path) {
+      return usable
     }
     if let anchored = swiftmutFindClosureArgumentReturnSourceLocation(
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableScalarSourceLocation(anchored, path: functionSourceLocation.path) {
+      return usable
     }
     if let anchored = swiftmutFindDescribedScalarLiteralSourceLocation(
       path: functionSourceLocation.path,
@@ -582,8 +598,8 @@ func swiftmutScalarValueSourceLocation(
       locationDescription: value.location.description,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableScalarSourceLocation(anchored, path: functionSourceLocation.path) {
+      return usable
     }
     if let anchored = swiftmutFindScalarLiteralSourceLocation(
       path: functionSourceLocation.path,
@@ -591,8 +607,8 @@ func swiftmutScalarValueSourceLocation(
       preferredColumn: 1,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableScalarSourceLocation(anchored, path: functionSourceLocation.path) {
+      return usable
     }
     if let anchored = swiftmutFindOrdinalScalarValueSourceLocation(
       for: value,
@@ -600,8 +616,8 @@ func swiftmutScalarValueSourceLocation(
       preferredLine: functionSourceLocation.line,
       mutation: mutation,
       config: config
-    ) {
-      return anchored
+    ), let usable = usableScalarSourceLocation(anchored, path: functionSourceLocation.path) {
+      return usable
     }
   }
   return nil

@@ -303,21 +303,6 @@ func swiftmutIsIntegerLiteralBody(_ byte: UInt8) -> Bool {
   (byte >= 48 && byte <= 57) || byte == 95
 }
 
-func swiftmutFunctionSourceLocation(
-  for function: Function,
-  config: SwiftmutConfig
-) -> (path: String, line: Int)? {
-  let location = function.location.description
-  for path in swiftmutSwiftSourcePaths(config: config) {
-    guard location.contains(path),
-          let line = swiftmutPreferredLine(in: location, path: path) else {
-      continue
-    }
-    return (path, line)
-  }
-  return nil
-}
-
 func swiftmutFindValueExpressionSourceLocation(
   for apply: ApplyInst,
   path: String,

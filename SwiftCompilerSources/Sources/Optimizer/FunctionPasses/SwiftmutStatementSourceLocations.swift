@@ -508,20 +508,22 @@ func swiftmutFindGenericConditionSourceLocationByBranchOrdinal(
 
   func inspectLine(_ lineText: String, line: Int)
     -> (line: Int, column: Int, sourceOriginal: String)? {
-    guard line >= preferredLine,
-          let expression = swiftmutGenericConditionExpression(lineText) else {
+    guard line >= preferredLine else {
       return nil
     }
-    let branchSpan = swiftmutGenericConditionBranchSpan(expression.sourceOriginal)
-    let rangeStart = consumedBranches + 1
-    let rangeEnd = consumedBranches + branchSpan
-    consumedBranches = rangeEnd
-    guard branchSpan == 1,
-          branchOrdinal >= rangeStart,
-          branchOrdinal <= rangeEnd else {
-      return nil
+    for expression in swiftmutGenericConditionExpressionCandidates(lineText) {
+      let branchSpan = swiftmutGenericConditionBranchSpan(expression.sourceOriginal)
+      let rangeStart = consumedBranches + 1
+      let rangeEnd = consumedBranches + branchSpan
+      consumedBranches = rangeEnd
+      guard branchSpan == 1,
+            branchOrdinal >= rangeStart,
+            branchOrdinal <= rangeEnd else {
+        continue
+      }
+      return (line, expression.column, expression.sourceOriginal)
     }
-    return (line, expression.column, expression.sourceOriginal)
+    return nil
   }
 
   func updateBraceDepth(_ lineText: String) {

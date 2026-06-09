@@ -156,7 +156,7 @@ func swiftmutDiscoverConditionSites(
           mutation: mutation,
           config: config)
         if let location,
-           !swiftmutGenericConditionSourceIsExplicit(file: location.file, line: location.line, config: config) {
+           !swiftmutGenericConditionSourceLocationIsExplicit(location, config: config) {
           stats.genericNonExplicitSourceLocations += 1
           continue
         }

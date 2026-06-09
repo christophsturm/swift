@@ -448,6 +448,21 @@ func swiftmutGenericConditionSourceIsExplicit(
     || swiftmutMultilineGenericConditionSourceIsExplicit(file: file, line: line, config: config)
 }
 
+func swiftmutGenericConditionSourceLocationIsExplicit(
+  _ location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String),
+  config: SwiftmutConfig
+) -> Bool {
+  if swiftmutGenericConditionSourceIsExplicit(file: location.file, line: location.line, config: config) {
+    return true
+  }
+  guard let sourceLine = swiftmutSourceLine(file: location.file, line: location.line, config: config) else {
+    return true
+  }
+  return swiftmutGenericConditionExpressionCandidates(sourceLine).contains {
+    $0.sourceOriginal == location.sourceOriginal
+  }
+}
+
 func swiftmutSourceLine(
   file: String,
   line: Int,
@@ -639,6 +654,88 @@ func swiftmutGenericConditionExpression(
   return (
     range.start + 1,
     String(decoding: bytes[range.start..<range.end], as: UTF8.self))
+}
+
+func swiftmutGenericConditionExpressionCandidates(
+  _ line: String
+) -> [(column: Int, sourceOriginal: String)] {
+  if let expression = swiftmutGenericConditionExpression(line) {
+    return [expression]
+  }
+  return swiftmutOptionalBindingBooleanConditionExpressions(line)
+}
+
+func swiftmutOptionalBindingBooleanConditionExpressions(
+  _ line: String
+) -> [(column: Int, sourceOriginal: String)] {
+  let bytes = Array(line.utf8)
+  let lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  var start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  guard start < lineEnd else {
+    return []
+  }
+
+  if bytes[start] == 125 {
+    start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 1)
+    if swiftmutASCIIHasPrefix(bytes, start: start, prefix: "else ") {
+      start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 5)
+    }
+  }
+
+  let expressionRange: (start: Int, end: Int)?
+  if swiftmutASCIIHasPrefix(bytes, start: start, prefix: "if ") {
+    expressionRange = swiftmutControlConditionRange(bytes: bytes, start: start + 3, end: lineEnd)
+  } else if swiftmutASCIIHasPrefix(bytes, start: start, prefix: "guard ") {
+    expressionRange = swiftmutGuardConditionRange(bytes: bytes, start: start + 6, end: lineEnd)
+  } else if swiftmutASCIIHasPrefix(bytes, start: start, prefix: "while ") {
+    expressionRange = swiftmutControlConditionRange(bytes: bytes, start: start + 6, end: lineEnd)
+  } else {
+    expressionRange = nil
+  }
+  guard let range = expressionRange else {
+    return []
+  }
+
+  var result: [(column: Int, sourceOriginal: String)] = []
+  for clause in swiftmutTopLevelCommaSeparatedRanges(bytes: bytes, start: range.start, end: range.end) {
+    let clauseStart = swiftmutSkipHorizontalWhitespace(bytes, from: clause.start)
+    let clauseEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: clause.end)
+    guard clauseStart < clauseEnd,
+          !swiftmutConditionClauseLooksLikeBinding(bytes: bytes, start: clauseStart, end: clauseEnd),
+          swiftmutSourceExpressionIsSingleLineComplete(bytes: bytes, start: clauseStart, end: clauseEnd) else {
+      continue
+    }
+    result.append((
+      clauseStart + 1,
+      String(decoding: bytes[clauseStart..<clauseEnd], as: UTF8.self)))
+  }
+  return result
+}
+
+func swiftmutTopLevelCommaSeparatedRanges(
+  bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> [(start: Int, end: Int)] {
+  var result: [(start: Int, end: Int)] = []
+  var clauseStart = start
+  var searchStart = start
+  while let comma = swiftmutTopLevelByteIndex(bytes, start: searchStart, end: end, byte: 44) {
+    result.append((clauseStart, comma))
+    clauseStart = comma + 1
+    searchStart = comma + 1
+  }
+  result.append((clauseStart, end))
+  return result
+}
+
+func swiftmutConditionClauseLooksLikeBinding(bytes: [UInt8], start: Int, end: Int) -> Bool {
+  guard start < end else {
+    return true
+  }
+  return swiftmutASCIIHasPrefix(bytes, start: start, prefix: "let ")
+    || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "var ")
+    || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "case ")
 }
 
 func swiftmutControlConditionRange(

@@ -671,5 +671,8 @@ func swiftmutFindUniqueExplicitConditionSourceLocation(
     match.line,
     match.column,
     match.sourceOriginal,
-    mutation.sourceMutated)
+    swiftmutGenericConditionSourceMutated(
+      match.sourceOriginal,
+      mutation: mutation,
+      config: config))
 }

@@ -28,7 +28,10 @@ func swiftmutGenericConditionSourceLocation(
     line,
     expression.column > 0 ? expression.column : fallbackColumn,
     expression.sourceOriginal,
-    mutation.sourceMutated)
+    swiftmutGenericConditionSourceMutated(
+      expression.sourceOriginal,
+      mutation: mutation,
+      config: config))
 }
 
 func swiftmutSourceLocation(
@@ -119,6 +122,15 @@ func swiftmutSourceLocation(
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard swiftmutIsComparisonBuiltin(comparison) else {
     return nil
+  }
+  if let functionSourceLocation = swiftmutFunctionSourceLocation(for: function, config: config),
+     let located = swiftmutFindUniqueExplicitConditionSourceLocation(
+       path: functionSourceLocation.path,
+       preferredLine: functionSourceLocation.line,
+       mutation: mutation,
+       config: config
+     ) {
+    return located
   }
   if mutation.sourceOriginal == "condition",
      let located = swiftmutFindDescribedGenericConditionSourceLocation(
@@ -244,6 +256,63 @@ func swiftmutSourceLine(
 
   if currentLine == line {
     return String(text[lineStart..<text.endIndex])
+  }
+  return nil
+}
+
+func swiftmutGenericConditionSourceMutated(
+  _ sourceOriginal: String,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> String {
+  guard mutation.sourceOriginal != "condition" else {
+    return mutation.sourceMutated
+  }
+  for rule in swiftmutSourceMutationDisplayRules(for: mutation, config: config) {
+    let sourceMutated = rule.sourceMutatedOverride.isEmpty
+      ? rule.sourceMutated
+      : rule.sourceMutatedOverride
+    if let mutated = swiftmutReplaceFirstSourceOperator(
+      rule.sourceOriginal,
+      with: sourceMutated,
+      in: sourceOriginal
+    ) {
+      return mutated
+    }
+  }
+  return mutation.sourceMutated
+}
+
+func swiftmutReplaceFirstSourceOperator(
+  _ sourceOriginal: String,
+  with sourceMutated: String,
+  in expression: String
+) -> String? {
+  let bytes = Array(expression.utf8)
+  let operatorBytes = Array(sourceOriginal.utf8)
+  guard !operatorBytes.isEmpty,
+        bytes.count >= operatorBytes.count else {
+    return nil
+  }
+
+  var index = 0
+  while index + operatorBytes.count <= bytes.count {
+    var matched = true
+    for offset in 0..<operatorBytes.count where bytes[index + offset] != operatorBytes[offset] {
+      matched = false
+      break
+    }
+    if matched,
+       swiftmutIsSourceComparisonOperator(
+        bytes: bytes,
+        operatorStart: index,
+        operatorEnd: index + operatorBytes.count
+       ) {
+      let prefix = String(decoding: bytes[0..<index], as: UTF8.self)
+      let suffix = String(decoding: bytes[(index + operatorBytes.count)..<bytes.count], as: UTF8.self)
+      return prefix + sourceMutated + suffix
+    }
+    index += 1
   }
   return nil
 }

@@ -138,13 +138,13 @@ func swiftmutDiscoverConditionSites(
       if let comparison {
         location = swiftmutSourceLocation(
           for: comparison,
+          branch: branch,
           function: function,
           moduleName: moduleName,
           mutation: mutation,
           config: config
         ) ?? swiftmutSourceLocation(
           for: comparison,
-          branch: branch,
           function: function,
           moduleName: moduleName,
           mutation: mutation,

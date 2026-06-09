@@ -609,6 +609,14 @@ func swiftmutFindUniqueExplicitConditionSourceLocation(
         let text = swiftmutRead(path) else {
     return nil
   }
+  if let multiline = swiftmutFindUniqueMultilineExplicitConditionSourceLocation(
+    path: path,
+    preferredLine: preferredLine,
+    mutation: mutation,
+    config: config
+  ) {
+    return multiline
+  }
 
   var matches: [(line: Int, column: Int, sourceOriginal: String)] = []
   var currentLine = 1

@@ -21,7 +21,12 @@ func swiftmutGenericConditionSourceLocation(
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard let sourceLine = swiftmutAbsoluteSourceLine(path: path, line: line),
         let expression = swiftmutGenericConditionExpression(sourceLine) else {
-    return nil
+    return swiftmutMultilineGenericConditionSourceLocation(
+      path: path,
+      line: line,
+      fallbackColumn: fallbackColumn,
+      mutation: mutation,
+      config: config)
   }
   return (
     swiftmutTrimPackageRoot(path, config: config),
@@ -32,6 +37,219 @@ func swiftmutGenericConditionSourceLocation(
       expression.sourceOriginal,
       mutation: mutation,
       config: config))
+}
+
+func swiftmutMultilineGenericConditionSourceLocation(
+  path: String,
+  line: Int,
+  fallbackColumn: Int,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard line > 0,
+        let text = swiftmutRead(path) else {
+    return nil
+  }
+  let lines = swiftmutNumberedSourceLines(text)
+  guard line <= lines.count else {
+    return nil
+  }
+  let targetIndex = line - 1
+  let firstCandidateIndex = targetIndex > 8 ? targetIndex - 8 : 0
+
+  var startIndex = targetIndex
+  while startIndex >= firstCandidateIndex {
+    guard swiftmutSourceLineLooksLikeExplicitCondition(lines[startIndex].text),
+          let statement = swiftmutMultilineConditionStatement(
+            lines: lines,
+            startIndex: startIndex,
+            targetIndex: targetIndex
+          ),
+          let expression = swiftmutGenericConditionExpression(statement.text) else {
+      if startIndex == 0 {
+        break
+      }
+      startIndex -= 1
+      continue
+    }
+    guard expression.sourceOriginal.contains("("),
+          !swiftmutGenericConditionSourceContainsTopLevelLogicalOperator(expression.sourceOriginal) else {
+      return nil
+    }
+    return (
+      swiftmutTrimPackageRoot(path, config: config),
+      lines[startIndex].number,
+      expression.column > 0 ? expression.column : fallbackColumn,
+      expression.sourceOriginal,
+      swiftmutGenericConditionSourceMutated(
+        expression.sourceOriginal,
+        mutation: mutation,
+        config: config))
+  }
+  return nil
+}
+
+func swiftmutNumberedSourceLines(_ text: String) -> [(number: Int, text: String)] {
+  var result: [(number: Int, text: String)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      result.append((currentLine, String(text[lineStart..<index])))
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+  if lineStart < text.endIndex || text.isEmpty {
+    result.append((currentLine, String(text[lineStart..<text.endIndex])))
+  }
+  return result
+}
+
+func swiftmutMultilineConditionStatement(
+  lines: [(number: Int, text: String)],
+  startIndex: Int,
+  targetIndex: Int
+) -> (line: Int, text: String, endIndex: Int)? {
+  var parts: [String] = []
+  var index = startIndex
+  while index < lines.count && index <= startIndex + 12 {
+    let lineText = lines[index].text
+    parts.append(index == startIndex ? lineText : swiftmutTrimmedHorizontalWhitespace(lineText))
+    if swiftmutLineContainsTopLevelOpeningBrace(lineText) {
+      guard index >= targetIndex else {
+        return nil
+      }
+      return (lines[startIndex].number, parts.joined(separator: " "), index)
+    }
+    index += 1
+  }
+  return nil
+}
+
+func swiftmutFindUniqueMultilineExplicitConditionSourceLocation(
+  path: String,
+  preferredLine: Int,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard preferredLine > 0,
+        let text = swiftmutRead(path) else {
+    return nil
+  }
+  let lines = swiftmutNumberedSourceLines(text)
+  var matches: [(line: Int, column: Int, sourceOriginal: String)] = []
+  var index = 0
+  while index < lines.count {
+    let line = lines[index].number
+    if line >= preferredLine,
+       line <= preferredLine + 120,
+       swiftmutSourceLineLooksLikeExplicitCondition(lines[index].text),
+       let statement = swiftmutMultilineConditionStatement(
+        lines: lines,
+        startIndex: index,
+        targetIndex: index
+       ),
+       statement.endIndex > index,
+       let expression = swiftmutGenericConditionExpression(statement.text),
+       expression.sourceOriginal.contains("("),
+       !swiftmutGenericConditionSourceContainsTopLevelLogicalOperator(expression.sourceOriginal) {
+      matches.append((line, expression.column, expression.sourceOriginal))
+      if matches.count >= 2 {
+        break
+      }
+      index = statement.endIndex
+    }
+    if line > preferredLine + 120 {
+      break
+    }
+    index += 1
+  }
+  guard matches.count == 1,
+        let match = matches.first else {
+    return nil
+  }
+  return (
+    swiftmutTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    match.sourceOriginal,
+    swiftmutGenericConditionSourceMutated(
+      match.sourceOriginal,
+      mutation: mutation,
+      config: config))
+}
+
+func swiftmutTrimmedHorizontalWhitespace(_ text: String) -> String {
+  let bytes = Array(text.utf8)
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard start < end else {
+    return ""
+  }
+  return String(decoding: bytes[start..<end], as: UTF8.self)
+}
+
+func swiftmutLineContainsTopLevelOpeningBrace(_ line: String) -> Bool {
+  let bytes = Array(line.utf8)
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  return swiftmutTopLevelByteIndex(bytes, start: start, end: end, byte: 123) != nil
+}
+
+func swiftmutGenericConditionSourceContainsTopLevelLogicalOperator(_ source: String) -> Bool {
+  let bytes = Array(source.utf8)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  return swiftmutTopLevelLogicalOperatorIndex(bytes: bytes, start: start, end: end) != nil
+}
+
+func swiftmutMultilineGenericConditionSourceIsExplicit(
+  file: String,
+  line: Int,
+  config: SwiftmutConfig
+) -> Bool {
+  guard line > 0 else {
+    return false
+  }
+
+  let path: String
+  if file.hasPrefix("/") || config.packageRoot.isEmpty {
+    path = file
+  } else {
+    path = config.packageRoot + "/" + file
+  }
+  guard let matchedPath = swiftmutIncludedSourcePath(path, config: config),
+        let text = swiftmutRead(matchedPath) else {
+    return false
+  }
+  let lines = swiftmutNumberedSourceLines(text)
+  guard line <= lines.count else {
+    return false
+  }
+  let targetIndex = line - 1
+  let firstCandidateIndex = targetIndex > 8 ? targetIndex - 8 : 0
+  var startIndex = targetIndex
+  while startIndex >= firstCandidateIndex {
+    if swiftmutSourceLineLooksLikeExplicitCondition(lines[startIndex].text),
+       let statement = swiftmutMultilineConditionStatement(
+        lines: lines,
+        startIndex: startIndex,
+        targetIndex: targetIndex
+       ),
+       let expression = swiftmutGenericConditionExpression(statement.text),
+       expression.sourceOriginal.contains("("),
+       !swiftmutGenericConditionSourceContainsTopLevelLogicalOperator(expression.sourceOriginal) {
+      return true
+    }
+    if startIndex == 0 {
+      break
+    }
+    startIndex -= 1
+  }
+  return false
 }
 
 func swiftmutSourceLocation(
@@ -227,6 +445,7 @@ func swiftmutGenericConditionSourceIsExplicit(
     return true
   }
   return swiftmutSourceLineLooksLikeExplicitCondition(sourceLine)
+    || swiftmutMultilineGenericConditionSourceIsExplicit(file: file, line: line, config: config)
 }
 
 func swiftmutSourceLine(
@@ -408,6 +627,13 @@ func swiftmutGenericConditionExpression(
   range.start = swiftmutSkipHorizontalWhitespace(bytes, from: range.start)
   range.end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: range.end)
   guard range.start < range.end else {
+    return nil
+  }
+  guard swiftmutSourceExpressionIsSingleLineComplete(
+    bytes: bytes,
+    start: range.start,
+    end: range.end
+  ) else {
     return nil
   }
   return (

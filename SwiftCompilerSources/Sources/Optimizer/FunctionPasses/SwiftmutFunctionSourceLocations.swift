@@ -78,3 +78,25 @@ func swiftmutSourceLineBelongsToFunction(
   }
   return inspectLine(String(text[lineStart..<text.endIndex]), lineNumber: currentLine) ?? true
 }
+
+func swiftmutSourceLocationBelongsToFunction(
+  _ location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String),
+  function: Function,
+  config: SwiftmutConfig
+) -> Bool {
+  let path: String
+  if location.file.hasPrefix("/") || config.packageRoot.isEmpty {
+    path = location.file
+  } else {
+    path = config.packageRoot + "/" + location.file
+  }
+  guard let matchedPath = swiftmutIncludedSourcePath(path, config: config) else {
+    return true
+  }
+  return swiftmutSourceLineBelongsToFunction(
+    location.line,
+    path: matchedPath,
+    function: function,
+    config: config
+  )
+}

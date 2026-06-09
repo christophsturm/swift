@@ -399,6 +399,17 @@ func swiftmutBranchSourceLocation(
   mutation: SwiftmutMutation,
   config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let function = branch.parentFunction
+
+  func usableConditionSourceLocation(
+    _ location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)
+  ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+    if swiftmutSourceLocationBelongsToFunction(location, function: function, config: config) {
+      return location
+    }
+    return nil
+  }
+
   if let fileNameAndPosition = branch.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
@@ -409,7 +420,7 @@ func swiftmutBranchSourceLocation(
         mutation: mutation,
         config: config
       ) {
-        return sourceLocation
+        return usableConditionSourceLocation(sourceLocation)
       }
       if let ordinal = swiftmutGenericConditionBranchOrdinal(branch),
          let sourceLocation = swiftmutFindGenericConditionSourceLocationByBranchOrdinal(
@@ -419,14 +430,14 @@ func swiftmutBranchSourceLocation(
           mutation: mutation,
           config: config
          ) {
-        return sourceLocation
+        return usableConditionSourceLocation(sourceLocation)
       }
       if let sourceLocation = swiftmutFindDescribedBranchGenericConditionSourceLocation(
         branch,
         mutation: mutation,
         config: config
       ) {
-        return sourceLocation
+        return usableConditionSourceLocation(sourceLocation)
       }
       return nil
     }
@@ -446,14 +457,14 @@ func swiftmutBranchSourceLocation(
         mutation: mutation,
         config: config
        ) {
-      return sourceLocation
+      return usableConditionSourceLocation(sourceLocation)
     }
     if let sourceLocation = swiftmutFindDescribedBranchGenericConditionSourceLocation(
       branch,
       mutation: mutation,
       config: config
     ) {
-      return sourceLocation
+      return usableConditionSourceLocation(sourceLocation)
     }
     if let anchored = swiftmutFindUniqueExplicitConditionSourceLocation(
       path: path,
@@ -461,7 +472,7 @@ func swiftmutBranchSourceLocation(
       mutation: mutation,
       config: config
     ) {
-      return anchored
+      return usableConditionSourceLocation(anchored)
     }
     return nil
   }

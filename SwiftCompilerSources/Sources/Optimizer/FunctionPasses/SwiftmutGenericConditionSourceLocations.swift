@@ -89,25 +89,6 @@ func swiftmutMultilineGenericConditionSourceLocation(
   return nil
 }
 
-func swiftmutNumberedSourceLines(_ text: String) -> [(number: Int, text: String)] {
-  var result: [(number: Int, text: String)] = []
-  var currentLine = 1
-  var lineStart = text.startIndex
-  var index = text.startIndex
-  while index < text.endIndex {
-    if text[index] == "\n" {
-      result.append((currentLine, String(text[lineStart..<index])))
-      currentLine += 1
-      lineStart = text.index(after: index)
-    }
-    index = text.index(after: index)
-  }
-  if lineStart < text.endIndex || text.isEmpty {
-    result.append((currentLine, String(text[lineStart..<text.endIndex])))
-  }
-  return result
-}
-
 func swiftmutMultilineConditionStatement(
   lines: [(number: Int, text: String)],
   startIndex: Int,
@@ -263,6 +244,15 @@ func swiftmutSourceLocation(
   mutation: SwiftmutMutation,
   config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  func usableConditionSourceLocation(
+    _ location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)
+  ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+    if swiftmutSourceLocationBelongsToFunction(location, function: function, config: config) {
+      return location
+    }
+    return nil
+  }
+
   let completeExpressionLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
   if let comparison = instruction as? BuiltinInst,
      swiftmutIsComparisonBuiltin(comparison),
@@ -301,18 +291,18 @@ func swiftmutSourceLocation(
     if let completeExpressionLocation,
        completeExpressionLocation.file == swiftmutTrimPackageRoot(matchedPath, config: config),
        completeExpressionLocation.line == fileNameAndPosition.line {
-      return completeExpressionLocation
+      return usableConditionSourceLocation(completeExpressionLocation)
     }
-    return (
+    return usableConditionSourceLocation((
       swiftmutTrimPackageRoot(matchedPath, config: config),
       fileNameAndPosition.line,
       fileNameAndPosition.column,
       "",
-      "")
+      ""))
   }
 
   if let completeExpressionLocation {
-    return completeExpressionLocation
+    return usableConditionSourceLocation(completeExpressionLocation)
   }
 
   if mutation.sourceOriginal == "condition" {
@@ -327,7 +317,7 @@ func swiftmutSourceLocation(
             ) else {
         continue
       }
-      return located
+      return usableConditionSourceLocation(located)
     }
   }
 
@@ -345,6 +335,15 @@ func swiftmutSourceLocation(
   guard swiftmutIsComparisonBuiltin(comparison) else {
     return nil
   }
+  func usableConditionSourceLocation(
+    _ location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)
+  ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+    if swiftmutSourceLocationBelongsToFunction(location, function: function, config: config) {
+      return location
+    }
+    return nil
+  }
+
   if let functionSourceLocation = swiftmutFunctionSourceLocation(for: function, config: config),
      let located = swiftmutFindUniqueExplicitConditionSourceLocation(
        path: functionSourceLocation.path,
@@ -352,7 +351,7 @@ func swiftmutSourceLocation(
        mutation: mutation,
        config: config
      ) {
-    return located
+    return usableConditionSourceLocation(located)
   }
   if let located = swiftmutFindOrdinalExplicitConditionSourceLocation(
     moduleName: moduleName,
@@ -362,7 +361,7 @@ func swiftmutSourceLocation(
     mutation: mutation,
     config: config
   ) {
-    return located
+    return usableConditionSourceLocation(located)
   }
   if let located = swiftmutFindBooleanNegatedConditionSourceLocation(
     moduleName: moduleName,
@@ -371,7 +370,7 @@ func swiftmutSourceLocation(
     mutation: mutation,
     config: config
   ) {
-    return located
+    return usableConditionSourceLocation(located)
   }
   if mutation.sourceOriginal == "condition",
      let located = swiftmutFindDescribedGenericConditionSourceLocation(
@@ -381,9 +380,9 @@ func swiftmutSourceLocation(
        mutation: mutation,
        config: config
      ) {
-    return located
+    return usableConditionSourceLocation(located)
   }
-  return swiftmutFindDescribedSourceOperator(
+  if let located = swiftmutFindDescribedSourceOperator(
     moduleName: moduleName,
     functionLocation: function.location.description,
     locationDescription: branch.location.description,
@@ -395,7 +394,10 @@ func swiftmutSourceLocation(
     branch: branch,
     locationDescription: branch.location.description,
     mutation: mutation,
-    config: config)
+    config: config) {
+    return usableConditionSourceLocation(located)
+  }
+  return nil
 }
 
 func swiftmutFindDescribedGenericConditionSourceLocation(
@@ -477,46 +479,6 @@ func swiftmutGenericConditionSourceLocationIsExplicit(
   }
 }
 
-func swiftmutSourceLine(
-  file: String,
-  line: Int,
-  config: SwiftmutConfig
-) -> String? {
-  guard line > 0 else {
-    return nil
-  }
-
-  let path: String
-  if file.hasPrefix("/") || config.packageRoot.isEmpty {
-    path = file
-  } else {
-    path = config.packageRoot + "/" + file
-  }
-  guard let matchedPath = swiftmutIncludedSourcePath(path, config: config),
-        let text = swiftmutRead(matchedPath) else {
-    return nil
-  }
-
-  var currentLine = 1
-  var lineStart = text.startIndex
-  var index = text.startIndex
-  while index < text.endIndex {
-    if text[index] == "\n" {
-      if currentLine == line {
-        return String(text[lineStart..<index])
-      }
-      currentLine += 1
-      lineStart = text.index(after: index)
-    }
-    index = text.index(after: index)
-  }
-
-  if currentLine == line {
-    return String(text[lineStart..<text.endIndex])
-  }
-  return nil
-}
-
 func swiftmutGenericConditionSourceMutated(
   _ sourceOriginal: String,
   mutation: SwiftmutMutation,
@@ -577,32 +539,6 @@ func swiftmutReplaceFirstSourceOperator(
       return prefix + sourceMutated + suffix
     }
     index += 1
-  }
-  return nil
-}
-
-func swiftmutAbsoluteSourceLine(path: String, line: Int) -> String? {
-  guard line > 0,
-        let text = swiftmutRead(path) else {
-    return nil
-  }
-
-  var currentLine = 1
-  var lineStart = text.startIndex
-  var index = text.startIndex
-  while index < text.endIndex {
-    if text[index] == "\n" {
-      if currentLine == line {
-        return String(text[lineStart..<index])
-      }
-      currentLine += 1
-      lineStart = text.index(after: index)
-    }
-    index = text.index(after: index)
-  }
-
-  if currentLine == line {
-    return String(text[lineStart..<text.endIndex])
   }
   return nil
 }

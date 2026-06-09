@@ -556,6 +556,11 @@ func swiftmutDescribedGenericConditionNeedle(_ snippet: String) -> String? {
   if start < end && bytes[start] == 33 {
     start = swiftmutSkipHorizontalWhitespace(bytes, from: start + 1)
   }
+  if let elseIndex = swiftmutTopLevelASCIIIndex(bytes, start: start, end: end, pattern: " else") {
+    end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: elseIndex)
+  } else if let elseIndex = swiftmutTopLevelASCIIIndex(bytes, start: start, end: end, pattern: " els") {
+    end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: elseIndex)
+  }
   while end > start {
     let byte = bytes[end - 1]
     if byte == 44 || byte == 123 || byte == 125 {

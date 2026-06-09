@@ -529,6 +529,18 @@ func swiftmutFindDescribedSourceOperatorInFile(
 }
 
 func swiftmutDescribedSourceOperatorNeedle(_ snippet: String) -> String? {
+  if snippet.contains("\n") {
+    for line in snippet.split(separator: "\n", omittingEmptySubsequences: false) {
+      if let needle = swiftmutSingleLineDescribedSourceOperatorNeedle(String(line)) {
+        return needle
+      }
+    }
+    return nil
+  }
+  return swiftmutSingleLineDescribedSourceOperatorNeedle(snippet)
+}
+
+func swiftmutSingleLineDescribedSourceOperatorNeedle(_ snippet: String) -> String? {
   let bytes = Array(snippet.utf8)
   var start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
   var end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)

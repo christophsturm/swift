@@ -27,6 +27,7 @@
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-build-swift -O %t/Value.swift %t/main.swift -module-name SwiftmutBoolCallConditionOwnsValueApply -Xfrontend -external-pass-pipeline-filename -Xfrontend %t/pipeline.yaml -o %t/a.out
 // RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
 // RUN: %FileCheck %s --input-file %t/all-fragments.json
+// RUN: %FileCheck %s --check-prefix=NOCHAIN --input-file %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
 
 //--- Value.swift
@@ -71,6 +72,10 @@ public func swiftmutPrefixClassifierShape(_ text: String) -> Int {
 // CHECK-DAG: "function":"{{.*}}swiftmutCheckySiSSF"{{.*}}"siteKind":"condition"{{.*}}"sourceOriginal":"swiftmutBoolCall(text)","sourceMutated":"false"{{.*}}"sourceOriginal":"swiftmutBoolCall(text)","sourceMutated":"true"
 // CHECK-DAG: "function":"{{.*}}swiftmutDirectPrefixCheckySiSSF"{{.*}}"siteKind":"condition"{{.*}}"sourceOriginal":"text.hasPrefix(\"@\")","sourceMutated":"false"{{.*}}"sourceOriginal":"text.hasPrefix(\"@\")","sourceMutated":"true"
 // CHECK-DAG: "function":"{{.*}}swiftmutPrefixClassifierShapeySiSSF"{{.*}}"siteKind":"condition"{{.*}}"sourceOriginal":"text.hasPrefix(\"@\")","sourceMutated":"false"{{.*}}"sourceOriginal":"text.hasPrefix(\"@\")","sourceMutated":"true"
+// NOCHAIN: "sites"
+// NOCHAIN-NOT: "sourceOriginal":"text.hasPrefix(\"//\")"
+// NOCHAIN-NOT: "sourceOriginal":"text.hasPrefix(\"import \")"
+// NOCHAIN-NOT: "sourceOriginal":"text == \"import\""
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutBoolCallConditionOwnsValueApply","function":"{{.*}}swiftmutCheckySiSSF"
 // EVENTS-SAME: "conditionSites":"1"
 // EVENTS-SAME: "valueApplySites":"0"

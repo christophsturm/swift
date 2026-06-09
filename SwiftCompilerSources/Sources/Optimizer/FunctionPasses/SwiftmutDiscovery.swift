@@ -173,7 +173,16 @@ func swiftmutDiscoverConditionSites(
         }
       }
       let resolvedLocation: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)?
-      if let location {
+      if comparison != nil,
+         mutation.sourceOriginal == "condition",
+         let siteLocation = sourceLocation {
+        resolvedLocation = (
+          siteLocation.file,
+          siteLocation.line,
+          siteLocation.column,
+          siteLocation.sourceOriginal,
+          mutation.sourceMutated)
+      } else if let location {
         resolvedLocation = location
       } else if mutation.sourceOriginal == "condition",
                 let siteLocation = sourceLocation {
@@ -270,7 +279,10 @@ func swiftmutDiscoverConditionSites(
     ))
   }
 
-  return SwiftmutConditionDiscoveryResult(sites: sites, stats: stats)
+  return SwiftmutConditionDiscoveryResult(
+    sites: swiftmutMergingGenericDuplicateConditionSites(sites),
+    stats: stats
+  )
 }
 
 func swiftmutDiscoverReturnSites(

@@ -43,6 +43,7 @@ swift_compiler_sources(Optimizer
   SwiftmutAssignmentText.swift
   SwiftmutBooleanNegationConditionSourceLocations.swift
   SwiftmutClosureArgumentReturnSourceLocations.swift
+  SwiftmutConditionSiteMerging.swift
   SwiftmutConfig.swift
   SwiftmutDefaultArgumentReturnSourceLocations.swift
   SwiftmutDefaultArgumentValueApplySourceLocations.swift

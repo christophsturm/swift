@@ -411,12 +411,26 @@ func swiftmutBranchSourceLocation(
       ) {
         return sourceLocation
       }
-      return (
+      let fallback = (
         swiftmutTrimPackageRoot(matchedPath, config: config),
         fileNameAndPosition.line,
         fileNameAndPosition.column,
         mutation.sourceOriginal,
         mutation.sourceMutated)
+      if swiftmutGenericConditionSourceIsExplicit(file: fallback.0, line: fallback.1, config: config) {
+        return fallback
+      }
+      if let ordinal = swiftmutGenericConditionBranchOrdinal(branch),
+         let sourceLocation = swiftmutFindGenericConditionSourceLocationByBranchOrdinal(
+          path: matchedPath,
+          preferredLine: fileNameAndPosition.line,
+          branchOrdinal: ordinal,
+          mutation: mutation,
+          config: config
+         ) {
+        return sourceLocation
+      }
+      return fallback
     }
   }
 
@@ -434,6 +448,16 @@ func swiftmutBranchSourceLocation(
     ) {
       return anchored
     }
+    if let ordinal = swiftmutGenericConditionBranchOrdinal(branch),
+       let sourceLocation = swiftmutFindGenericConditionSourceLocationByBranchOrdinal(
+        path: path,
+        preferredLine: line,
+        branchOrdinal: ordinal,
+        mutation: mutation,
+        config: config
+       ) {
+      return sourceLocation
+    }
     return (
       swiftmutTrimPackageRoot(path, config: config),
       line,
@@ -442,6 +466,137 @@ func swiftmutBranchSourceLocation(
       mutation.sourceMutated)
   }
   return nil
+}
+
+func swiftmutGenericConditionBranchOrdinal(_ branch: CondBranchInst) -> Int? {
+  var ordinal = 0
+  for block in branch.parentFunction.blocks {
+    guard let candidate = block.terminator as? CondBranchInst else {
+      continue
+    }
+    if let comparison = candidate.condition as? BuiltinInst,
+       swiftmutIsComparisonBuiltin(comparison) {
+      continue
+    }
+    ordinal += 1
+    if candidate === branch {
+      return ordinal
+    }
+  }
+  return nil
+}
+
+func swiftmutFindGenericConditionSourceLocationByBranchOrdinal(
+  path: String,
+  preferredLine: Int,
+  branchOrdinal: Int,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard preferredLine > 0,
+        branchOrdinal > 0,
+        let text = swiftmutRead(path) else {
+    return nil
+  }
+
+  var consumedBranches = 0
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+  var braceDepth = 0
+  var sawOpeningBrace = false
+
+  func inspectLine(_ lineText: String, line: Int)
+    -> (line: Int, column: Int, sourceOriginal: String)? {
+    guard line >= preferredLine,
+          let expression = swiftmutGenericConditionExpression(lineText) else {
+      return nil
+    }
+    let branchSpan = swiftmutGenericConditionBranchSpan(expression.sourceOriginal)
+    let rangeStart = consumedBranches + 1
+    let rangeEnd = consumedBranches + branchSpan
+    consumedBranches = rangeEnd
+    guard branchSpan == 1,
+          branchOrdinal >= rangeStart,
+          branchOrdinal <= rangeEnd else {
+      return nil
+    }
+    return (line, expression.column, expression.sourceOriginal)
+  }
+
+  func updateBraceDepth(_ lineText: String) {
+    for byte in lineText.utf8 {
+      if byte == 123 {
+        braceDepth += 1
+        sawOpeningBrace = true
+      } else if byte == 125 {
+        braceDepth -= 1
+      }
+    }
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      let lineText = String(text[lineStart..<index])
+      if currentLine >= preferredLine {
+        if let match = inspectLine(lineText, line: currentLine) {
+          return (
+            swiftmutTrimPackageRoot(path, config: config),
+            match.line,
+            match.column,
+            match.sourceOriginal,
+            mutation.sourceMutated)
+        }
+        updateBraceDepth(lineText)
+        if consumedBranches >= branchOrdinal {
+          break
+        }
+        if sawOpeningBrace && braceDepth <= 0 {
+          break
+        }
+        if currentLine >= preferredLine + 300 {
+          break
+        }
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && currentLine >= preferredLine {
+    let lineText = String(text[lineStart..<text.endIndex])
+    if let match = inspectLine(lineText, line: currentLine) {
+      return (
+        swiftmutTrimPackageRoot(path, config: config),
+        match.line,
+        match.column,
+        match.sourceOriginal,
+        mutation.sourceMutated)
+    }
+  }
+  return nil
+}
+
+func swiftmutGenericConditionBranchSpan(_ sourceOriginal: String) -> Int {
+  let bytes = Array(sourceOriginal.utf8)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  var count = 1
+  var searchStart = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  while let logical = swiftmutTopLevelLogicalOperatorIndex(bytes: bytes, start: searchStart, end: end) {
+    count += 1
+    searchStart = logical + 2
+  }
+  return count
+}
+
+func swiftmutTopLevelLogicalOperatorIndex(bytes: [UInt8], start: Int, end: Int) -> Int? {
+  swiftmutFirstTopLevelIndex(bytes, start: start, end: end) { index in
+    guard index + 1 < end else {
+      return false
+    }
+    return (bytes[index] == 38 || bytes[index] == 124) && bytes[index + 1] == bytes[index]
+  }
 }
 
 func swiftmutFindUniqueExplicitConditionSourceLocation(

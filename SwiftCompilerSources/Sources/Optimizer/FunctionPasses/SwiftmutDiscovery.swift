@@ -702,6 +702,9 @@ func swiftmutDiscoverValueApplySites(
         ) {
           continue
         }
+        if swiftmutValueApplyLocationIsOwnedByExplicitCondition(location, config: config) {
+          continue
+        }
         guard swiftmutSourceOriginalIsComplete(location.sourceOriginal) else {
           stats.sourceLocationMisses += 1
           continue
@@ -774,6 +777,17 @@ private func swiftmutValueApplyCanBypassOriginalApply(_ apply: ApplyInst) -> Boo
     }
   }
   return true
+}
+
+private func swiftmutValueApplyLocationIsOwnedByExplicitCondition(
+  _ location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String),
+  config: SwiftmutConfig
+) -> Bool {
+  guard let sourceLine = swiftmutSourceLine(file: location.file, line: location.line, config: config),
+        let condition = swiftmutGenericConditionExpression(sourceLine) else {
+    return false
+  }
+  return condition.sourceOriginal == location.sourceOriginal
 }
 
 private func swiftmutValueApplyLocationConflictsWithClosureArgumentPredicate(

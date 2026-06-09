@@ -49,6 +49,7 @@ swift_compiler_sources(Optimizer
   SwiftmutDefaultArgumentReturnSourceLocations.swift
   SwiftmutDefaultArgumentValueApplySourceLocations.swift
   SwiftmutDescribedAssignmentSourceLocations.swift
+  SwiftmutDescribedOperatorSourceLocations.swift
   SwiftmutDescribedValueSourceLocations.swift
   SwiftmutDictionaryLiteralSourceLocations.swift
   SwiftmutDiscovery.swift
@@ -74,6 +75,7 @@ swift_compiler_sources(Optimizer
   SwiftmutOperatorText.swift
   SwiftmutOperatorValueApplySourceLocations.swift
   SwiftmutOrdinalConditionSourceLocations.swift
+  SwiftmutOrdinalOperatorSourceLocations.swift
   SwiftmutReturnSourceLocations.swift
   SwiftmutReturnText.swift
   SwiftmutRuntimeChoice.swift

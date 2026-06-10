@@ -27,6 +27,7 @@
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-build-swift -O %t/Classifier.swift %t/main.swift -module-name SwiftmutSameTypeInlinedPredicateSourceLocations -Xfrontend -external-pass-pipeline-filename -Xfrontend %t/pipeline.yaml -o %t/a.out
 // RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
 // RUN: %FileCheck %s --input-file %t/all-fragments.json
+// RUN: %FileCheck %s --check-prefix=NO-WRONG-RETURN --input-file %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=CLONES --input-file %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
 
@@ -37,6 +38,14 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 }
 
 public struct SwiftmutMangledFunctionClassifier {
+  @inline(__always)
+  public static func swiftmutIsClone(function: String) -> Bool {
+    guard swiftmutIsMangledSwiftFunction(function) else {
+      return false
+    }
+    return function.hasSuffix("Clone")
+  }
+
   @inline(__always)
   public static func swiftmutIsMangledSwiftFunction(_ function: String) -> Bool {
     return function.hasPrefix("$s") || function.hasPrefix("@$s")
@@ -53,6 +62,9 @@ public struct SwiftmutMangledFunctionClassifier {
   }
 
   public static func swiftmutReason(function: String) -> Int {
+    if swiftmutIsClone(function: function) {
+      return 3
+    }
     if swiftmutIsGeneratedReabstractionThunk(function: function) {
       return 1
     }
@@ -74,10 +86,13 @@ public func swiftmutClassify(_ function: String) -> Int {
 // CHECK-DAG: "function":"{{.*}}0A25MangledFunctionClassifierV14swiftmutReason8functionSiSS_tFZ"{{.*}}"siteKind":"condition"{{.*}}"sourceOriginal":"swiftmutIsGeneratedReabstractionThunk(function: function)","sourceMutated":"false"{{.*}}"sourceOriginal":"swiftmutIsGeneratedReabstractionThunk(function: function)","sourceMutated":"true"
 // CHECK-DAG: "function":"{{.*}}0A25MangledFunctionClassifierV14swiftmutReason8functionSiSS_tFZ"{{.*}}"siteKind":"condition"{{.*}}"sourceOriginal":"swiftmutDirectProbe(function)","sourceMutated":"false"{{.*}}"sourceOriginal":"swiftmutDirectProbe(function)","sourceMutated":"true"
 
+// NO-WRONG-RETURN-NOT: "function":"{{.*}}0A25MangledFunctionClassifierV010swiftmutIsh5SwiftI0ySbSSFZ"{{.*}}"sourceLocation":{"file":"Classifier.swift","line":12,"column":5},"siteKind":"returnValue"
+
 // CLONES-NOT: Tf4
 // CLONES: "siteKind"
 
 // EVENTS-DAG: "event":"metamutantDiscovery","module":"SwiftmutSameTypeInlinedPredicateSourceLocations","function":"{{.*}}0A25MangledFunctionClassifierV010swiftmutIsh5SwiftI0ySbSSFZ"
+// EVENTS-DAG: "event":"metamutantDiscovery","module":"SwiftmutSameTypeInlinedPredicateSourceLocations","function":"{{.*}}0A25MangledFunctionClassifierV15swiftmutIsClone8functionSbSS_tFZ"
 // EVENTS-DAG: "event":"metamutantDiscovery","module":"SwiftmutSameTypeInlinedPredicateSourceLocations","function":"{{.*}}0A25MangledFunctionClassifierV37swiftmutIsGeneratedReabstractionThunk8functionSbSS_tFZ"
 // EVENTS-DAG: "event":"metamutantDiscovery","module":"SwiftmutSameTypeInlinedPredicateSourceLocations","function":"{{.*}}0A25MangledFunctionClassifierV19swiftmutDirectProbeySbSSFZ"
 // EVENTS-DAG: "event":"metamutantDiscovery","module":"SwiftmutSameTypeInlinedPredicateSourceLocations","function":"{{.*}}0A25MangledFunctionClassifierV14swiftmutReason8functionSiSS_tFZ"

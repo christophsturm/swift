@@ -33,9 +33,13 @@ func swiftmutSourceLineBelongsToFunction(
   config: SwiftmutConfig
 ) -> Bool {
   guard let functionLocation = swiftmutFunctionSourceLocation(for: function, config: config),
-        functionLocation.path == path,
-        line >= functionLocation.line,
-        let text = swiftmutRead(path) else {
+        functionLocation.path == path else {
+    return true
+  }
+  guard line >= functionLocation.line else {
+    return false
+  }
+  guard let text = swiftmutRead(path) else {
     return true
   }
 

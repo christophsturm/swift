@@ -23,6 +23,14 @@ func swiftmutReturnSourceLocation(
     _ location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String),
     path: String
   ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+    guard swiftmutSourceLineBelongsToFunction(
+      location.line,
+      path: path,
+      function: returnInst.parentFunction,
+      config: config
+    ) else {
+      return nil
+    }
     if swiftmutReturnSourceLocationIsUsableForFunction(
       location,
       functionName: functionName,

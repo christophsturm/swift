@@ -829,7 +829,80 @@ private func swiftmutValueApplyLocationIsOwnedByExplicitCondition(
         let condition = swiftmutGenericConditionExpression(sourceLine) else {
     return false
   }
-  return condition.sourceOriginal == location.sourceOriginal
+  if condition.sourceOriginal == location.sourceOriginal {
+    return true
+  }
+  guard swiftmutSourceLineLooksLikeExplicitValueCondition(condition.sourceOriginal) else {
+    return false
+  }
+  return swiftmutConditionSourceContainsValueExpression(
+    condition.sourceOriginal,
+    valueExpression: location.sourceOriginal
+  )
+}
+
+private func swiftmutSourceLineLooksLikeExplicitValueCondition(_ sourceOriginal: String) -> Bool {
+  let operators = ["==", "!=", "<=", ">=", "&&", "||", "<", ">"]
+  return operators.contains { sourceOriginal.contains($0) }
+}
+
+private func swiftmutConditionSourceContainsValueExpression(
+  _ condition: String,
+  valueExpression: String
+) -> Bool {
+  let conditionBytes = Array(condition.utf8)
+  let valueBytes = Array(valueExpression.utf8)
+  let valueStart = swiftmutSkipHorizontalWhitespace(valueBytes, from: 0)
+  let valueEnd = swiftmutTrimTrailingHorizontalWhitespace(valueBytes, end: valueBytes.count)
+  guard valueStart < valueEnd,
+        valueEnd - valueStart < conditionBytes.count else {
+    return false
+  }
+  let needle = Array(valueBytes[valueStart..<valueEnd])
+  var index = 0
+  while index + needle.count <= conditionBytes.count {
+    if swiftmutBytesMatch(conditionBytes, start: index, needle: needle),
+       swiftmutConditionSubexpressionBoundaryIsClean(
+        conditionBytes,
+        lowerBound: index,
+        upperBound: index + needle.count
+       ) {
+      return true
+    }
+    index += 1
+  }
+  return false
+}
+
+private func swiftmutBytesMatch(_ bytes: [UInt8], start: Int, needle: [UInt8]) -> Bool {
+  var offset = 0
+  while offset < needle.count {
+    if bytes[start + offset] != needle[offset] {
+      return false
+    }
+    offset += 1
+  }
+  return true
+}
+
+private func swiftmutConditionSubexpressionBoundaryIsClean(
+  _ condition: [UInt8],
+  lowerBound: Int,
+  upperBound: Int
+) -> Bool {
+  if lowerBound > 0 {
+    let previous = condition[lowerBound - 1]
+    if swiftmutIsASCIILetterNumberOrUnderscore(previous) {
+      return false
+    }
+  }
+  if upperBound < condition.count {
+    let next = condition[upperBound]
+    if swiftmutIsASCIILetterNumberOrUnderscore(next) {
+      return false
+    }
+  }
+  return true
 }
 
 private func swiftmutValueApplyLocationConflictsWithClosureArgumentPredicate(

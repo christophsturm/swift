@@ -582,6 +582,8 @@ func swiftmutGenericConditionExpression(
   } else if swiftmutASCIIHasPrefix(bytes, start: start, prefix: "for ")
       || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "for(") {
     expressionRange = swiftmutForWhereConditionRange(bytes: bytes, start: start, end: lineEnd)
+  } else if swiftmutASCIIHasPrefix(bytes, start: start, prefix: "case ") {
+    expressionRange = swiftmutCaseWhereConditionRange(bytes: bytes, start: start, end: lineEnd)
   } else {
     expressionRange = nil
   }
@@ -787,6 +789,20 @@ func swiftmutForWhereConditionRange(
   return (valueStart, valueEnd)
 }
 
+func swiftmutCaseWhereConditionRange(
+  bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> (start: Int, end: Int)? {
+  guard let whereIndex = swiftmutTopLevelASCIIIndex(bytes, start: start, end: end, pattern: " where ") else {
+    return nil
+  }
+  let valueStart = whereIndex + 7
+  let colonIndex = swiftmutTopLevelByteIndex(bytes, start: valueStart, end: end, byte: 58)
+  let valueEnd = colonIndex ?? end
+  return (valueStart, valueEnd)
+}
+
 func swiftmutParenthesizedControlConditionRange(
   bytes: [UInt8],
   open: Int,
@@ -831,6 +847,7 @@ func swiftmutSourceLineLooksLikeExplicitCondition(_ line: String) -> Bool {
     || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "while(")
     || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "for ")
     || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "for(")
+    || swiftmutASCIIHasPrefix(bytes, start: start, prefix: "case ")
 }
 
 func swiftmutSourceLineLooksLikeOptionalBindingCondition(bytes: [UInt8], start: Int) -> Bool {

@@ -22,7 +22,7 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutStoredPropertyReturnSourceLocations -external-pass-pipeline-filename %t/pipeline.yaml %s -o /dev/null
-// RUN: %FileCheck %s --input-file %t/mutants.jsonl
+// RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
 
 public struct SwiftmutFeatureFlag {
   public let isEnabled = true
@@ -45,10 +45,6 @@ public struct SwiftmutCoverageLine {
   public let file: String
 }
 
-// CHECK: "sourceOriginal":"true","sourceMutated":"false"
-// CHECK-NOT: V10totalLinesSivg{{.*}}"sourceOriginal":"Dictionary(grouping: lines, by: \\.file)"
-// CHECK-NOT: V11missedLinesSivg{{.*}}"sourceOriginal":"Dictionary(grouping: lines, by: \\.file)"
-// CHECK: V10totalLinesSivg
-// CHECK-SAME: "sourceOriginal":"totalLines","sourceMutated":"0"
-// CHECK: V11missedLinesSivg
-// CHECK-SAME: "sourceOriginal":"missedLines","sourceMutated":"0"
+// EVENTS-DAG: "event":"functionSkip","reason":"generatedStoredPropertyGetter","module":"SwiftmutStoredPropertyReturnSourceLocations","function":"{{.*}}V9isEnabledSbvg"
+// EVENTS-DAG: "event":"functionSkip","reason":"generatedStoredPropertyGetter","module":"SwiftmutStoredPropertyReturnSourceLocations","function":"{{.*}}V10totalLinesSivg"
+// EVENTS-DAG: "event":"functionSkip","reason":"generatedStoredPropertyGetter","module":"SwiftmutStoredPropertyReturnSourceLocations","function":"{{.*}}V11missedLinesSivg"

@@ -25,6 +25,9 @@ func swiftmutExclusionReason(
   if swiftmutIsGeneratedSpecializationFunctionName(function.name.string) {
     return "generatedSpecialization"
   }
+  if swiftmutIsGeneratedStoredPropertyGetter(function: function, config: config) {
+    return "generatedStoredPropertyGetter"
+  }
   let location = function.location.description
   for fragment in config.excludePathFragments {
     if location.contains(fragment) {
@@ -84,6 +87,40 @@ func swiftmutIsGeneratedSpecializationFunctionName(_ name: String) -> Bool {
 
 func swiftmutIsMangledFunctionName(_ name: String) -> Bool {
   name.hasPrefix("$s") || name.hasPrefix("@$s")
+}
+
+func swiftmutIsGeneratedStoredPropertyGetter(
+  function: Function,
+  config: SwiftmutConfig
+) -> Bool {
+  let name = function.name.string
+  guard swiftmutIsMangledFunctionName(name),
+        name.hasSuffix("vg") else {
+    return false
+  }
+
+  let location = function.location.description
+  for path in swiftmutSwiftSourcePaths(config: config) {
+    guard let line = swiftmutPreferredLine(in: location, path: path),
+          let lineText = swiftmutAbsoluteSourceLine(path: path, line: line),
+          swiftmutLineLooksLikeStoredPropertyDeclaration(lineText) else {
+      continue
+    }
+    return true
+  }
+  return false
+}
+
+func swiftmutLineLooksLikeStoredPropertyDeclaration(_ line: String) -> Bool {
+  let bytes = Array(line.utf8)
+  let lineStart = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let lineEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard lineStart < lineEnd,
+        swiftmutPropertyDeclarationKeyword(bytes: bytes, start: lineStart, end: lineEnd) != nil,
+        swiftmutTopLevelByteIndex(bytes, start: lineStart, end: lineEnd, byte: 123) == nil else {
+    return false
+  }
+  return true
 }
 
 func swiftmutFindSourceOperator(

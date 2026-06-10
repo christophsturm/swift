@@ -37,6 +37,11 @@ public func swiftmutBoolCall(_ text: String) -> Bool {
   return text.hasPrefix("@")
 }
 
+@inline(never)
+public func swiftmutCandidateCount(_ values: [Int]) -> Int {
+  return values.count
+}
+
 //--- main.swift
 @_silgen_name("__swiftmut_visit")
 public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
@@ -57,6 +62,13 @@ public func swiftmutDirectPrefixCheck(_ text: String) -> Int {
   return 0
 }
 
+public func swiftmutCountComparisonCheck(_ values: [Int]) -> Int {
+  if swiftmutCandidateCount(values) == 0 {
+    return 1
+  }
+  return 0
+}
+
 public func swiftmutPrefixClassifierShape(_ text: String) -> Int {
   if text.hasPrefix("//") || text.hasPrefix("/*") || text.hasPrefix("*") {
     return 1
@@ -72,16 +84,21 @@ public func swiftmutPrefixClassifierShape(_ text: String) -> Int {
 
 // CHECK-DAG: "function":"{{.*}}swiftmutCheckySiSSF"{{.*}}"siteKind":"condition"{{.*}}"sourceOriginal":"swiftmutBoolCall(text)","sourceMutated":"false"{{.*}}"sourceOriginal":"swiftmutBoolCall(text)","sourceMutated":"true"
 // CHECK-DAG: "function":"{{.*}}swiftmutDirectPrefixCheckySiSSF"{{.*}}"siteKind":"condition"{{.*}}"sourceOriginal":"text.hasPrefix(\"@\")","sourceMutated":"false"{{.*}}"sourceOriginal":"text.hasPrefix(\"@\")","sourceMutated":"true"
+// CHECK-DAG: "function":"{{.*}}swiftmutCountComparisonCheckySiSaySiGF"{{.*}}"siteKind":"condition"{{.*}}"sourceOriginal":"swiftmutCandidateCount(values) == 0","sourceMutated":"false"{{.*}}"sourceOriginal":"swiftmutCandidateCount(values) == 0","sourceMutated":"true"
 // CHECK-DAG: "function":"{{.*}}swiftmutPrefixClassifierShapeySiSSF"{{.*}}"siteKind":"condition"{{.*}}"sourceOriginal":"text.hasPrefix(\"@\")","sourceMutated":"false"{{.*}}"sourceOriginal":"text.hasPrefix(\"@\")","sourceMutated":"true"
 // NOCHAIN: "sites"
 // NOCHAIN-NOT: "sourceOriginal":"text.hasPrefix(\"//\")"
 // NOCHAIN-NOT: "sourceOriginal":"text.hasPrefix(\"import \")"
 // NOCHAIN-NOT: "sourceOriginal":"text == \"import\""
+// NOCHAIN-NOT: "siteKind":"valueApply"{{.*}}"sourceOriginal":"swiftmutCandidateCount(values)"
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutBoolCallConditionOwnsValueApply","function":"{{.*}}swiftmutCheckySiSSF"
 // EVENTS-SAME: "conditionSites":"1"
 // RUNTIME-SKIP: "event":"functionSkip","reason":"generatedRuntimeSupport","module":"SwiftmutBoolCallConditionOwnsValueApply","function":"__swiftmut_visit"
 // EVENTS-SAME: "valueApplySites":"0"
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutBoolCallConditionOwnsValueApply","function":"{{.*}}swiftmutDirectPrefixCheckySiSSF"
+// EVENTS-SAME: "conditionSites":"1"
+// EVENTS-SAME: "valueApplySites":"0"
+// EVENTS: "event":"metamutantDiscovery","module":"SwiftmutBoolCallConditionOwnsValueApply","function":"{{.*}}swiftmutCountComparisonCheckySiSaySiGF"
 // EVENTS-SAME: "conditionSites":"1"
 // EVENTS-SAME: "valueApplySites":"0"
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutBoolCallConditionOwnsValueApply","function":"{{.*}}swiftmutPrefixClassifierShapeySiSSF"

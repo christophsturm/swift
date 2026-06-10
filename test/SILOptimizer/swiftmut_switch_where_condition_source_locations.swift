@@ -62,13 +62,5 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
-// CHECK: "sourceLocation":{"file":"swiftmut_switch_where_condition_source_locations.swift","line":42,"column":39}
-// CHECK-SAME: "siteKind":"condition"
-// CHECK-SAME: "sourceOriginal":"total >= limit","sourceMutated":"total > limit"
-// CHECK-SAME: "sourceOriginal":"total >= limit","sourceMutated":"total < limit"
-// CHECK-SAME: "sourceOriginal":"total >= limit","sourceMutated":"false"
-// CHECK-SAME: "sourceOriginal":"total >= limit","sourceMutated":"true"
-// CHECK: "sourceLocation":{"file":"swiftmut_switch_where_condition_source_locations.swift","line":53,"column":33}
-// CHECK-SAME: "siteKind":"condition"
-// CHECK-SAME: "sourceOriginal":"swiftmutSwitchWhereAccepts(total)","sourceMutated":"false"
-// CHECK-SAME: "sourceOriginal":"swiftmutSwitchWhereAccepts(total)","sourceMutated":"true"
+// CHECK-DAG: "sourceLocation":{"file":"swiftmut_switch_where_condition_source_locations.swift","line":42,"column":39}{{.*}}"siteKind":"condition"{{.*}}"sourceOriginal":"total >= limit","sourceMutated":"total > limit"{{.*}}"sourceOriginal":"total >= limit","sourceMutated":"total < limit"{{.*}}"sourceOriginal":"total >= limit","sourceMutated":"false"{{.*}}"sourceOriginal":"total >= limit","sourceMutated":"true"
+// CHECK-DAG: "sourceLocation":{"file":"swiftmut_switch_where_condition_source_locations.swift","line":53,"column":33}{{.*}}"siteKind":"condition"{{.*}}"sourceOriginal":"swiftmutSwitchWhereAccepts(total)","sourceMutated":"false"{{.*}}"sourceOriginal":"swiftmutSwitchWhereAccepts(total)","sourceMutated":"true"

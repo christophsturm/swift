@@ -16,6 +16,9 @@ func swiftmutExclusionReason(
   function: Function,
   config: SwiftmutConfig
 ) -> String? {
+  if swiftmutIsGeneratedReabstractionThunk(function) {
+    return "generatedReabstractionThunk"
+  }
   if swiftmutIsGeneratedInvalidLocationFunction(function) {
     return "generatedInvalidLocation"
   }
@@ -29,6 +32,14 @@ func swiftmutExclusionReason(
     }
   }
   return nil
+}
+
+func swiftmutIsGeneratedReabstractionThunk(_ function: Function) -> Bool {
+  let location = function.location.description
+  guard location.contains("<compiler-generated>") else {
+    return false
+  }
+  return function.name.string.hasSuffix("TR")
 }
 
 func swiftmutIsGeneratedInvalidLocationFunction(_ function: Function) -> Bool {

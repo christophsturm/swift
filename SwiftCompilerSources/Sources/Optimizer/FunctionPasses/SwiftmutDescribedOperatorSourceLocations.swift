@@ -501,7 +501,15 @@ func swiftmutTernaryConditionStart(
         braceDepth -= 1
       }
     case 61:
-      if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 {
+      if parenDepth == 0
+          && bracketDepth == 0
+          && braceDepth == 0
+          && swiftmutTernaryConditionStartEqualsIsBoundary(
+            bytes: bytes,
+            index: index,
+            lineStart: lineStart,
+            questionIndex: questionIndex
+          ) {
         return index + 1
       }
     case 44:
@@ -513,6 +521,25 @@ func swiftmutTernaryConditionStart(
     }
   }
   return lineStart
+}
+
+func swiftmutTernaryConditionStartEqualsIsBoundary(
+  bytes: [UInt8],
+  index: Int,
+  lineStart: Int,
+  questionIndex: Int
+) -> Bool {
+  if index > lineStart {
+    let previous = bytes[index - 1]
+    if previous == 33 || previous == 60 || previous == 61 || previous == 62 {
+      return false
+    }
+  }
+  if index + 1 < questionIndex,
+     bytes[index + 1] == 61 {
+    return false
+  }
+  return true
 }
 
 func swiftmutSourceOperatorNeedleContainsOperator(_ needle: String) -> Bool {

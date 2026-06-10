@@ -22,7 +22,8 @@ func swiftmutExclusionReason(
   if swiftmutIsGeneratedInvalidLocationFunction(function) {
     return "generatedInvalidLocation"
   }
-  if swiftmutIsGeneratedSpecializationFunctionName(function.name.string) {
+  if config.mode != .metamutant,
+     swiftmutIsGeneratedSpecializationFunctionName(function.name.string) {
     return "generatedSpecialization"
   }
   let location = function.location.description

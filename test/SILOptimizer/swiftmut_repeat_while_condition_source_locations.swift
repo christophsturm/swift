@@ -37,6 +37,21 @@ public func swiftmutRepeatWhileTotal(_ values: [Int]) -> Int {
   return total
 }
 
+@inline(never)
+public func swiftmutRepeatWhileAccepts(_ index: Int, _ count: Int) -> Bool {
+  index != count
+}
+
+public func swiftmutRepeatWhileGenericTotal(_ values: [Int]) -> Int {
+  var total = 0
+  var index = 0
+  repeat {
+    total += index
+    index += 1
+  } while swiftmutRepeatWhileAccepts(index, values.count)
+  return total
+}
+
 @_silgen_name("__swiftmut_visit")
 public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
@@ -48,3 +63,7 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 // CHECK-SAME: "sourceOriginal":"index < values.count","sourceMutated":"index >= values.count"
 // CHECK-SAME: "sourceOriginal":"index < values.count","sourceMutated":"false"
 // CHECK-SAME: "sourceOriginal":"index < values.count","sourceMutated":"true"
+// CHECK: "sourceLocation":{"file":"swiftmut_repeat_while_condition_source_locations.swift","line":51,"column":11}
+// CHECK-SAME: "siteKind":"condition"
+// CHECK-SAME: "sourceOriginal":"swiftmutRepeatWhileAccepts(index, values.count)","sourceMutated":"false"
+// CHECK-SAME: "sourceOriginal":"swiftmutRepeatWhileAccepts(index, values.count)","sourceMutated":"true"

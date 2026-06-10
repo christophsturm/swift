@@ -22,7 +22,8 @@ func swiftmutExclusionReason(
   if swiftmutIsGeneratedInvalidLocationFunction(function) {
     return "generatedInvalidLocation"
   }
-  if swiftmutIsGeneratedSpecializationFunctionName(function.name.string) {
+  if function.isSpecialization
+    || swiftmutIsGeneratedSpecializationFunctionName(function.name.string) {
     return "generatedSpecialization"
   }
   if swiftmutIsGeneratedStoredPropertyGetter(function: function, config: config) {
@@ -38,11 +39,7 @@ func swiftmutExclusionReason(
 }
 
 func swiftmutIsGeneratedReabstractionThunk(_ function: Function) -> Bool {
-  let location = function.location.description
-  guard location.contains("<compiler-generated>") else {
-    return false
-  }
-  return function.name.string.hasSuffix("TR")
+  function.thunkKind == .reabstractionThunk
 }
 
 func swiftmutIsGeneratedInvalidLocationFunction(_ function: Function) -> Bool {
@@ -77,6 +74,9 @@ func swiftmutIsGeneratedRawRepresentableFunctionName(_ name: String) -> Bool {
     || name.contains("SgSS_tcfC")
 }
 
+// The Tf markers are mangling grammar for function-signature-optimization
+// clones, which do not carry the isSpecialization attribute (that covers
+// generic specialization only). Both checks together are exact.
 func swiftmutIsGeneratedSpecializationFunctionName(_ name: String) -> Bool {
   swiftmutIsMangledFunctionName(name)
     && (name.contains("FTf")

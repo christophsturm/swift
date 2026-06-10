@@ -430,7 +430,8 @@ func swiftmutFindOrdinalValueExpressionSourceLocation(
   expectedCount: Int,
   mutation: SwiftmutMutation,
   config: SwiftmutConfig,
-  requiresMultipleMatches: Bool = true
+  requiresMultipleMatches: Bool = true,
+  requiresDirectValueExpression: Bool = false
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
         ordinal > 0,
@@ -450,7 +451,11 @@ func swiftmutFindOrdinalValueExpressionSourceLocation(
   func inspectLine(_ lineText: String, line: Int) {
     guard line >= preferredLine,
           matches.count <= expectedCount,
-          let expression = swiftmutOrdinalValueExpression(lineText, mutation: mutation) else {
+          let expression = swiftmutOrdinalValueExpression(
+            lineText,
+            mutation: mutation,
+            requiresDirectValueExpression: requiresDirectValueExpression
+          ) else {
       return
     }
     matches.append((line, expression.column, expression.sourceOriginal, expression.sourceMutated))
@@ -758,9 +763,14 @@ func swiftmutValueExpressionOnLine(
 
 func swiftmutOrdinalValueExpression(
   _ line: String,
-  mutation: SwiftmutMutation
+  mutation: SwiftmutMutation,
+  requiresDirectValueExpression: Bool = false
 ) -> (column: Int, sourceOriginal: String, sourceMutated: String)? {
-  if let expression = swiftmutAssignmentValueExpression(line, mutation: mutation) {
+  if let expression = swiftmutAssignmentValueExpression(
+    line,
+    mutation: mutation,
+    requiresDirectValueExpression: requiresDirectValueExpression
+  ) {
     return expression
   }
   if let expression = swiftmutStandaloneLabeledValueExpression(line, mutation: mutation) {

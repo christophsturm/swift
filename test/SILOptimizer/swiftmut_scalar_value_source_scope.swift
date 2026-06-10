@@ -32,6 +32,13 @@ public struct SwiftmutScopedManifest {
     return productionIDs
   }
 
+  public func groupedByNonEmptyValues(_ values: [Int]) -> [Bool: [Int]] {
+    let grouped = Dictionary(grouping: values) { _ in
+      !values.isEmpty
+    }
+    return grouped
+  }
+
   public static func mergedFragments(_ fragments: [[Int]]) -> [Int] {
     let orderedSites = fragments
       .flatMap { $0 }
@@ -47,3 +54,5 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 
 // CHECK-NOT: filteringProductionMutants{{.*}}"sourceOriginal":"fragments"
 // CHECK: "sourceOriginal":"1","sourceMutated":"0"
+// CHECK-NOT: "sourceOriginal":"Dictionary(grouping: values)"
+// CHECK: "sourceOriginal":"!values.isEmpty","sourceMutated":"false"

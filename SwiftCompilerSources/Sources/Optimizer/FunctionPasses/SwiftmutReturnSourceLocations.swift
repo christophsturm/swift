@@ -680,7 +680,8 @@ func swiftmutFindOrdinalScalarValueSourceLocation(
     expectedCount: ordinal.count,
     mutation: mutation,
     config: config,
-    requiresMultipleMatches: false
+    requiresMultipleMatches: false,
+    requiresDirectValueExpression: true
   )
 }
 

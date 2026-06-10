@@ -24,7 +24,7 @@
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutScalarValueSourceScope -external-pass-pipeline-filename %t/pipeline.yaml %s -o /dev/null
 // RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
-// RUN: %FileCheck %s --input-file %t/all-fragments.json
+// RUN: %FileCheck %s --implicit-check-not='"sourceOriginal":"Dictionary(grouping: values)"' --input-file %t/all-fragments.json
 
 public struct SwiftmutScopedManifest {
   public func filteringProductionMutants(_ values: [Int]) -> Int {
@@ -53,6 +53,5 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 }
 
 // CHECK-NOT: filteringProductionMutants{{.*}}"sourceOriginal":"fragments"
-// CHECK: "sourceOriginal":"1","sourceMutated":"0"
-// CHECK-NOT: "sourceOriginal":"Dictionary(grouping: values)"
-// CHECK: "sourceOriginal":"!values.isEmpty","sourceMutated":"false"
+// CHECK-DAG: "sourceOriginal":"1","sourceMutated":"0"
+// CHECK-DAG: "sourceOriginal":"!values.isEmpty","sourceMutated":"false"

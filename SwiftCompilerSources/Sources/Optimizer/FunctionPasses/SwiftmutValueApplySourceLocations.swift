@@ -55,7 +55,7 @@ func swiftmutValueApplySourceLocation(
          ) {
         return anchored
       }
-      if let anchored = swiftmutFindValueExpressionSourceLocation(
+      if let anchored = swiftmutFindCalleeOrdinalValueExpressionSourceLocation(
         for: apply,
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
@@ -175,7 +175,7 @@ func swiftmutValueApplySourceLocation(
     ) {
       return anchored
     }
-    if let anchored = swiftmutFindValueExpressionSourceLocation(
+    if let anchored = swiftmutFindCalleeOrdinalValueExpressionSourceLocation(
       for: apply,
       path: functionSourceLocation.path,
       preferredLine: functionSourceLocation.line,

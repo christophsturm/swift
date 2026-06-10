@@ -30,14 +30,20 @@ public func swiftmutTernaryLimit(_ value: Int, limit: Int) -> Int {
   value >= limit ? 10 : 0
 }
 
+public func swiftmutTernaryFlag(_ includeColumn: Bool, value: String) -> String {
+  let selected = includeColumn ? value : "fallback"
+  return selected
+}
+
 @_silgen_name("__swiftmut_visit")
 public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
-// CHECK: "siteKind":"condition"
-// CHECK-SAME: "sourceOriginal":"value >= limit","sourceMutated":"false"
-// CHECK-SAME: "sourceOriginal":"value >= limit","sourceMutated":"true"
+// CHECK-DAG: "sourceOriginal":"value >= limit","sourceMutated":"false"
+// CHECK-DAG: "sourceOriginal":"value >= limit","sourceMutated":"true"
+// CHECK-DAG: "sourceOriginal":"includeColumn","sourceMutated":"false"
+// CHECK-DAG: "sourceOriginal":"includeColumn","sourceMutated":"true"
 
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutTernaryConditionSourceLocations","function":"$s39SwiftmutTernaryConditionSourceLocations08swiftmutB5Limit
 // EVENTS-SAME: "conditionSourceLocationMisses":"0"

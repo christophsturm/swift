@@ -584,6 +584,8 @@ func swiftmutGenericConditionExpression(
     expressionRange = swiftmutForWhereConditionRange(bytes: bytes, start: start, end: lineEnd)
   } else if swiftmutASCIIHasPrefix(bytes, start: start, prefix: "case ") {
     expressionRange = swiftmutCaseWhereConditionRange(bytes: bytes, start: start, end: lineEnd)
+  } else if let ternaryRange = swiftmutTernaryConditionRange(bytes: bytes, start: start, end: lineEnd) {
+    expressionRange = ternaryRange
   } else {
     expressionRange = nil
   }
@@ -801,6 +803,34 @@ func swiftmutCaseWhereConditionRange(
   let colonIndex = swiftmutTopLevelByteIndex(bytes, start: valueStart, end: end, byte: 58)
   let valueEnd = colonIndex ?? end
   return (valueStart, valueEnd)
+}
+
+func swiftmutTernaryConditionRange(
+  bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> (start: Int, end: Int)? {
+  guard let question = swiftmutTopLevelTernaryQuestionIndex(bytes: bytes, start: start, end: end),
+        swiftmutTopLevelByteIndex(bytes, start: question + 1, end: end, byte: 58) != nil else {
+    return nil
+  }
+
+  var conditionStart = start
+  if swiftmutASCIIHasPrefix(bytes, start: conditionStart, prefix: "return ") {
+    conditionStart = swiftmutSkipHorizontalWhitespace(bytes, from: conditionStart + 7)
+  }
+  if let assignment = swiftmutLastTopLevelAssignmentEqualsBefore(bytes: bytes, start: conditionStart, end: question) {
+    conditionStart = swiftmutSkipHorizontalWhitespace(bytes, from: assignment + 1)
+  }
+  if let labelColon = swiftmutLastTopLevelByteBefore(bytes: bytes, start: conditionStart, end: question, byte: 58) {
+    conditionStart = swiftmutSkipHorizontalWhitespace(bytes, from: labelColon + 1)
+  }
+
+  let conditionEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: question)
+  guard conditionStart < conditionEnd else {
+    return nil
+  }
+  return (conditionStart, conditionEnd)
 }
 
 func swiftmutParenthesizedControlConditionRange(

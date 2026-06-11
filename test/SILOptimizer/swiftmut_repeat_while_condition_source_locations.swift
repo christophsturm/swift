@@ -57,13 +57,7 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
-// CHECK: "sourceLocation":{"file":"swiftmut_repeat_while_condition_source_locations.swift","line":36,"column":11}
-// CHECK-SAME: "siteKind":"condition"
-// CHECK-SAME: "sourceOriginal":"index < values.count","sourceMutated":"index <= values.count"
-// CHECK-SAME: "sourceOriginal":"index < values.count","sourceMutated":"index >= values.count"
-// CHECK-SAME: "sourceOriginal":"index < values.count","sourceMutated":"false"
-// CHECK-SAME: "sourceOriginal":"index < values.count","sourceMutated":"true"
-// CHECK: "sourceLocation":{"file":"swiftmut_repeat_while_condition_source_locations.swift","line":51,"column":11}
-// CHECK-SAME: "siteKind":"condition"
-// CHECK-SAME: "sourceOriginal":"swiftmutRepeatWhileAccepts(index, values.count)","sourceMutated":"false"
-// CHECK-SAME: "sourceOriginal":"swiftmutRepeatWhileAccepts(index, values.count)","sourceMutated":"true"
+// Fragment files concatenate in filesystem order, so the two sites may
+// appear in either order; match each on its own line.
+// CHECK-DAG: "sourceLocation":{"file":"swiftmut_repeat_while_condition_source_locations.swift","line":36,"column":11}{{.*}}"siteKind":"condition"{{.*}}"sourceOriginal":"index < values.count","sourceMutated":"index <= values.count"{{.*}}"sourceOriginal":"index < values.count","sourceMutated":"index >= values.count"{{.*}}"sourceOriginal":"index < values.count","sourceMutated":"false"{{.*}}"sourceOriginal":"index < values.count","sourceMutated":"true"
+// CHECK-DAG: "sourceLocation":{"file":"swiftmut_repeat_while_condition_source_locations.swift","line":51,"column":11}{{.*}}"siteKind":"condition"{{.*}}"sourceOriginal":"swiftmutRepeatWhileAccepts(index, values.count)","sourceMutated":"false"{{.*}}"sourceOriginal":"swiftmutRepeatWhileAccepts(index, values.count)","sourceMutated":"true"

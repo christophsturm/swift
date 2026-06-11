@@ -24,6 +24,13 @@ func swiftmutInstrumentMetamutantSites(
     config: config
   )
   let conditionSites = conditionDiscovery.sites
+  let logicalConnectorDiscovery = swiftmutDiscoverLogicalConnectorSites(
+    in: function,
+    moduleName: moduleName,
+    conditionOwnedBranches: conditionSites.map(\.branch),
+    config: config
+  )
+  let logicalConnectorSites = logicalConnectorDiscovery.sites
   let arithmeticSites = swiftmutDiscoverArithmeticSites(
     in: function,
     moduleName: moduleName,
@@ -80,6 +87,10 @@ func swiftmutInstrumentMetamutantSites(
       ("conditionMutationAlternatives", "\(conditionDiscovery.stats.mutationAlternatives)"),
       ("conditionSourceLocationMisses", "\(conditionDiscovery.stats.sourceLocationMisses)"),
       ("conditionGenericNonExplicitSourceLocations", "\(conditionDiscovery.stats.genericNonExplicitSourceLocations)"),
+      ("logicalConnectorSites", "\(logicalConnectorSites.count)"),
+      ("logicalConnectorDiamondBranches", "\(logicalConnectorDiscovery.stats.diamondBranches)"),
+      ("logicalConnectorConditionOwnedBranches", "\(logicalConnectorDiscovery.stats.conditionOwnedBranches)"),
+      ("logicalConnectorSourceLocationMisses", "\(logicalConnectorDiscovery.stats.sourceLocationMisses)"),
       ("arithmeticSites", "\(arithmeticSites.count)"),
       ("scalarValueSites", "\(scalarValueSites.count)"),
       ("scalarValueStructInstructions", "\(scalarValueDiscovery.stats.structInstructions)"),
@@ -128,6 +139,7 @@ func swiftmutInstrumentMetamutantSites(
       ("returnBranchSourceLocationMisses", "\(returnBranchDiscovery.stats.sourceLocationMisses)")
     ])
   guard !conditionSites.isEmpty
+        || !logicalConnectorSites.isEmpty
         || !arithmeticSites.isEmpty
         || !scalarValueSites.isEmpty
         || !valueApplySites.isEmpty
@@ -145,6 +157,7 @@ func swiftmutInstrumentMetamutantSites(
   var injectedValueApplySites = 0
   var injectedAssignmentValueSites = 0
   var injectedConditionSites = 0
+  var injectedLogicalConnectorSites = 0
   var injectedReturnSites = 0
   var injectedReturnBranchSites = 0
   var injectedVoidCallSites = 0
@@ -173,6 +186,13 @@ func swiftmutInstrumentMetamutantSites(
     if swiftmutInjectAssignmentValueSite(site, context) {
       injectedSiteJSON.append(swiftmutAssignmentValueSiteJSON(site))
       injectedAssignmentValueSites += 1
+      changed = true
+    }
+  }
+  for site in logicalConnectorSites {
+    if swiftmutInjectLogicalConnectorSite(site, context) {
+      injectedSiteJSON.append(swiftmutLogicalConnectorSiteJSON(site))
+      injectedLogicalConnectorSites += 1
       changed = true
     }
   }
@@ -206,6 +226,7 @@ func swiftmutInstrumentMetamutantSites(
   }
   let runtimeVisitAvailable = swiftmutAnyRuntimeVisitFunctionAvailable(
     conditionSites: conditionSites,
+    logicalConnectorSites: logicalConnectorSites,
     arithmeticSites: arithmeticSites,
     scalarValueSites: scalarValueSites,
     valueApplySites: valueApplySites,
@@ -223,6 +244,8 @@ func swiftmutInstrumentMetamutantSites(
       ("function", function.name.string),
       ("attemptedConditionSites", "\(conditionSites.count)"),
       ("injectedConditionSites", "\(injectedConditionSites)"),
+      ("attemptedLogicalConnectorSites", "\(logicalConnectorSites.count)"),
+      ("injectedLogicalConnectorSites", "\(injectedLogicalConnectorSites)"),
       ("attemptedArithmeticSites", "\(arithmeticSites.count)"),
       ("injectedArithmeticSites", "\(injectedArithmeticSites)"),
       ("attemptedScalarValueSites", "\(scalarValueSites.count)"),

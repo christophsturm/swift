@@ -63,6 +63,7 @@ swift_compiler_sources(Optimizer
   SwiftmutInjection.swift
   SwiftmutJSON.swift
   SwiftmutLabeledReturnSourceLocations.swift
+  SwiftmutLogicalConnector.swift
   SwiftmutLogicalRHSValueApplySourceLocations.swift
   SwiftmutManifest.swift
   SwiftmutMetamutantInstrumentation.swift

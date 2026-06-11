@@ -30,6 +30,7 @@ func swiftmutRuntimeVisitFunction(
 
 func swiftmutAnyRuntimeVisitFunctionAvailable(
   conditionSites: [SwiftmutConditionSite],
+  logicalConnectorSites: [SwiftmutLogicalConnectorSite],
   arithmeticSites: [SwiftmutArithmeticSite],
   scalarValueSites: [SwiftmutScalarValueSite],
   valueApplySites: [SwiftmutValueApplySite],
@@ -40,6 +41,9 @@ func swiftmutAnyRuntimeVisitFunctionAvailable(
   _ context: FunctionPassContext
 ) -> Bool {
   for site in conditionSites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+    return true
+  }
+  for site in logicalConnectorSites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
     return true
   }
   for site in arithmeticSites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {

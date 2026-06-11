@@ -289,7 +289,7 @@ private func swiftmutReturnSiteJSON(
   return "{\(fields.joined(separator: ","))}"
 }
 
-private func swiftmutAlternativeJSON(
+func swiftmutAlternativeJSON(
   mutantID: String,
   alternativeIndex: UInt32,
   mutation: SwiftmutMutation

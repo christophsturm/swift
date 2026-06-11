@@ -701,7 +701,12 @@ func swiftmutDiscoverValueApplySites(
       guard apply.type.isTrivial(in: function) else {
         continue
       }
-      guard swiftmutValueApplyCanBypassOriginalApply(apply) else {
+      let preservesOriginalApply: Bool
+      if swiftmutValueApplyCanBypassOriginalApply(apply) {
+        preservesOriginalApply = false
+      } else if swiftmutValueApplyIsLogicalChainClause(apply) {
+        preservesOriginalApply = true
+      } else {
         continue
       }
 
@@ -792,12 +797,51 @@ func swiftmutDiscoverValueApplySites(
         line: location.line,
         column: location.column,
         apply: apply,
+        preservesOriginalApply: preservesOriginalApply,
         alternatives: alternatives
       ))
     }
   }
 
   return SwiftmutValueApplyDiscoveryResult(sites: sites, stats: stats)
+}
+
+/// A logical-chain clause is the right-hand side of a short-circuiting
+/// `||`/`&&`: its boolean result reaches a `cond_br`, possibly through the
+/// chain's merge blocks or a `struct_extract` of `Bool._value`. The
+/// condition mutator cannot reach these clauses (the merged branches carry
+/// no per-clause source location), so the value mutator takes them, keeping
+/// the original call in place. First clauses that the condition mutator
+/// already owns are dropped later by the explicit-condition location check.
+private func swiftmutValueApplyIsLogicalChainClause(_ apply: ApplyInst) -> Bool {
+  swiftmutValueFeedsConditionBranch(apply, depth: 0)
+}
+
+private func swiftmutValueFeedsConditionBranch(_ value: Value, depth: Int) -> Bool {
+  guard depth < 4 else {
+    return false
+  }
+  for use in value.uses {
+    switch use.instruction {
+    case is CondBranchInst:
+      return true
+    case let extract as StructExtractInst:
+      if swiftmutValueFeedsConditionBranch(extract, depth: depth + 1) {
+        return true
+      }
+    case let branch as BranchInst:
+      if use.index < branch.targetBlock.arguments.count,
+         swiftmutValueFeedsConditionBranch(
+           branch.targetBlock.arguments[use.index],
+           depth: depth + 1
+         ) {
+        return true
+      }
+    default:
+      continue
+    }
+  }
+  return false
 }
 
 private func swiftmutValueApplyCanBypassOriginalApply(_ apply: ApplyInst) -> Bool {

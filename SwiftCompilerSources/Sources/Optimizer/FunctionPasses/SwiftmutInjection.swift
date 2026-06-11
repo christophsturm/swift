@@ -511,7 +511,15 @@ func swiftmutInjectValueApplySite(
   }
 
   let originalPredecessorBlock = site.apply.parentBlock
-  let continuationBlock = context.splitBlock(before: site.apply)
+  let continuationBlock: BasicBlock
+  if site.preservesOriginalApply {
+    guard let successor = site.apply.next else {
+      return false
+    }
+    continuationBlock = context.splitBlock(before: successor)
+  } else {
+    continuationBlock = context.splitBlock(before: site.apply)
+  }
   let selectedValue = continuationBlock.addArgument(
     type: valueType,
     ownership: site.apply.ownership,
@@ -551,15 +559,22 @@ func swiftmutInjectValueApplySite(
   }
 
   let originalBuilder = Builder(atEndOf: originalBlock, location: site.apply.location, context)
-  let originalValue = originalBuilder.createApply(
-    function: site.apply.callee,
-    site.apply.substitutionMap,
-    arguments: Array(site.apply.arguments),
-    isNonThrowing: site.apply.isNonThrowing,
-    isNonAsync: site.apply.isNonAsync,
-    specializationInfo: site.apply.specializationInfo
-  )
-  originalBuilder.createBranch(to: continuationBlock, arguments: [originalValue])
+  if site.preservesOriginalApply {
+    // The call already ran in the predecessor block; the original branch
+    // only forwards its untouched result.
+    site.apply.uses.replaceAll(with: selectedValue, context)
+    originalBuilder.createBranch(to: continuationBlock, arguments: [site.apply])
+  } else {
+    let originalValue = originalBuilder.createApply(
+      function: site.apply.callee,
+      site.apply.substitutionMap,
+      arguments: Array(site.apply.arguments),
+      isNonThrowing: site.apply.isNonThrowing,
+      isNonAsync: site.apply.isNonAsync,
+      specializationInfo: site.apply.specializationInfo
+    )
+    originalBuilder.createBranch(to: continuationBlock, arguments: [originalValue])
+  }
 
   for (index, alternative) in site.alternatives.enumerated() {
     let builder = index == 0
@@ -582,7 +597,9 @@ func swiftmutInjectValueApplySite(
     )
   }
 
-  site.apply.replace(with: selectedValue, context)
+  if !site.preservesOriginalApply {
+    site.apply.replace(with: selectedValue, context)
+  }
   return true
 }
 

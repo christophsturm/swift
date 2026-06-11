@@ -214,6 +214,10 @@ struct SwiftmutValueApplySite {
   let line: Int
   let column: Int
   let apply: ApplyInst
+  /// Logical-chain clauses keep the original call and replace only its
+  /// result: their applies take owned or indirect arguments, so branching
+  /// around the call is not possible.
+  let preservesOriginalApply: Bool
   let alternatives: [SwiftmutValueApplyAlternative]
 }
 

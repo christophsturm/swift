@@ -89,6 +89,7 @@ func swiftmutInstrumentMetamutantSites(
       ("conditionGenericNonExplicitSourceLocations", "\(conditionDiscovery.stats.genericNonExplicitSourceLocations)"),
       ("logicalConnectorSites", "\(logicalConnectorSites.count)"),
       ("logicalConnectorDiamondBranches", "\(logicalConnectorDiscovery.stats.diamondBranches)"),
+      ("logicalConnectorLadderPairBranches", "\(logicalConnectorDiscovery.stats.ladderPairBranches)"),
       ("logicalConnectorConditionOwnedBranches", "\(logicalConnectorDiscovery.stats.conditionOwnedBranches)"),
       ("logicalConnectorSourceLocationMisses", "\(logicalConnectorDiscovery.stats.sourceLocationMisses)"),
       ("arithmeticSites", "\(arithmeticSites.count)"),

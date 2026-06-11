@@ -32,13 +32,22 @@ struct SwiftmutLogicalConnectorSite {
   let line: Int
   let column: Int
   let branch: CondBranchInst
-  /// The constant the chain short-circuits to: true for `||`, false for `&&`.
-  let constantValue: Bool
-  /// The constant as it appears in SIL, used to rebuild the flipped value
-  /// with the same shape (bare `Builtin.Int1` or `struct $Bool`).
-  let constantOperand: Value
-  let constantEdge: SwiftmutLogicalConnectorConstantEdge
+  let form: SwiftmutLogicalConnectorForm
   let alternatives: [SwiftmutLogicalConnectorAlternative]
+}
+
+enum SwiftmutLogicalConnectorForm {
+  /// One edge of the branch feeds a constant Bool into the merge block.
+  case diamond(
+    /// The constant the chain short-circuits to: true for `||`, false for `&&`.
+    constantValue: Bool,
+    /// The constant as it appears in SIL, used to rebuild the flipped value
+    /// with the same shape (bare `Builtin.Int1` or `struct $Bool`).
+    constantOperand: Value,
+    constantEdge: SwiftmutLogicalConnectorConstantEdge)
+  /// Two consecutive `||` ladder rungs: the branch's false edge evaluates
+  /// the next clause, whose branch shares the same then-target.
+  case ladderPair(nextBranch: CondBranchInst)
 }
 
 enum SwiftmutLogicalConnectorConstantEdge {
@@ -57,6 +66,7 @@ struct SwiftmutLogicalConnectorAlternative {
 
 struct SwiftmutLogicalConnectorDiscoveryStats {
   var diamondBranches = 0
+  var ladderPairBranches = 0
   var conditionOwnedBranches = 0
   var mutationAlternatives = 0
   var sourceLocationMisses = 0
@@ -82,41 +92,42 @@ func swiftmutDiscoverLogicalConnectorSites(
   let functionName = function.name.string
   var localOrdinal = 1
   var snippetOccurrences: [String: Int] = [:]
-  for block in function.blocks {
-    guard let branch = block.terminator as? CondBranchInst,
-          let diamond = swiftmutLogicalConnectorDiamond(for: branch, in: function) else {
-      continue
-    }
-    stats.diamondBranches += 1
-    let sourceOriginal = diamond.constantValue ? "||" : "&&"
-    let sourceMutated = diamond.constantValue ? "&&" : "||"
-    // Identical clause prefixes share a truncated snippet; the n-th diamond
+
+  func emitSite(
+    branch: CondBranchInst,
+    form: SwiftmutLogicalConnectorForm,
+    sourceOriginal: String,
+    computedValue: Value?,
+    conditionOwned: Bool
+  ) {
+    let sourceMutated = sourceOriginal == "||" ? "&&" : "||"
+    // Identical clause prefixes share a truncated snippet; the n-th branch
     // carrying a snippet maps to the n-th matching source line. Chained
-    // diamonds are data-dependent, so block order follows clause order.
-    // Condition-owned diamonds still consume their occurrence so the
-    // remaining diamonds keep pointing at their own clause lines.
+    // clauses are data-dependent, so block order follows clause order.
+    // Condition-owned branches still consume their occurrence so the
+    // remaining branches keep pointing at their own clause lines.
     var occurrence = 0
     if let snippet = swiftmutLogicalConnectorSnippet(
-      diamond: diamond,
+      computedValue: computedValue,
       branch: branch,
       operatorText: sourceOriginal
     ) {
       occurrence = (snippetOccurrences[snippet] ?? 0) + 1
       snippetOccurrences[snippet] = occurrence
     }
-    if conditionOwnedBranches.contains(where: { $0 === branch }) {
+    if conditionOwned {
       stats.conditionOwnedBranches += 1
-      continue
+      return
     }
     guard occurrence > 0,
           let location = swiftmutLogicalConnectorSourceLocation(
-      diamond: diamond,
-      branch: branch,
-      function: function,
-      operatorText: sourceOriginal,
-      occurrence: occurrence,
-      config: config
-    ) else {
+            computedValue: computedValue,
+            branch: branch,
+            function: function,
+            operatorText: sourceOriginal,
+            occurrence: occurrence,
+            config: config
+          ) else {
       stats.sourceLocationMisses += 1
       if stats.sourceLocationMisses <= 25 {
         swiftmutLogEvent(
@@ -126,18 +137,17 @@ func swiftmutDiscoverLogicalConnectorSites(
             ("module", moduleName),
             ("function", functionName),
             ("branchLocation", branch.location.description),
-            ("computedLocation", diamond.computedValue?.definingInstruction?.location.description ?? "<none>"),
-            ("constantValue", "\(diamond.constantValue)")
+            ("computedLocation", computedValue?.definingInstruction?.location.description ?? "<none>")
           ])
       }
-      continue
+      return
     }
 
     stats.mutationAlternatives += 1
     let mutation = SwiftmutMutation(
       originalID: nil,
       mutator: swiftmutChangeLogicalConnectorMutator,
-      mutatedBuiltinName: diamond.constantValue ? "logical_and" : "logical_or",
+      mutatedBuiltinName: sourceOriginal == "||" ? "logical_and" : "logical_or",
       sourceOriginal: sourceOriginal,
       sourceMutated: sourceMutated,
       silOriginal: sourceOriginal,
@@ -167,14 +177,131 @@ func swiftmutDiscoverLogicalConnectorSites(
       line: location.line,
       column: location.column,
       branch: branch,
-      constantValue: diamond.constantValue,
-      constantOperand: diamond.constantOperand,
-      constantEdge: diamond.constantEdge,
+      form: form,
       alternatives: [alternative]
     ))
   }
 
+  for block in function.blocks {
+    guard let branch = block.terminator as? CondBranchInst else {
+      continue
+    }
+    if let diamond = swiftmutLogicalConnectorDiamond(for: branch, in: function) {
+      stats.diamondBranches += 1
+      emitSite(
+        branch: branch,
+        form: .diamond(
+          constantValue: diamond.constantValue,
+          constantOperand: diamond.constantOperand,
+          constantEdge: diamond.constantEdge),
+        sourceOriginal: diamond.constantValue ? "||" : "&&",
+        computedValue: diamond.computedValue,
+        conditionOwned: conditionOwnedBranches.contains(where: { $0 === branch })
+      )
+      continue
+    }
+    if let nextBranch = swiftmutNextLadderRung(after: branch) {
+      stats.ladderPairBranches += 1
+      // Ladder injection only wraps condition values, so it composes with
+      // condition-site injection on the same branch; nothing is owned.
+      emitSite(
+        branch: branch,
+        form: .ladderPair(nextBranch: nextBranch),
+        sourceOriginal: "||",
+        computedValue: nextBranch.condition,
+        conditionOwned: false
+      )
+    }
+  }
+
   return SwiftmutLogicalConnectorDiscoveryResult(sites: sites, stats: stats)
+}
+
+/// A `||` ladder rung branches through a cleanup trampoline to the chain's
+/// shared then-target, or falls through to the next clause. Consecutive
+/// rungs sharing a then-target form a connector pair.
+private func swiftmutNextLadderRung(after branch: CondBranchInst) -> CondBranchInst? {
+  // The pass can visit a function more than once, and a wrapped ladder
+  // still matches the ladder shape; an existing runtime-visit dispatch in
+  // the rung's block means this connector is already instrumented.
+  guard !swiftmutBlockContainsRuntimeVisitApply(branch.parentBlock),
+        branch.trueOperands.isEmpty,
+        let exitTarget = swiftmutLadderExitTarget(from: branch.trueBlock),
+        branch.falseOperands.isEmpty else {
+    return nil
+  }
+
+  var current = branch.falseBlock
+  for _ in 0..<16 {
+    if let candidate = current.terminator as? CondBranchInst {
+      if candidate.trueOperands.isEmpty,
+         swiftmutLadderExitTarget(from: candidate.trueBlock) === exitTarget {
+        return candidate
+      }
+      // Inner guards of inlined stdlib code branch to no-return blocks;
+      // the spine continues on the surviving side.
+      let trueDead = swiftmutBlockEndsUnreachable(candidate.trueBlock)
+      let falseDead = swiftmutBlockEndsUnreachable(candidate.falseBlock)
+      if trueDead && !falseDead {
+        current = candidate.falseBlock
+        continue
+      }
+      if falseDead && !trueDead {
+        current = candidate.trueBlock
+        continue
+      }
+      return nil
+    }
+    guard let forwarding = current.terminator as? BranchInst else {
+      return nil
+    }
+    current = forwarding.targetBlock
+  }
+  return nil
+}
+
+/// Resolves a rung's true edge through argument-less cleanup trampolines to
+/// the block the chain exits into.
+private func swiftmutLadderExitTarget(from block: BasicBlock) -> BasicBlock? {
+  var current = block
+  for _ in 0..<4 {
+    guard swiftmutBlockOnlyCleansUp(current),
+          let forwarding = current.terminator as? BranchInst,
+          forwarding.operands.isEmpty else {
+      return current
+    }
+    current = forwarding.targetBlock
+  }
+  return current
+}
+
+private func swiftmutBlockOnlyCleansUp(_ block: BasicBlock) -> Bool {
+  for instruction in block.instructions {
+    switch instruction {
+    case is ReleaseValueInst, is StrongReleaseInst, is DestroyValueInst,
+         is EndBorrowInst, is EndAccessInst, is DeallocStackInst,
+         is DebugValueInst, is BranchInst:
+      continue
+    default:
+      return false
+    }
+  }
+  return true
+}
+
+private func swiftmutBlockEndsUnreachable(_ block: BasicBlock) -> Bool {
+  block.terminator is UnreachableInst
+}
+
+private func swiftmutBlockContainsRuntimeVisitApply(_ block: BasicBlock) -> Bool {
+  for instruction in block.instructions {
+    if let apply = instruction as? ApplyInst,
+       let functionRef = apply.callee as? FunctionRefInst,
+       swiftmutIsRuntimeSupportFunctionName(functionRef.referencedFunction.name.string) {
+      return true
+    }
+  }
+  return false
 }
 
 private struct SwiftmutLogicalConnectorDiamond {
@@ -297,13 +424,16 @@ private func swiftmutShortCircuitConstantValue(
 /// example `"|| combinedOutput.co[...]"`). The snippet starts with the
 /// connector being mutated.
 private func swiftmutLogicalConnectorSnippet(
-  diamond: SwiftmutLogicalConnectorDiamond,
+  computedValue: Value?,
   branch: CondBranchInst,
   operatorText: String
 ) -> String? {
   var descriptions: [String] = []
-  if let definingInstruction = diamond.computedValue?.definingInstruction {
+  if let definingInstruction = computedValue?.definingInstruction {
     descriptions.append(definingInstruction.location.description)
+    if let operandDefinition = definingInstruction.operands.first?.value.definingInstruction {
+      descriptions.append(operandDefinition.location.description)
+    }
   }
   descriptions.append(branch.location.description)
 
@@ -320,7 +450,7 @@ private func swiftmutLogicalConnectorSnippet(
 }
 
 private func swiftmutLogicalConnectorSourceLocation(
-  diamond: SwiftmutLogicalConnectorDiamond,
+  computedValue: Value?,
   branch: CondBranchInst,
   function: Function,
   operatorText: String,
@@ -332,7 +462,7 @@ private func swiftmutLogicalConnectorSourceLocation(
     config: config
   ),
         let snippet = swiftmutLogicalConnectorSnippet(
-          diamond: diamond,
+          computedValue: computedValue,
           branch: branch,
           operatorText: operatorText
         ),
@@ -466,39 +596,78 @@ func swiftmutInjectLogicalConnectorSite(
     resultType: conditionType,
     arguments: [rawChoice, alternativeLiteral]
   )
-  let mutatedCondition = builder.createBuiltinBinaryFunction(
-    name: "xor",
-    operandType: conditionType,
-    resultType: conditionType,
-    arguments: [site.branch.condition, active]
-  )
-  let constantLiteral = builder.createIntegerLiteral(
-    site.constantValue ? -1 : 0,
-    type: conditionType
-  )
-  let toggledConstant = builder.createBuiltinBinaryFunction(
-    name: "xor",
-    operandType: conditionType,
-    resultType: conditionType,
-    arguments: [constantLiteral, active]
-  )
-  let replacementConstant: Value
-  if site.constantOperand is StructInst {
-    replacementConstant = builder.createStruct(
-      type: site.constantOperand.type,
-      elements: [toggledConstant]
-    )
-  } else {
-    replacementConstant = toggledConstant
-  }
 
-  switch site.constantEdge {
-  case .branchArgument(let operandIndex):
-    site.branch.operands[operandIndex].set(to: replacementConstant, context)
-  case .forwardingBranch(let forwarding, let operandIndex):
-    forwarding.operands[operandIndex].set(to: replacementConstant, context)
+  switch site.form {
+  case .diamond(let constantValue, let constantOperand, let constantEdge):
+    let mutatedCondition = builder.createBuiltinBinaryFunction(
+      name: "xor",
+      operandType: conditionType,
+      resultType: conditionType,
+      arguments: [site.branch.condition, active]
+    )
+    let constantLiteral = builder.createIntegerLiteral(
+      constantValue ? -1 : 0,
+      type: conditionType
+    )
+    let toggledConstant = builder.createBuiltinBinaryFunction(
+      name: "xor",
+      operandType: conditionType,
+      resultType: conditionType,
+      arguments: [constantLiteral, active]
+    )
+    let replacementConstant: Value
+    if constantOperand is StructInst {
+      replacementConstant = builder.createStruct(
+        type: constantOperand.type,
+        elements: [toggledConstant]
+      )
+    } else {
+      replacementConstant = toggledConstant
+    }
+
+    switch constantEdge {
+    case .branchArgument(let operandIndex):
+      site.branch.operands[operandIndex].set(to: replacementConstant, context)
+    case .forwardingBranch(let forwarding, let operandIndex):
+      forwarding.operands[operandIndex].set(to: replacementConstant, context)
+    }
+    site.branch.operands[0].set(to: mutatedCondition, context)
+  case .ladderPair(let nextBranch):
+    // `(a && b)` over two rungs: when active, rung k always falls through
+    // into clause k+1, whose rung only stays true if a was. Wrapping the
+    // condition values keeps the CFG intact and composes with neighboring
+    // connector mutants and condition-site injection on the same branches.
+    let trueLiteral = builder.createIntegerLiteral(-1, type: conditionType)
+    let inactive = builder.createBuiltinBinaryFunction(
+      name: "xor",
+      operandType: conditionType,
+      resultType: conditionType,
+      arguments: [active, trueLiteral]
+    )
+    let rungCondition = site.branch.operands[0].value
+    let mutatedCondition = builder.createBuiltinBinaryFunction(
+      name: "and",
+      operandType: conditionType,
+      resultType: conditionType,
+      arguments: [rungCondition, inactive]
+    )
+    site.branch.operands[0].set(to: mutatedCondition, context)
+
+    let nextBuilder = Builder(before: nextBranch, context)
+    let gate = nextBuilder.createBuiltinBinaryFunction(
+      name: "or",
+      operandType: conditionType,
+      resultType: conditionType,
+      arguments: [inactive, rungCondition]
+    )
+    let mutatedNextCondition = nextBuilder.createBuiltinBinaryFunction(
+      name: "and",
+      operandType: conditionType,
+      resultType: conditionType,
+      arguments: [nextBranch.operands[0].value, gate]
+    )
+    nextBranch.operands[0].set(to: mutatedNextCondition, context)
   }
-  site.branch.operands[0].set(to: mutatedCondition, context)
   return true
 }
 

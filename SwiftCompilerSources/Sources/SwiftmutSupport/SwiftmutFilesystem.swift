@@ -110,23 +110,32 @@ public func swiftmutCreateParentDirectories(forFile path: String) {
 public func swiftmutRead(_ path: String) -> String? {
   #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS) || os(Linux) || os(Android)
   return path.withCString { pathPointer in
-    guard let file = fopen(pathPointer, "r") else {
+    guard let file = fopen(pathPointer, "rb") else {
       return nil
     }
     defer { fclose(file) }
 
-    var output = ""
-    var buffer = [CChar](repeating: 0, count: 4096)
-    while true {
-      let readLine = buffer.withUnsafeMutableBufferPointer {
-        fgets($0.baseAddress, Int32($0.count), file)
-      }
-      guard readLine != nil else {
-        break
-      }
-      output += String(cString: buffer)
+    guard fseek(file, 0, SEEK_END) == 0 else {
+      return nil
     }
-    return output
+    let size = ftell(file)
+    guard size >= 0 else {
+      return nil
+    }
+    guard size > 0 else {
+      return ""
+    }
+    rewind(file)
+
+    var bytes = [UInt8](repeating: 0, count: size)
+    let byteCount = bytes.count
+    let readCount = bytes.withUnsafeMutableBytes { buffer in
+      fread(buffer.baseAddress, 1, byteCount, file)
+    }
+    if readCount < bytes.count {
+      bytes.removeSubrange(readCount..<bytes.count)
+    }
+    return String(decoding: bytes, as: UTF8.self)
   }
   #else
   return nil

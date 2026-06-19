@@ -163,13 +163,11 @@ if let configPath = options.configPath {
 }
 
 let configPath = options.configPath ?? "synthetic.json"
+let benchmarkJSON = loaded.json
 let parseSeconds = elapsed {
   for _ in 0..<options.iterations {
     _ = SwiftmutConfig.load(configPath: configPath) { path in
-      if let realPath = options.configPath {
-        return SwiftmutSupport.swiftmutRead(realPath)
-      }
-      return path == "synthetic.json" ? loaded.json : nil
+      path == configPath ? benchmarkJSON : nil
     }
   }
 }

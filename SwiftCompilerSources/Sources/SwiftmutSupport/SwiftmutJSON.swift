@@ -180,7 +180,21 @@ public func swiftmutParseJSONString(in bytes: [UInt8], index: inout Int) -> Stri
   }
   index += 1
 
-  var value: [UInt8] = []
+  let valueStart = index
+  while index < bytes.count {
+    let byte = bytes[index]
+    if byte == 34 {
+      let value = String(decoding: bytes[valueStart..<index], as: UTF8.self)
+      index += 1
+      return value
+    }
+    if byte == 92 {
+      break
+    }
+    index += 1
+  }
+
+  var value = Array(bytes[valueStart..<index])
   var escaped = false
   while index < bytes.count {
     let byte = bytes[index]

@@ -263,7 +263,7 @@ let endLineComparisonIterations = max(1, options.iterations / 100)
 let repeatedEndLineSeconds = elapsed {
   for _ in 0..<endLineComparisonIterations {
     for line in multiFunctionFixture.startLines {
-      _ = swiftmutFunctionEndLineSlowForTesting(
+      _ = swiftmutFunctionEndLineByScanning(
         functionLocationLine: line,
         text: multiFunctionFixture.text)
     }

@@ -342,7 +342,7 @@ public func swiftmutFunctionEndLine(
   functionLocationLine: Int,
   text: String
 ) -> Int? {
-  SwiftmutSourceTextIndex(text: text).functionEndLine(functionLocationLine: functionLocationLine)
+  swiftmutFunctionEndLineByScanning(functionLocationLine: functionLocationLine, text: text)
 }
 
 public struct SwiftmutSourceTextIndex {
@@ -395,15 +395,18 @@ public struct SwiftmutSourceTextIndex {
   }
 }
 
-public func swiftmutFunctionEndLineSlowForTesting(
+public func swiftmutFunctionEndLineByScanning(
   functionLocationLine: Int,
   text: String
 ) -> Int? {
+  let bytes = Array(text.utf8)
   var currentLine = 1
   var braceDepth = 0
   var sawOpeningBrace = false
 
-  for byte in text.utf8 {
+  var index = 0
+  while index < bytes.count {
+    let byte = bytes[index]
     if currentLine >= functionLocationLine {
       if byte == 123 {
         braceDepth += 1
@@ -418,6 +421,7 @@ public func swiftmutFunctionEndLineSlowForTesting(
       }
       currentLine += 1
     }
+    index += 1
   }
   if sawOpeningBrace && braceDepth <= 0 {
     return currentLine

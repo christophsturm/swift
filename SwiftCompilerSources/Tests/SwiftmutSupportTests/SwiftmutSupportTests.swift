@@ -246,7 +246,7 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertNil(index.functionEndLine(functionLocationLine: 99))
     XCTAssertEqual(
       index.functionEndLine(functionLocationLine: 5),
-      swiftmutFunctionEndLineSlowForTesting(functionLocationLine: 5, text: source))
+      swiftmutFunctionEndLineByScanning(functionLocationLine: 5, text: source))
   }
 
   func testSharedSourceLookupCacheCachesConfiguredSourceReads() throws {

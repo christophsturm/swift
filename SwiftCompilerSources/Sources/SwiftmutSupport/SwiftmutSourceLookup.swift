@@ -106,10 +106,29 @@ public final class SwiftmutSourceLookupCache {
 
     let candidate = String(decoding: locationBytes[rootIndex..<pathEnd], as: UTF8.self)
     guard let includedPath = includedSourcePath(candidate),
-          let line = swiftmutPreferredLine(in: locationDescription, path: includedPath) else {
+          let line = swiftmutLineNumber(in: locationBytes, afterPathEnd: pathEnd) else {
       return nil
     }
     return (includedPath, line)
+  }
+
+  private func swiftmutLineNumber(in locationBytes: [UInt8], afterPathEnd pathEnd: Int) -> Int? {
+    guard pathEnd < locationBytes.count, locationBytes[pathEnd] == 58 else {
+      return nil
+    }
+    var index = pathEnd + 1
+    var value = 0
+    var hasDigit = false
+    while index < locationBytes.count {
+      let byte = locationBytes[index]
+      guard byte >= 48 && byte <= 57 else {
+        break
+      }
+      value = value * 10 + Int(byte - 48)
+      hasDigit = true
+      index += 1
+    }
+    return hasDigit ? value : nil
   }
 
   private func configuredSourcePaths() -> Set<String> {

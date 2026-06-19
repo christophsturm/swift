@@ -28,12 +28,9 @@ func swiftmutFindDescribedAssignmentValueSourceLocation(
 
   var matches: [(path: String, line: Int, column: Int)] = []
   for path in swiftmutSwiftSourcePaths(config: config) {
-    guard let text = swiftmutRead(path) else {
-      continue
-    }
-    for match in swiftmutSourceSnippetMatches(snippetInfo.snippet, in: text) {
+    for match in swiftmutSourceSnippetMatches(snippetInfo.snippet, path: path) {
       let expressionColumn = match.column + snippetInfo.expressionStart
-      guard let lineText = swiftmutSourceLine(text, line: match.line),
+      guard let lineText = swiftmutAbsoluteSourceLine(path: path, line: match.line),
             swiftmutDescribedAssignmentLineIsMappable(
               lineText,
               expression: snippetInfo.expression,

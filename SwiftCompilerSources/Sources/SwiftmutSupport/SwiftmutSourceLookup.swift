@@ -25,6 +25,7 @@ public final class SwiftmutSourceLookupCache {
   private var missingIncludedSourcePathInputs = Set<String>()
   private var sourceTextByPath: [String: String] = [:]
   private var sourceTextIndexByPath: [String: SwiftmutSourceTextIndex] = [:]
+  private var sourceSnippetMatchesByPathAndSnippet: [String: [String: [SwiftmutSourceSnippetMatch]]] = [:]
   private var functionLocationByDescription: [String: (path: String, line: Int)] = [:]
   private var missingFunctionLocationDescriptions = Set<String>()
   private var functionEndLineByPathAndStartLine: [String: [Int: Int]] = [:]
@@ -320,6 +321,24 @@ public final class SwiftmutSourceLookupCache {
     }
     return sourceTextIndex.lineText(line: line)
   }
+
+  public func sourceSnippetMatches(
+    _ snippet: String,
+    path: String
+  ) -> [SwiftmutSourceSnippetMatch] {
+    let cachePath = includedSourcePath(path) ?? path
+    if let cached = sourceSnippetMatchesByPathAndSnippet[cachePath]?[snippet] {
+      return cached
+    }
+    guard let text = read(path) else {
+      return []
+    }
+    let matches = swiftmutSourceSnippetMatches(snippet, in: text)
+    var matchesBySnippet = sourceSnippetMatchesByPathAndSnippet[cachePath] ?? [:]
+    matchesBySnippet[snippet] = matches
+    sourceSnippetMatchesByPathAndSnippet[cachePath] = matchesBySnippet
+    return matches
+  }
 }
 
 public func swiftmutFunctionSourceLocation(
@@ -529,6 +548,19 @@ public func swiftmutCachedSourceLine(path: String, line: Int) -> String? {
     return nil
   }
   return swiftmutSourceLine(in: text, line: line)
+}
+
+public func swiftmutCachedSourceSnippetMatches(
+  _ snippet: String,
+  path: String
+) -> [SwiftmutSourceSnippetMatch] {
+  if let cache = swiftmutSharedSourceLookupCacheStorage {
+    return cache.sourceSnippetMatches(snippet, path: path)
+  }
+  guard let text = swiftmutRead(path) else {
+    return []
+  }
+  return swiftmutSourceSnippetMatches(snippet, in: text)
 }
 
 public func swiftmutSourceLineBelongsToFunction(

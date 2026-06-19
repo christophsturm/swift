@@ -30,7 +30,7 @@ func swiftmutFindDefaultArgumentValueApplySourceLocation(
     guard let text = swiftmutRead(path) else {
       continue
     }
-    for match in swiftmutSourceSnippetMatches(snippet, in: text) {
+    for match in swiftmutSourceSnippetMatches(snippet, path: path) {
       guard let expression = swiftmutDefaultArgumentSourceExpression(
         in: text,
         matchOffset: match.offset,

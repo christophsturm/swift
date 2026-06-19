@@ -275,7 +275,7 @@ func swiftmutFindDescribedDefaultArgumentReturnSourceLocation(
     guard let text = swiftmutRead(path) else {
       continue
     }
-    let fileMatches = SwiftmutSupport.swiftmutSourceSnippetMatches(snippet, in: text)
+    let fileMatches = swiftmutSourceSnippetMatches(snippet, path: path)
     for match in fileMatches {
       guard let expression = swiftmutDefaultArgumentSourceExpression(
         in: text,
@@ -540,6 +540,15 @@ func swiftmutSourceSnippetMatches(
   in text: String
 ) -> [(line: Int, column: Int, offset: Int)] {
   SwiftmutSupport.swiftmutSourceSnippetMatches(snippet, in: text).map { match in
+    (line: match.line, column: match.column, offset: match.offset)
+  }
+}
+
+func swiftmutSourceSnippetMatches(
+  _ snippet: String,
+  path: String
+) -> [(line: Int, column: Int, offset: Int)] {
+  SwiftmutSupport.swiftmutCachedSourceSnippetMatches(snippet, path: path).map { match in
     (line: match.line, column: match.column, offset: match.offset)
   }
 }

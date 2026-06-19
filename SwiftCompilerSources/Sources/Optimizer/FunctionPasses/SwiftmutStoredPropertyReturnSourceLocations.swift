@@ -29,11 +29,8 @@ func swiftmutFindDescribedStoredPropertyInitializerReturnSourceLocation(
 
   var matches: [(path: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)] = []
   for path in swiftmutSwiftSourcePaths(config: config) {
-    guard let text = swiftmutRead(path) else {
-      continue
-    }
-    for match in swiftmutSourceSnippetMatches(snippet, in: text) {
-      guard let sourceLine = swiftmutSourceLine(text, line: match.line),
+    for match in swiftmutSourceSnippetMatches(snippet, path: path) {
+      guard let sourceLine = swiftmutAbsoluteSourceLine(path: path, line: match.line),
             let property = swiftmutStoredPropertyInitializerDeclaration(sourceLine, mutation: mutation),
             swiftmutFunctionName(functionName, containsPropertyName: property.name) else {
         continue

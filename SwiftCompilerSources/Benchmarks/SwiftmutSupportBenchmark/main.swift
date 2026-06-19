@@ -330,6 +330,11 @@ let cachedSourceLineSeconds = elapsed {
     _ = membershipFixture.cache.sourceLine(path: membershipFixture.path, line: 1_000)
   }
 }
+let cachedSourceSnippetSeconds = elapsed {
+  for _ in 0..<options.iterations {
+    _ = membershipFixture.cache.sourceSnippetMatches("let value999", path: membershipFixture.path)
+  }
+}
 membershipFixture.cleanup()
 let endLineFixture = functionEndLineFixture()
 let sourceLineSeconds = elapsed {
@@ -484,6 +489,7 @@ print(String(format: "source read: %.6fs", sourceReadSeconds))
 print(String(format: "source line: %.6fs", sourceLineSeconds))
 print(String(format: "source line cached: %.6fs", cachedSourceLineSeconds))
 print(String(format: "source snippet: %.6fs", sourceSnippetSeconds))
+print(String(format: "source snippet cached: %.6fs", cachedSourceSnippetSeconds))
 print(String(format: "function end-line scan: %.6fs", endLineSeconds))
 print("function end-line comparison iterations: \(endLineComparisonIterations)")
 print(String(format: "function end-line repeated scan: %.6fs", repeatedEndLineSeconds))

@@ -713,4 +713,50 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertEqual(cache.sourceLine(path: source.path, line: 3), "")
     XCTAssertNil(cache.sourceLine(path: source.path, line: 4))
   }
+
+  func testSourceLookupCacheCachesSourceSnippetMatches() throws {
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("swiftmut-support-snippet-tests-\(UUID().uuidString)")
+    let source = directory
+      .appendingPathComponent("Sources")
+      .appendingPathComponent("App")
+      .appendingPathComponent("Feature.swift")
+    try FileManager.default.createDirectory(
+      at: source.deletingLastPathComponent(),
+      withIntermediateDirectories: true)
+    try """
+    alpha call()
+    béta call()
+    call()
+    """.write(to: source, atomically: true, encoding: .utf8)
+    defer {
+      try? FileManager.default.removeItem(at: directory)
+    }
+
+    let config = SwiftmutConfig(
+      mode: .discover,
+      activeMutantID: "",
+      mutantsPath: directory.appendingPathComponent("manifest.json").path,
+      manifestFragmentsDirectory: "",
+      compilerEventsPath: "",
+      packageRoot: directory.path,
+      excludePathFragments: [],
+      sourceFiles: [source.path],
+      enabledMutators: [],
+      conditionMutationRules: [],
+      arithmeticMutationRules: [],
+      contextualArithmeticMutationRules: [],
+      returnMutationRules: [],
+      voidCallMutationRules: [],
+      sourceMutationDisplayRules: [])
+    let cache = SwiftmutSourceLookupCache(config: config)
+
+    let expected = [
+      SwiftmutSourceSnippetMatch(line: 1, column: 7, offset: 6),
+      SwiftmutSourceSnippetMatch(line: 2, column: 7, offset: 19),
+      SwiftmutSourceSnippetMatch(line: 3, column: 1, offset: 26),
+    ]
+    XCTAssertEqual(cache.sourceSnippetMatches("call()", path: source.path), expected)
+    XCTAssertEqual(cache.sourceSnippetMatches("call()", path: source.path), expected)
+  }
 }

@@ -21,6 +21,8 @@ public final class SwiftmutSourceLookupCache {
   private var sourcePaths: [String]?
   private var sourcePathSet: Set<String>?
   private var sourcePathByRelativePath: [String: String]?
+  private var includedSourcePathByInput: [String: String] = [:]
+  private var missingIncludedSourcePathInputs = Set<String>()
   private var sourceTextByPath: [String: String] = [:]
   private var sourceTextIndexByPath: [String: SwiftmutSourceTextIndex] = [:]
   private var functionLocationByDescription: [String: (path: String, line: Int)] = [:]
@@ -48,6 +50,21 @@ public final class SwiftmutSourceLookupCache {
   }
 
   public func includedSourcePath(_ path: String) -> String? {
+    if let cached = includedSourcePathByInput[path] {
+      return cached
+    }
+    if missingIncludedSourcePathInputs.contains(path) {
+      return nil
+    }
+    guard let resolved = computeIncludedSourcePath(path) else {
+      missingIncludedSourcePathInputs.insert(path)
+      return nil
+    }
+    includedSourcePathByInput[path] = resolved
+    return resolved
+  }
+
+  private func computeIncludedSourcePath(_ path: String) -> String? {
     if !path.hasPrefix("/"),
        let sourcePath = relativeSourcePathMap()[path] {
       return sourcePath

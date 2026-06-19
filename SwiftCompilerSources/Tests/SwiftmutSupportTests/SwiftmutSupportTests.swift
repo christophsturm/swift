@@ -35,6 +35,9 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertEqual(fields.stringArray("sourceFiles"), ["/repo/A.swift", "/repo/B.swift"])
     XCTAssertNil(fields.stringValue("nested"))
     XCTAssertEqual(fields.stringArray("numbers"), [])
+    XCTAssertEqual(swiftmutJSONStringArrayInitialCapacity(remainingByteCount: 0), 0)
+    XCTAssertEqual(swiftmutJSONStringArrayInitialCapacity(remainingByteCount: 47), 1)
+    XCTAssertEqual(swiftmutJSONStringArrayInitialCapacity(remainingByteCount: 480), 10)
   }
 
   func testTopLevelJSONParserKeepsFirstDuplicateValueForCompatibility() {

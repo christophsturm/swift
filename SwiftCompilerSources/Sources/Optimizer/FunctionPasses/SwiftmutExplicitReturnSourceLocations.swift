@@ -275,7 +275,7 @@ func swiftmutFindDescribedDefaultArgumentReturnSourceLocation(
     guard let text = swiftmutRead(path) else {
       continue
     }
-    let fileMatches = swiftmutSourceSnippetMatches(snippet, in: text)
+    let fileMatches = SwiftmutSupport.swiftmutSourceSnippetMatches(snippet, in: text)
     for match in fileMatches {
       guard let expression = swiftmutDefaultArgumentSourceExpression(
         in: text,
@@ -539,33 +539,9 @@ func swiftmutSourceSnippetMatches(
   _ snippet: String,
   in text: String
 ) -> [(line: Int, column: Int, offset: Int)] {
-  let source = Array(text.utf8)
-  let pattern = Array(snippet.utf8)
-  guard !pattern.isEmpty,
-        pattern.count <= source.count else {
-    return []
+  SwiftmutSupport.swiftmutSourceSnippetMatches(snippet, in: text).map { match in
+    (line: match.line, column: match.column, offset: match.offset)
   }
-
-  var matches: [(line: Int, column: Int, offset: Int)] = []
-  var index = 0
-  while index + pattern.count <= source.count {
-    var matched = true
-    for offset in 0..<pattern.count where source[index + offset] != pattern[offset] {
-      matched = false
-      break
-    }
-    if matched {
-      let location = swiftmutSourceLineAndColumn(source, offset: index)
-      matches.append((line: location.line, column: location.column, offset: index))
-      if matches.count > 8 {
-        return matches
-      }
-      index += pattern.count
-    } else {
-      index += 1
-    }
-  }
-  return matches
 }
 
 func swiftmutSnippetExpressionStartOffset(_ snippet: String) -> Int {
@@ -580,19 +556,7 @@ func swiftmutSourceLineAndColumn(
   _ bytes: [UInt8],
   offset: Int
 ) -> (line: Int, column: Int) {
-  var line = 1
-  var column = 1
-  var index = 0
-  while index < offset && index < bytes.count {
-    if bytes[index] == 10 {
-      line += 1
-      column = 1
-    } else {
-      column += 1
-    }
-    index += 1
-  }
-  return (line, column)
+  SwiftmutSupport.swiftmutSourceLineAndColumn(bytes, offset: offset)
 }
 
 func swiftmutDefaultArgumentDeclarationScore(

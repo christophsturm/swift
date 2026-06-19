@@ -231,6 +231,34 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertNil(swiftmutSourceLine(in: source, line: 99))
   }
 
+  func testSourceSnippetMatchesTrackLineColumnAndOffset() {
+    let source = """
+    alpha call()
+    béta call()
+    call()
+    """
+
+    XCTAssertEqual(
+      swiftmutSourceSnippetMatches("call()", in: source),
+      [
+        SwiftmutSourceSnippetMatch(line: 1, column: 7, offset: 6),
+        SwiftmutSourceSnippetMatch(line: 2, column: 7, offset: 19),
+        SwiftmutSourceSnippetMatch(line: 3, column: 1, offset: 26),
+      ])
+    XCTAssertEqual(swiftmutSourceSnippetMatches("", in: source), [])
+    XCTAssertEqual(swiftmutSourceLineAndColumn(Array(source.utf8), offset: 19).line, 2)
+    XCTAssertEqual(swiftmutSourceLineAndColumn(Array(source.utf8), offset: 19).column, 7)
+  }
+
+  func testSourceSnippetMatchesPreserveNonOverlappingBehavior() {
+    XCTAssertEqual(
+      swiftmutSourceSnippetMatches("aa", in: "aaaa"),
+      [
+        SwiftmutSourceSnippetMatch(line: 1, column: 1, offset: 0),
+        SwiftmutSourceSnippetMatch(line: 1, column: 3, offset: 2),
+      ])
+  }
+
   func testSourceTextIndexExtractsLineText() {
     let index = SwiftmutSourceTextIndex(text: "alpha\nbéta\n")
 

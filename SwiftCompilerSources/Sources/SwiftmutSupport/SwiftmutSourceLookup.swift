@@ -17,6 +17,8 @@ public final class SwiftmutSourceLookupCache {
   private var sourceTextByPath: [String: String] = [:]
   private var functionLocationByDescription: [String: (path: String, line: Int)] = [:]
   private var missingFunctionLocationDescriptions = Set<String>()
+  private var functionEndLineByPathAndStartLine: [String: [Int: Int]] = [:]
+  private var packageRootBytes: [UInt8]?
 
   public init(config: SwiftmutConfig) {
     self.config = config
@@ -109,7 +111,7 @@ public final class SwiftmutSourceLookupCache {
     }
 
     let locationBytes = Array(locationDescription.utf8)
-    let rootBytes = Array(config.packageRoot.utf8)
+    let rootBytes = cachedPackageRootBytes()
     guard let rootIndex = swiftmutFind(rootBytes, in: locationBytes, startingAt: 0) else {
       return nil
     }
@@ -124,11 +126,20 @@ public final class SwiftmutSourceLookupCache {
     }
 
     let candidate = String(decoding: locationBytes[rootIndex..<pathEnd], as: UTF8.self)
-    guard let includedPath = includedSourcePath(candidate),
+    guard let includedPath = exactlyIncludedSourcePath(candidate),
           let line = swiftmutLineNumber(in: locationBytes, afterPathEnd: pathEnd) else {
       return nil
     }
     return (includedPath, line)
+  }
+
+  private func cachedPackageRootBytes() -> [UInt8] {
+    if let packageRootBytes {
+      return packageRootBytes
+    }
+    let computed = Array(config.packageRoot.utf8)
+    packageRootBytes = computed
+    return computed
   }
 
   private func swiftmutLineNumber(in locationBytes: [UInt8], afterPathEnd pathEnd: Int) -> Int? {
@@ -169,6 +180,10 @@ public final class SwiftmutSourceLookupCache {
     return pathIsIncludedConfiguredSource(path)
   }
 
+  private func exactlyIncludedSourcePath(_ path: String) -> String? {
+    pathIsIncluded(path) ? path : nil
+  }
+
   private func pathIsIncludedConfiguredSource(_ path: String) -> Bool {
     if !config.packageRoot.isEmpty && !path.hasPrefix(config.packageRoot + "/") {
       return false
@@ -196,10 +211,18 @@ public final class SwiftmutSourceLookupCache {
     guard let text = read(path) else {
       return true
     }
-    return swiftmutSourceLineBelongsToFunction(
-      line,
+    if let endLine = functionEndLineByPathAndStartLine[path]?[functionLocation.line] {
+      return line <= endLine
+    }
+    guard let endLine = swiftmutFunctionEndLine(
       functionLocationLine: functionLocation.line,
-      text: text)
+      text: text) else {
+      return true
+    }
+    var endLineByStartLine = functionEndLineByPathAndStartLine[path] ?? [:]
+    endLineByStartLine[functionLocation.line] = endLine
+    functionEndLineByPathAndStartLine[path] = endLineByStartLine
+    return line <= endLine
   }
 }
 
@@ -240,18 +263,30 @@ public func swiftmutSourceLineBelongsToFunction(
   functionLocationLine: Int,
   text: String
 ) -> Bool {
+  guard line >= functionLocationLine else {
+    return false
+  }
+  guard let endLine = swiftmutFunctionEndLine(
+    functionLocationLine: functionLocationLine,
+    text: text) else {
+    return true
+  }
+  return line <= endLine
+}
+
+public func swiftmutFunctionEndLine(
+  functionLocationLine: Int,
+  text: String
+) -> Int? {
   var currentLine = 1
   var lineStart = text.startIndex
   var index = text.startIndex
   var braceDepth = 0
   var sawOpeningBrace = false
 
-  func inspectLine(_ lineText: String, lineNumber: Int) -> Bool? {
+  func inspectLine(_ lineText: String, lineNumber: Int) -> Int? {
     guard lineNumber >= functionLocationLine else {
       return nil
-    }
-    if lineNumber == line {
-      return true
     }
     for byte in lineText.utf8 {
       if byte == 123 {
@@ -262,22 +297,22 @@ public func swiftmutSourceLineBelongsToFunction(
       }
     }
     if sawOpeningBrace && braceDepth <= 0 {
-      return false
+      return lineNumber
     }
     return nil
   }
 
   while index < text.endIndex {
     if text[index] == "\n" {
-      if let result = inspectLine(String(text[lineStart..<index]), lineNumber: currentLine) {
-        return result
+      if let endLine = inspectLine(String(text[lineStart..<index]), lineNumber: currentLine) {
+        return endLine
       }
       currentLine += 1
       lineStart = text.index(after: index)
     }
     index = text.index(after: index)
   }
-  return inspectLine(String(text[lineStart..<text.endIndex]), lineNumber: currentLine) ?? true
+  return inspectLine(String(text[lineStart..<text.endIndex]), lineNumber: currentLine)
 }
 
 private var swiftmutSharedSourceLookupCacheStorage: SwiftmutSourceLookupCache?

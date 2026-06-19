@@ -88,6 +88,7 @@ final class SwiftmutSupportTests: XCTestCase {
 
     XCTAssertTrue(swiftmutSourceLineBelongsToFunction(2, functionLocationLine: 1, text: source))
     XCTAssertFalse(swiftmutSourceLineBelongsToFunction(5, functionLocationLine: 1, text: source))
+    XCTAssertEqual(swiftmutFunctionEndLine(functionLocationLine: 1, text: source), 3)
   }
 
   func testSharedSourceLookupCacheCachesConfiguredSourceReads() throws {
@@ -128,5 +129,51 @@ final class SwiftmutSupportTests: XCTestCase {
 
     try "second".write(to: source, atomically: true, encoding: .utf8)
     XCTAssertEqual(swiftmutCachedRead(source.path), "first")
+  }
+
+  func testSourceLookupCacheCachesFunctionEndLine() throws {
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("swiftmut-support-end-line-tests-\(UUID().uuidString)")
+    let source = directory
+      .appendingPathComponent("Sources")
+      .appendingPathComponent("App")
+      .appendingPathComponent("Feature.swift")
+    try FileManager.default.createDirectory(
+      at: source.deletingLastPathComponent(),
+      withIntermediateDirectories: true)
+    try """
+    func first() {
+      let x = 1
+    }
+
+    func second() {
+      let y = 2
+    }
+    """.write(to: source, atomically: true, encoding: .utf8)
+    defer {
+      try? FileManager.default.removeItem(at: directory)
+    }
+
+    let config = SwiftmutConfig(
+      mode: .discover,
+      activeMutantID: "",
+      mutantsPath: directory.appendingPathComponent("manifest.json").path,
+      manifestFragmentsDirectory: "",
+      compilerEventsPath: "",
+      packageRoot: directory.path,
+      excludePathFragments: [],
+      sourceFiles: [source.path],
+      enabledMutators: [],
+      conditionMutationRules: [],
+      arithmeticMutationRules: [],
+      contextualArithmeticMutationRules: [],
+      returnMutationRules: [],
+      voidCallMutationRules: [],
+      sourceMutationDisplayRules: [])
+    let cache = SwiftmutSourceLookupCache(config: config)
+    let functionLocation = (path: source.path, line: 1)
+
+    XCTAssertTrue(cache.sourceLineBelongsToFunction(2, path: source.path, functionLocation: functionLocation))
+    XCTAssertFalse(cache.sourceLineBelongsToFunction(5, path: source.path, functionLocation: functionLocation))
   }
 }

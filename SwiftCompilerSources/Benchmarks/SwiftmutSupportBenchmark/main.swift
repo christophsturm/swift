@@ -78,6 +78,59 @@ func syntheticJSON() -> (json: String, config: SwiftmutConfig) {
   return (json, config)
 }
 
+func sourceLocations(from sourcePaths: [String], count: Int) -> [String] {
+  sourcePaths.prefix(count).enumerated().map { index, path in
+    "debug location: \(path):\(index + 1):1"
+  }
+}
+
+func missingLocations(root: String, count: Int) -> [String] {
+  (0..<count).map { index in
+    "debug location: \(root)/Sources/Missing/File\(index).swift:\(index + 1):1"
+  }
+}
+
+func makeMembershipFixture() -> (cache: SwiftmutSourceLookupCache, path: String, cleanup: () -> Void) {
+  let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+    .appendingPathComponent("swiftmut-support-benchmark-\(UUID().uuidString)")
+  let source = directory
+    .appendingPathComponent("Sources")
+    .appendingPathComponent("App")
+    .appendingPathComponent("Feature.swift")
+  try! FileManager.default.createDirectory(
+    at: source.deletingLastPathComponent(),
+    withIntermediateDirectories: true)
+
+  var lines = ["func benchmark() {"]
+  for index in 0..<2_000 {
+    lines.append("  let value\(index) = \(index)")
+  }
+  lines.append("}")
+  try! lines.joined(separator: "\n").write(to: source, atomically: true, encoding: .utf8)
+
+  let config = SwiftmutConfig(
+    mode: .discover,
+    activeMutantID: "",
+    mutantsPath: directory.appendingPathComponent("manifest.json").path,
+    manifestFragmentsDirectory: "",
+    compilerEventsPath: "",
+    packageRoot: directory.path,
+    excludePathFragments: [],
+    sourceFiles: [source.path],
+    enabledMutators: [],
+    conditionMutationRules: [],
+    arithmeticMutationRules: [],
+    contextualArithmeticMutationRules: [],
+    returnMutationRules: [],
+    voidCallMutationRules: [],
+    sourceMutationDisplayRules: [])
+  return (
+    SwiftmutSourceLookupCache(config: config),
+    source.path,
+    { try? FileManager.default.removeItem(at: directory) }
+  )
+}
+
 let options = parseOptions(CommandLine.arguments)
 let loaded: (json: String?, config: SwiftmutConfig)
 if let configPath = options.configPath {
@@ -105,20 +158,48 @@ let parseSeconds = elapsed {
 
 let cache = SwiftmutSourceLookupCache(config: loaded.config)
 let sourcePaths = cache.swiftSourcePaths()
-let locations = sourcePaths.prefix(500).enumerated().map { index, path in
-  "debug location: \(path):\(index + 1):1"
+let locations = sourceLocations(from: sourcePaths, count: 500)
+let coldLookupSeconds = elapsed {
+  let coldCache = SwiftmutSourceLookupCache(config: loaded.config)
+  for location in locations {
+    _ = coldCache.functionSourceLocation(in: location)
+  }
 }
-let lookupSeconds = elapsed {
+let warmLookupSeconds = elapsed {
   for _ in 0..<options.iterations {
     for location in locations {
       _ = cache.functionSourceLocation(in: location)
     }
   }
 }
+let missing = missingLocations(root: loaded.config.packageRoot, count: max(1, min(sourcePaths.count, 500)))
+let missingLookupSeconds = elapsed {
+  let missingCache = SwiftmutSourceLookupCache(config: loaded.config)
+  for _ in 0..<options.iterations {
+    for location in missing {
+      _ = missingCache.functionSourceLocation(in: location)
+    }
+  }
+}
+let membershipFixture = makeMembershipFixture()
+let membershipSeconds = elapsed {
+  for _ in 0..<options.iterations {
+    for line in stride(from: 1, through: 2_200, by: 11) {
+      _ = membershipFixture.cache.sourceLineBelongsToFunction(
+        line,
+        path: membershipFixture.path,
+        functionLocation: (path: membershipFixture.path, line: 1))
+    }
+  }
+}
+membershipFixture.cleanup()
 
 print("swiftmut support benchmark")
 print("config: \(configPath)")
 print("iterations: \(options.iterations)")
 print("source files: \(sourcePaths.count)")
 print(String(format: "config parse: %.6fs", parseSeconds))
-print(String(format: "source lookup: %.6fs", lookupSeconds))
+print(String(format: "source lookup cold: %.6fs", coldLookupSeconds))
+print(String(format: "source lookup warm: %.6fs", warmLookupSeconds))
+print(String(format: "source lookup missing: %.6fs", missingLookupSeconds))
+print(String(format: "source membership cached: %.6fs", membershipSeconds))

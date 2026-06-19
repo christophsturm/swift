@@ -762,20 +762,30 @@ private func swiftmutFunctionEndLineByScanning(
   functionLocationLine: Int,
   bytes: UnsafeBufferPointer<UInt8>
 ) -> Int? {
+  guard functionLocationLine > 0 else {
+    return nil
+  }
   var currentLine = 1
+  var index = 0
+  while currentLine < functionLocationLine && index < bytes.count {
+    if bytes[index] == 10 {
+      currentLine += 1
+    }
+    index += 1
+  }
+  guard currentLine == functionLocationLine else {
+    return nil
+  }
+
   var braceDepth = 0
   var sawOpeningBrace = false
-
-  var index = 0
   while index < bytes.count {
     let byte = bytes[index]
-    if currentLine >= functionLocationLine {
-      if byte == 123 {
-        braceDepth += 1
-        sawOpeningBrace = true
-      } else if byte == 125 {
-        braceDepth -= 1
-      }
+    if byte == 123 {
+      braceDepth += 1
+      sawOpeningBrace = true
+    } else if byte == 125 {
+      braceDepth -= 1
     }
     if byte == 10 {
       if sawOpeningBrace && braceDepth <= 0 {

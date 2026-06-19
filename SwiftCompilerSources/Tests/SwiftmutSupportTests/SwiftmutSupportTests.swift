@@ -587,6 +587,7 @@ final class SwiftmutSupportTests: XCTestCase {
     """
 
     XCTAssertEqual(swiftmutFunctionEndLine(functionLocationLine: 1, text: source), 3)
+    XCTAssertNil(swiftmutFunctionEndLineByScanning(functionLocationLine: 0, text: source))
   }
 
   func testSourceTextIndexFindsLaterFunctionEndLine() {

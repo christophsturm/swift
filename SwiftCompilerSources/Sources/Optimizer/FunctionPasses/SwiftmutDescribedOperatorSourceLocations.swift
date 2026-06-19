@@ -439,13 +439,22 @@ func swiftmutTernaryConditionExpression(
   guard lineStart < lineEnd,
         !needleBytes.isEmpty,
         let needleIndex = swiftmutFind(needleBytes, in: bytes, startingAt: lineStart),
-        let questionIndex = swiftmutTopLevelByteIndex(bytes, start: needleIndex, end: lineEnd, byte: 63) else {
+        let ternary = swiftmutTopLevelTernaryParts(bytes: bytes, start: lineStart, end: lineEnd),
+        needleIndex <= ternary.question else {
     return nil
   }
 
-  var start = swiftmutTernaryConditionStart(bytes: bytes, before: questionIndex, lineStart: lineStart)
+  var boundary = -1
+  if let assignment = ternary.assignmentBeforeQuestion {
+    boundary = max(boundary, assignment)
+  }
+  if let comma = ternary.commaBeforeQuestion {
+    boundary = max(boundary, comma)
+  }
+
+  var start = boundary >= lineStart ? boundary + 1 : lineStart
   start = swiftmutSkipHorizontalWhitespace(bytes, from: start)
-  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: questionIndex)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: ternary.question)
   guard start < end,
         swiftmutSourceExpressionIsSingleLineComplete(bytes: bytes, start: start, end: end) else {
     return nil
@@ -453,17 +462,6 @@ func swiftmutTernaryConditionExpression(
   return (
     start + 1,
     String(decoding: bytes[start..<end], as: UTF8.self))
-}
-
-func swiftmutTernaryConditionStart(
-  bytes: [UInt8],
-  before questionIndex: Int,
-  lineStart: Int
-) -> Int {
-  SwiftmutSupport.swiftmutTernaryConditionStart(
-    bytes: bytes,
-    before: questionIndex,
-    lineStart: lineStart)
 }
 
 func swiftmutSourceOperatorNeedleContainsOperator(_ needle: String) -> Bool {

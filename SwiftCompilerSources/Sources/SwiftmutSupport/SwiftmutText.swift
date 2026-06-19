@@ -346,17 +346,20 @@ public struct SwiftmutTopLevelTernaryParts: Equatable {
   public let colonAfterQuestion: Int
   public let assignmentBeforeQuestion: Int?
   public let labelColonBeforeQuestion: Int?
+  public let commaBeforeQuestion: Int?
 
   public init(
     question: Int,
     colonAfterQuestion: Int,
     assignmentBeforeQuestion: Int?,
-    labelColonBeforeQuestion: Int?
+    labelColonBeforeQuestion: Int?,
+    commaBeforeQuestion: Int? = nil
   ) {
     self.question = question
     self.colonAfterQuestion = colonAfterQuestion
     self.assignmentBeforeQuestion = assignmentBeforeQuestion
     self.labelColonBeforeQuestion = labelColonBeforeQuestion
+    self.commaBeforeQuestion = commaBeforeQuestion
   }
 }
 
@@ -373,6 +376,7 @@ public func swiftmutTopLevelTernaryParts(
   var question: Int?
   var assignmentBeforeQuestion: Int?
   var labelColonBeforeQuestion: Int?
+  var commaBeforeQuestion: Int?
   var index = start
   while index < end {
     let byte = bytes[index]
@@ -400,7 +404,8 @@ public func swiftmutTopLevelTernaryParts(
             question: questionIndex,
             colonAfterQuestion: index,
             assignmentBeforeQuestion: assignmentBeforeQuestion,
-            labelColonBeforeQuestion: labelColonBeforeQuestion)
+            labelColonBeforeQuestion: labelColonBeforeQuestion,
+            commaBeforeQuestion: commaBeforeQuestion)
         }
       } else if byte == 63 {
         let previous = index > start ? bytes[index - 1] : 0
@@ -416,6 +421,8 @@ public func swiftmutTopLevelTernaryParts(
         }
       } else if byte == 58 {
         labelColonBeforeQuestion = index
+      } else if byte == 44 {
+        commaBeforeQuestion = index
       }
     }
     switch byte {

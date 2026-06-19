@@ -454,7 +454,7 @@ final class SwiftmutSupportTests: XCTestCase {
   }
 
   func testTopLevelTernaryPartsScansQuestionColonAssignmentAndLabelTogether() {
-    let source = #"target = label: call([1: 2], text: ":") ? yes : no"#
+    let source = #"prefix(value), target = label: call([1: 2], text: ":") ? yes : no"#
     let bytes = Array(source.utf8)
 
     XCTAssertEqual(
@@ -463,7 +463,8 @@ final class SwiftmutSupportTests: XCTestCase {
         question: swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: " ? ")! + 1,
         colonAfterQuestion: swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: " : no")! + 1,
         assignmentBeforeQuestion: swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: " = ")! + 1,
-        labelColonBeforeQuestion: swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: "label:")! + 5))
+        labelColonBeforeQuestion: swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: "label:")! + 5,
+        commaBeforeQuestion: swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: ", target")!))
   }
 
   func testTopLevelTernaryPartsRejectsMissingColonAndNilCoalescing() {

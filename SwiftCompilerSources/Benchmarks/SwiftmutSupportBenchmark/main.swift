@@ -396,16 +396,24 @@ let ternaryScanSeconds = elapsed {
     }
   }
 }
-let ternaryStartSeconds = elapsed {
+let ternaryConditionRangeSeconds = elapsed {
   for _ in 0..<options.iterations {
-    if let question = swiftmutTopLevelTernaryQuestionIndex(
+    if let parts = swiftmutTopLevelTernaryParts(
       bytes: ternaryFixture,
       start: 0,
       end: ternaryFixture.count) {
-      _ = swiftmutTernaryConditionStart(
-        bytes: ternaryFixture,
-        before: question,
-        lineStart: 0)
+      var boundary = -1
+      if let assignment = parts.assignmentBeforeQuestion {
+        boundary = max(boundary, assignment)
+      }
+      if let comma = parts.commaBeforeQuestion {
+        boundary = max(boundary, comma)
+      }
+      let start = swiftmutSkipHorizontalWhitespace(
+        ternaryFixture,
+        from: boundary >= 0 ? boundary + 1 : 0)
+      let end = swiftmutTrimTrailingHorizontalWhitespace(ternaryFixture, end: parts.question)
+      _ = start < end
     }
   }
 }
@@ -463,7 +471,7 @@ print(String(format: "top-level ascii scan: %.6fs", topLevelASCIISeconds))
 print(String(format: "expression complete scan: %.6fs", expressionCompleteSeconds))
 print(String(format: "balanced expression scan: %.6fs", balancedExpressionSeconds))
 print(String(format: "ternary boundary scan: %.6fs", ternaryScanSeconds))
-print(String(format: "ternary start scan: %.6fs", ternaryStartSeconds))
+print(String(format: "ternary condition range scan: %.6fs", ternaryConditionRangeSeconds))
 print("mangled identifier iterations: \(mangledIdentifierIterations)")
 print(String(format: "mangled identifier scan: %.6fs", mangledIdentifierSeconds))
 print("default argument declaration iterations: \(defaultArgumentIterations)")

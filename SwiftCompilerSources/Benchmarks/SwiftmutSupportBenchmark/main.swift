@@ -164,6 +164,15 @@ func multiFunctionEndLineFixture() -> (text: String, startLines: [Int]) {
   return (lines.joined(separator: "\n"), startLines)
 }
 
+func topLevelScanFixture() -> [UInt8] {
+  var segments: [String] = []
+  for index in 0..<250 {
+    segments.append("call\(index)(value: [1, 2, 3], text: \"where else = ?\")")
+  }
+  segments.append(" target: true")
+  return Array(segments.joined(separator: ", ").utf8)
+}
+
 let options = parseOptions(CommandLine.arguments)
 let loaded: (json: String?, config: SwiftmutConfig)
 if let configPath = options.configPath {
@@ -292,6 +301,33 @@ let indexedEndLineSeconds = elapsed {
     }
   }
 }
+let topLevelFixture = topLevelScanFixture()
+let topLevelByteSeconds = elapsed {
+  for _ in 0..<options.iterations {
+    _ = swiftmutTopLevelByteIndex(
+      topLevelFixture,
+      start: 0,
+      end: topLevelFixture.count,
+      byte: UInt8(ascii: ":"))
+  }
+}
+let topLevelASCIISeconds = elapsed {
+  for _ in 0..<options.iterations {
+    _ = swiftmutTopLevelASCIIIndex(
+      topLevelFixture,
+      start: 0,
+      end: topLevelFixture.count,
+      pattern: "target")
+  }
+}
+let expressionCompleteSeconds = elapsed {
+  for _ in 0..<options.iterations {
+    _ = swiftmutSourceExpressionIsSingleLineComplete(
+      bytes: topLevelFixture,
+      start: 0,
+      end: topLevelFixture.count)
+  }
+}
 
 print("swiftmut support benchmark")
 print("config: \(configPath)")
@@ -312,3 +348,6 @@ print(String(format: "function end-line scan: %.6fs", endLineSeconds))
 print("function end-line comparison iterations: \(endLineComparisonIterations)")
 print(String(format: "function end-line repeated scan: %.6fs", repeatedEndLineSeconds))
 print(String(format: "function end-line indexed: %.6fs", indexedEndLineSeconds))
+print(String(format: "top-level byte scan: %.6fs", topLevelByteSeconds))
+print(String(format: "top-level ascii scan: %.6fs", topLevelASCIISeconds))
+print(String(format: "expression complete scan: %.6fs", expressionCompleteSeconds))

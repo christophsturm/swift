@@ -269,6 +269,52 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertNil(index.lineText(line: 4))
   }
 
+  func testTopLevelByteIndexIgnoresNestedAndQuotedBytes() {
+    let bytes = Array(#"call(a, ["ignored, comma"], nested(value)) , trailing"#.utf8)
+
+    XCTAssertEqual(swiftmutTopLevelByteIndex(bytes, start: 0, end: bytes.count, byte: 44), 43)
+    XCTAssertEqual(swiftmutTopLevelASCIIIndex(bytes, start: 0, end: bytes.count, pattern: "trailing"), 45)
+    XCTAssertTrue(swiftmutTopLevelASCIIContains(bytes, start: 0, end: bytes.count, pattern: "trailing"))
+    XCTAssertFalse(swiftmutTopLevelASCIIContains(bytes, start: 0, end: bytes.count, pattern: "ignored"))
+  }
+
+  func testSingleLineExpressionCompletenessTracksQuotesAndDelimiters() {
+    XCTAssertTrue(swiftmutSourceExpressionIsSingleLineComplete(
+      bytes: Array(#"value(")") + [1, 2]"#.utf8),
+      start: 0,
+      end: #"value(")") + [1, 2]"#.utf8.count))
+    XCTAssertFalse(swiftmutSourceExpressionIsSingleLineComplete(
+      bytes: Array("value([1, 2".utf8),
+      start: 0,
+      end: "value([1, 2".utf8.count))
+    XCTAssertFalse(swiftmutSourceExpressionIsSingleLineComplete(
+      bytes: Array("value())".utf8),
+      start: 0,
+      end: "value())".utf8.count))
+  }
+
+  func testASCIITextHelpersAreAvailableWithoutCompilerModules() {
+    let bytes = Array("  Alpha beta  ".utf8)
+
+    XCTAssertEqual(swiftmutSkipHorizontalWhitespace(bytes, from: 0), 2)
+    XCTAssertEqual(swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count), 12)
+    XCTAssertEqual(swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: "beta"), 8)
+    XCTAssertTrue(swiftmutASCIIContains(bytes, start: 0, end: bytes.count, pattern: "Alpha"))
+    XCTAssertTrue(swiftmutASCIIHasPrefix(bytes, start: 2, prefix: "alpha"))
+    XCTAssertTrue(swiftmutASCIIHasExactPrefix(bytes, start: 2, prefix: "Alpha"))
+    XCTAssertFalse(swiftmutASCIIHasExactPrefix(bytes, start: 2, prefix: "alpha"))
+    XCTAssertEqual(swiftmutASCIILowercase(UInt8(ascii: "A")), UInt8(ascii: "a"))
+    XCTAssertTrue(swiftmutIsASCIIIdentifierStart(UInt8(ascii: "_")))
+    XCTAssertTrue(swiftmutIsASCIILetterNumberOrUnderscore(UInt8(ascii: "7")))
+    XCTAssertTrue(swiftmutIsHorizontalWhitespace(UInt8(ascii: "\t")))
+  }
+
+  func testLineOpensFunctionBodyUsesTopLevelBraceOnly() {
+    XCTAssertTrue(swiftmutLineOpensFunctionBody("func value() {"))
+    XCTAssertFalse(swiftmutLineOpensFunctionBody("let text = \"{\""))
+    XCTAssertFalse(swiftmutLineOpensFunctionBody("let value = call({ nested() })"))
+  }
+
   func testFunctionEndLineFindsClosingBraceWithoutTrailingNewline() {
     let source = """
     func value() {

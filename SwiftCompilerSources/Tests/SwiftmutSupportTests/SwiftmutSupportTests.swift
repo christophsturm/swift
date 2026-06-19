@@ -130,6 +130,31 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertNil(location)
   }
 
+  func testIncludedSourcePathResolvesRelativePackagePath() {
+    let config = SwiftmutConfig(
+      mode: .discover,
+      activeMutantID: "",
+      mutantsPath: "/repo/.swiftmut/manifest.json",
+      manifestFragmentsDirectory: "",
+      compilerEventsPath: "",
+      packageRoot: "/repo",
+      excludePathFragments: [],
+      sourceFiles: ["/repo/Sources/App/Feature.swift"],
+      enabledMutators: [],
+      conditionMutationRules: [],
+      arithmeticMutationRules: [],
+      contextualArithmeticMutationRules: [],
+      returnMutationRules: [],
+      voidCallMutationRules: [],
+      sourceMutationDisplayRules: [])
+
+    let cache = SwiftmutSourceLookupCache(config: config)
+
+    XCTAssertEqual(
+      cache.includedSourcePath("Sources/App/Feature.swift"),
+      "/repo/Sources/App/Feature.swift")
+  }
+
   func testSourceLineBelongsToFunctionUsesExtractedBraceScan() {
     let source = """
     func first() {

@@ -90,6 +90,15 @@ func missingLocations(root: String, count: Int) -> [String] {
   }
 }
 
+func relativeSourcePaths(from sourcePaths: [String], packageRoot: String, count: Int) -> [String] {
+  sourcePaths.prefix(count).map { path in
+    if !packageRoot.isEmpty && path.hasPrefix(packageRoot + "/") {
+      return String(path.dropFirst(packageRoot.count + 1))
+    }
+    return path
+  }
+}
+
 func makeMembershipFixture() -> (cache: SwiftmutSourceLookupCache, path: String, cleanup: () -> Void) {
   let directory = URL(fileURLWithPath: NSTemporaryDirectory())
     .appendingPathComponent("swiftmut-support-benchmark-\(UUID().uuidString)")
@@ -190,6 +199,18 @@ let missingLookupSeconds = elapsed {
     }
   }
 }
+let relativePaths = relativeSourcePaths(
+  from: sourcePaths,
+  packageRoot: loaded.config.packageRoot,
+  count: 500)
+let suffixLookupSeconds = elapsed {
+  let suffixCache = SwiftmutSourceLookupCache(config: loaded.config)
+  for _ in 0..<options.iterations {
+    for path in relativePaths {
+      _ = suffixCache.includedSourcePath(path)
+    }
+  }
+}
 let membershipFixture = makeMembershipFixture()
 let membershipSeconds = elapsed {
   for _ in 0..<options.iterations {
@@ -217,5 +238,6 @@ print(String(format: "config parse: %.6fs", parseSeconds))
 print(String(format: "source lookup cold: %.6fs", coldLookupSeconds))
 print(String(format: "source lookup warm: %.6fs", warmLookupSeconds))
 print(String(format: "source lookup missing: %.6fs", missingLookupSeconds))
+print(String(format: "source suffix lookup: %.6fs", suffixLookupSeconds))
 print(String(format: "source membership cached: %.6fs", membershipSeconds))
 print(String(format: "function end-line scan: %.6fs", endLineSeconds))

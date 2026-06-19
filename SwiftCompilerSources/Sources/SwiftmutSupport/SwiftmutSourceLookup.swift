@@ -20,6 +20,7 @@ public final class SwiftmutSourceLookupCache {
 
   private var sourcePaths: [String]?
   private var sourcePathSet: Set<String>?
+  private var sourcePathByRelativePath: [String: String]?
   private var sourceTextByPath: [String: String] = [:]
   private var functionLocationByDescription: [String: (path: String, line: Int)] = [:]
   private var missingFunctionLocationDescriptions = Set<String>()
@@ -47,6 +48,10 @@ public final class SwiftmutSourceLookupCache {
   public func includedSourcePath(_ path: String) -> String? {
     if pathIsIncluded(path) {
       return path
+    }
+    if !path.hasPrefix("/"),
+       let sourcePath = relativeSourcePathMap()[path] {
+      return sourcePath
     }
     let suffix = path.hasPrefix("/") ? path : "/" + path
     for sourceFile in config.sourceFiles {
@@ -180,6 +185,33 @@ public final class SwiftmutSourceLookupCache {
     }
     let computed = Set(config.sourceFiles)
     sourcePathSet = computed
+    return computed
+  }
+
+  private func relativeSourcePathMap() -> [String: String] {
+    if let sourcePathByRelativePath {
+      return sourcePathByRelativePath
+    }
+
+    var computed: [String: String] = [:]
+    for sourceFile in config.sourceFiles {
+      guard pathIsIncludedConfiguredSource(sourceFile) else {
+        continue
+      }
+      if !config.packageRoot.isEmpty && sourceFile.hasPrefix(config.packageRoot + "/") {
+        let relativePath = String(sourceFile.dropFirst(config.packageRoot.count + 1))
+        if computed[relativePath] == nil {
+          computed[relativePath] = sourceFile
+        }
+      }
+      if sourceFile.hasPrefix("/") {
+        let withoutLeadingSlash = String(sourceFile.dropFirst())
+        if computed[withoutLeadingSlash] == nil {
+          computed[withoutLeadingSlash] = sourceFile
+        }
+      }
+    }
+    sourcePathByRelativePath = computed
     return computed
   }
 

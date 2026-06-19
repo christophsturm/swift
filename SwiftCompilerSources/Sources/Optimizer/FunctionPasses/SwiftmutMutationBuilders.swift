@@ -11,6 +11,7 @@
 
 import AST
 import SIL
+import SwiftmutSupport
 
 func swiftmutReturnMutations(
   for returnInst: ReturnInst,
@@ -767,14 +768,5 @@ func swiftmutMutatorIsEnabled(
   _ mutator: String,
   config: SwiftmutConfig
 ) -> Bool {
-  if config.enabledMutators.isEmpty {
-    return true
-  }
-  for enabledMutator in config.enabledMutators {
-    if enabledMutator == mutator {
-      return true
-    }
-  }
-  return false
+  SwiftmutSupport.swiftmutMutatorIsEnabled(mutator, config: config)
 }
-

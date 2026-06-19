@@ -183,6 +183,7 @@ public struct SwiftmutConfig {
   public let excludePathFragments: [String]
   public let sourceFiles: [String]
   public let enabledMutators: [String]
+  private let enabledMutatorSet: Set<String>
   public let conditionMutationRules: [SwiftmutConditionMutationRule]
   public let arithmeticMutationRules: [SwiftmutArithmeticMutationRule]
   public let contextualArithmeticMutationRules: [SwiftmutContextualArithmeticMutationRule]
@@ -216,6 +217,7 @@ public struct SwiftmutConfig {
     self.excludePathFragments = excludePathFragments
     self.sourceFiles = sourceFiles
     self.enabledMutators = enabledMutators
+    enabledMutatorSet = Set(enabledMutators)
     self.conditionMutationRules = conditionMutationRules
     self.arithmeticMutationRules = arithmeticMutationRules
     self.contextualArithmeticMutationRules = contextualArithmeticMutationRules
@@ -304,6 +306,17 @@ public struct SwiftmutConfig {
       voidCallMutationRules: voidCallMutationRules,
       sourceMutationDisplayRules: sourceMutationDisplayRules)
   }
+
+  public func mutatorIsEnabled(_ mutator: String) -> Bool {
+    enabledMutators.isEmpty || enabledMutatorSet.contains(mutator)
+  }
+}
+
+public func swiftmutMutatorIsEnabled(
+  _ mutator: String,
+  config: SwiftmutConfig
+) -> Bool {
+  config.mutatorIsEnabled(mutator)
 }
 
 private var swiftmutCachedConfigPath: String?

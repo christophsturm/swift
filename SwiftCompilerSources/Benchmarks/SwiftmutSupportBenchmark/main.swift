@@ -186,6 +186,17 @@ let parseSeconds = elapsed {
     }
   }
 }
+let mutatorsToCheck = (
+  loaded.config.enabledMutators
+  + ["MISSING_MUTATOR", "MATH", "EMPTY_RETURNS", "VOID_METHOD_CALLS"]
+)
+let mutatorEnabledSeconds = elapsed {
+  for _ in 0..<options.iterations {
+    for mutator in mutatorsToCheck {
+      _ = swiftmutMutatorIsEnabled(mutator, config: loaded.config)
+    }
+  }
+}
 
 let cache = SwiftmutSourceLookupCache(config: loaded.config)
 let sourcePaths = cache.swiftSourcePaths()
@@ -272,6 +283,7 @@ print("config: \(configPath)")
 print("iterations: \(options.iterations)")
 print("source files: \(sourcePaths.count)")
 print(String(format: "config parse: %.6fs", parseSeconds))
+print(String(format: "mutator enabled: %.6fs", mutatorEnabledSeconds))
 print(String(format: "source lookup cold: %.6fs", coldLookupSeconds))
 print(String(format: "source lookup warm: %.6fs", warmLookupSeconds))
 print(String(format: "source lookup missing: %.6fs", missingLookupSeconds))

@@ -82,6 +82,45 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertEqual(config.sourceMutationDisplayRules.first?.sourceMutatedOverride, "!==")
   }
 
+  func testMutatorEnabledUsesConfiguredMutators() {
+    let unrestricted = SwiftmutConfig(
+      mode: .discover,
+      activeMutantID: "",
+      mutantsPath: "/repo/.swiftmut/manifest.json",
+      manifestFragmentsDirectory: "",
+      compilerEventsPath: "",
+      packageRoot: "/repo",
+      excludePathFragments: [],
+      sourceFiles: [],
+      enabledMutators: [],
+      conditionMutationRules: [],
+      arithmeticMutationRules: [],
+      contextualArithmeticMutationRules: [],
+      returnMutationRules: [],
+      voidCallMutationRules: [],
+      sourceMutationDisplayRules: [])
+    let restricted = SwiftmutConfig(
+      mode: .discover,
+      activeMutantID: "",
+      mutantsPath: "/repo/.swiftmut/manifest.json",
+      manifestFragmentsDirectory: "",
+      compilerEventsPath: "",
+      packageRoot: "/repo",
+      excludePathFragments: [],
+      sourceFiles: [],
+      enabledMutators: ["MATH", "EMPTY_RETURNS"],
+      conditionMutationRules: [],
+      arithmeticMutationRules: [],
+      contextualArithmeticMutationRules: [],
+      returnMutationRules: [],
+      voidCallMutationRules: [],
+      sourceMutationDisplayRules: [])
+
+    XCTAssertTrue(swiftmutMutatorIsEnabled("ANYTHING", config: unrestricted))
+    XCTAssertTrue(swiftmutMutatorIsEnabled("MATH", config: restricted))
+    XCTAssertFalse(swiftmutMutatorIsEnabled("VOID_METHOD_CALLS", config: restricted))
+  }
+
   func testSourceLookupFindsFunctionLocationWithoutCompilerModules() {
     let config = SwiftmutConfig(
       mode: .discover,

@@ -342,6 +342,11 @@ let sourceLineSeconds = elapsed {
     _ = swiftmutSourceLine(in: endLineFixture, line: 1_000)
   }
 }
+let numberedSourceLinesSeconds = elapsed {
+  for _ in 0..<options.iterations {
+    _ = swiftmutNumberedSourceLines(endLineFixture)
+  }
+}
 let sourceSnippetSeconds = elapsed {
   for _ in 0..<options.iterations {
     _ = swiftmutSourceSnippetMatches("let value999", in: endLineFixture)
@@ -487,6 +492,7 @@ print(String(format: "source suffix lookup: %.6fs", suffixLookupSeconds))
 print(String(format: "source membership cached: %.6fs", membershipSeconds))
 print(String(format: "source read: %.6fs", sourceReadSeconds))
 print(String(format: "source line: %.6fs", sourceLineSeconds))
+print(String(format: "numbered source lines: %.6fs", numberedSourceLinesSeconds))
 print(String(format: "source line cached: %.6fs", cachedSourceLineSeconds))
 print(String(format: "source snippet: %.6fs", sourceSnippetSeconds))
 print(String(format: "source snippet cached: %.6fs", cachedSourceSnippetSeconds))

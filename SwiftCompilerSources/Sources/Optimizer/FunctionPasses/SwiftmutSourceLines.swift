@@ -12,22 +12,7 @@
 import SwiftmutSupport
 
 func swiftmutNumberedSourceLines(_ text: String) -> [(number: Int, text: String)] {
-  var result: [(number: Int, text: String)] = []
-  var currentLine = 1
-  var lineStart = text.startIndex
-  var index = text.startIndex
-  while index < text.endIndex {
-    if text[index] == "\n" {
-      result.append((currentLine, String(text[lineStart..<index])))
-      currentLine += 1
-      lineStart = text.index(after: index)
-    }
-    index = text.index(after: index)
-  }
-  if lineStart < text.endIndex || text.isEmpty {
-    result.append((currentLine, String(text[lineStart..<text.endIndex])))
-  }
-  return result
+  SwiftmutSupport.swiftmutNumberedSourceLines(text)
 }
 
 func swiftmutSourceLine(

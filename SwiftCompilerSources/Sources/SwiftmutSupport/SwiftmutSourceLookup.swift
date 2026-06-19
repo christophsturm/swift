@@ -410,6 +410,32 @@ private func swiftmutSourceLine(
   return nil
 }
 
+public func swiftmutNumberedSourceLines(_ text: String) -> [(number: Int, text: String)] {
+  var sourceText = text
+  return sourceText.withUTF8 { bytes in
+    var lines: [(number: Int, text: String)] = []
+    var currentLine = 1
+    var lineStart = 0
+    var index = 0
+    while index < bytes.count {
+      if bytes[index] == 10 {
+        lines.append((
+          currentLine,
+          String(decoding: bytes[lineStart..<index], as: UTF8.self)))
+        currentLine += 1
+        lineStart = index + 1
+      }
+      index += 1
+    }
+    if lineStart < bytes.count || bytes.isEmpty {
+      lines.append((
+        currentLine,
+        String(decoding: bytes[lineStart..<bytes.count], as: UTF8.self)))
+    }
+    return lines
+  }
+}
+
 public struct SwiftmutSourceSnippetMatch: Equatable {
   public let line: Int
   public let column: Int

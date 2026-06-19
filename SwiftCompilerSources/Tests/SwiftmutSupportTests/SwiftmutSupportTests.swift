@@ -257,6 +257,20 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertNil(swiftmutSourceLine(in: source, line: 99))
   }
 
+  func testNumberedSourceLinesPreservesLineNumbersAndUTF8Text() {
+    let lines = swiftmutNumberedSourceLines("alpha\nbéta\n")
+    XCTAssertEqual(lines.map(\.number), [1, 2])
+    XCTAssertEqual(lines.map(\.text), ["alpha", "béta"])
+
+    let last = swiftmutNumberedSourceLines("last")
+    XCTAssertEqual(last.map(\.number), [1])
+    XCTAssertEqual(last.map(\.text), ["last"])
+
+    let empty = swiftmutNumberedSourceLines("")
+    XCTAssertEqual(empty.map(\.number), [1])
+    XCTAssertEqual(empty.map(\.text), [""])
+  }
+
   func testSourceSnippetMatchesTrackLineColumnAndOffset() {
     let source = """
     alpha call()

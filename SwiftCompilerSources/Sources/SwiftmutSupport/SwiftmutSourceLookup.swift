@@ -15,6 +15,8 @@ public final class SwiftmutSourceLookupCache {
   private var sourcePaths: [String]?
   private var sourcePathSet: Set<String>?
   private var sourceTextByPath: [String: String] = [:]
+  private var functionLocationByDescription: [String: (path: String, line: Int)] = [:]
+  private var missingFunctionLocationDescriptions = Set<String>()
 
   public init(config: SwiftmutConfig) {
     self.config = config
@@ -67,6 +69,23 @@ public final class SwiftmutSourceLookupCache {
   }
 
   public func functionSourceLocation(
+    in locationDescription: String
+  ) -> (path: String, line: Int)? {
+    if let cached = functionLocationByDescription[locationDescription] {
+      return cached
+    }
+    if missingFunctionLocationDescriptions.contains(locationDescription) {
+      return nil
+    }
+    guard let location = computeFunctionSourceLocation(in: locationDescription) else {
+      missingFunctionLocationDescriptions.insert(locationDescription)
+      return nil
+    }
+    functionLocationByDescription[locationDescription] = location
+    return location
+  }
+
+  private func computeFunctionSourceLocation(
     in locationDescription: String
   ) -> (path: String, line: Int)? {
     if let direct = directFunctionSourceLocation(in: locationDescription) {

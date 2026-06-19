@@ -58,6 +58,9 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertEqual(swiftmutFind(Array("beta".utf8), in: bytes, startingAt: 7), 12)
     XCTAssertNil(swiftmutFind(Array("missing".utf8), in: bytes, startingAt: 0))
     XCTAssertNil(swiftmutFind(Array("alpha".utf8), in: bytes, startingAt: bytes.count))
+    XCTAssertEqual(bytes.withUnsafeBufferPointer {
+      swiftmutFind(Array("beta".utf8), in: $0, startingAt: 7)
+    }, 12)
   }
 
   func testMangledIdentifiersExtractsUniqueLengthPrefixedIdentifiers() {

@@ -320,6 +320,39 @@ public func swiftmutFind(_ needle: [UInt8], in haystack: [UInt8], startingAt sta
   return nil
 }
 
+public func swiftmutFind(
+  _ needle: [UInt8],
+  in haystack: UnsafeBufferPointer<UInt8>,
+  startingAt start: Int
+) -> Int? {
+  guard !needle.isEmpty, haystack.count >= needle.count, start <= haystack.count - needle.count else {
+    return nil
+  }
+  let firstNeedleByte = needle[0]
+  let lastStart = haystack.count - needle.count
+  var index = start
+  while index <= lastStart {
+    while index <= lastStart && haystack[index] != firstNeedleByte {
+      index += 1
+    }
+    guard index <= lastStart else {
+      break
+    }
+    var matched = true
+    for needleIndex in 1..<needle.count {
+      if haystack[index + needleIndex] != needle[needleIndex] {
+        matched = false
+        break
+      }
+    }
+    if matched {
+      return index
+    }
+    index += 1
+  }
+  return nil
+}
+
 public func swiftmutFormatMutantID(_ ordinal: Int) -> String {
   if ordinal < 10 {
     return "M00\(ordinal)"

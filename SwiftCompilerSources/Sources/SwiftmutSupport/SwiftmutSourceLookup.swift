@@ -142,29 +142,31 @@ public final class SwiftmutSourceLookupCache {
       return .unknown
     }
 
-    let locationBytes = Array(locationDescription.utf8)
     let rootBytes = cachedPackageRootBytes()
-    guard let rootIndex = swiftmutFind(rootBytes, in: locationBytes, startingAt: 0) else {
-      return .unknown
-    }
+    var locationText = locationDescription
+    return locationText.withUTF8 { locationBytes in
+      guard let rootIndex = swiftmutFind(rootBytes, in: locationBytes, startingAt: 0) else {
+        return .unknown
+      }
 
-    var pathEnd = rootIndex + rootBytes.count
-    while pathEnd < locationBytes.count && locationBytes[pathEnd] != 58 {
-      pathEnd += 1
-    }
+      var pathEnd = rootIndex + rootBytes.count
+      while pathEnd < locationBytes.count && locationBytes[pathEnd] != 58 {
+        pathEnd += 1
+      }
 
-    guard pathEnd < locationBytes.count else {
-      return .unknown
-    }
+      guard pathEnd < locationBytes.count else {
+        return .unknown
+      }
 
-    let candidate = String(decoding: locationBytes[rootIndex..<pathEnd], as: UTF8.self)
-    guard let line = swiftmutLineNumber(in: locationBytes, afterPathEnd: pathEnd) else {
-      return .unknown
+      let candidate = String(decoding: locationBytes[rootIndex..<pathEnd], as: UTF8.self)
+      guard let line = swiftmutLineNumber(in: locationBytes, afterPathEnd: pathEnd) else {
+        return .unknown
+      }
+      guard let includedPath = exactlyIncludedSourcePath(candidate) else {
+        return .notPresent
+      }
+      return .found(path: includedPath, line: line)
     }
-    guard let includedPath = exactlyIncludedSourcePath(candidate) else {
-      return .notPresent
-    }
-    return .found(path: includedPath, line: line)
   }
 
   private func cachedPackageRootBytes() -> [UInt8] {
@@ -176,7 +178,10 @@ public final class SwiftmutSourceLookupCache {
     return computed
   }
 
-  private func swiftmutLineNumber(in locationBytes: [UInt8], afterPathEnd pathEnd: Int) -> Int? {
+  private func swiftmutLineNumber(
+    in locationBytes: UnsafeBufferPointer<UInt8>,
+    afterPathEnd pathEnd: Int
+  ) -> Int? {
     guard pathEnd < locationBytes.count, locationBytes[pathEnd] == 58 else {
       return nil
     }

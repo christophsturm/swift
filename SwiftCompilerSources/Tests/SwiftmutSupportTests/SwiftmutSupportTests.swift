@@ -231,6 +231,16 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertNil(swiftmutSourceLine(in: source, line: 99))
   }
 
+  func testSourceTextIndexExtractsLineText() {
+    let index = SwiftmutSourceTextIndex(text: "alpha\nbéta\n")
+
+    XCTAssertEqual(index.lineText(line: 1), "alpha")
+    XCTAssertEqual(index.lineText(line: 2), "béta")
+    XCTAssertEqual(index.lineText(line: 3), "")
+    XCTAssertNil(index.lineText(line: 0))
+    XCTAssertNil(index.lineText(line: 4))
+  }
+
   func testFunctionEndLineFindsClosingBraceWithoutTrailingNewline() {
     let source = """
     func value() {
@@ -347,5 +357,44 @@ final class SwiftmutSupportTests: XCTestCase {
 
     XCTAssertTrue(cache.sourceLineBelongsToFunction(2, path: source.path, functionLocation: functionLocation))
     XCTAssertFalse(cache.sourceLineBelongsToFunction(5, path: source.path, functionLocation: functionLocation))
+  }
+
+  func testSourceLookupCacheUsesIndexedSourceLine() throws {
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("swiftmut-support-source-line-tests-\(UUID().uuidString)")
+    let source = directory
+      .appendingPathComponent("Sources")
+      .appendingPathComponent("App")
+      .appendingPathComponent("Feature.swift")
+    try FileManager.default.createDirectory(
+      at: source.deletingLastPathComponent(),
+      withIntermediateDirectories: true)
+    try "alpha\nbéta\n".write(to: source, atomically: true, encoding: .utf8)
+    defer {
+      try? FileManager.default.removeItem(at: directory)
+    }
+
+    let config = SwiftmutConfig(
+      mode: .discover,
+      activeMutantID: "",
+      mutantsPath: directory.appendingPathComponent("manifest.json").path,
+      manifestFragmentsDirectory: "",
+      compilerEventsPath: "",
+      packageRoot: directory.path,
+      excludePathFragments: [],
+      sourceFiles: [source.path],
+      enabledMutators: [],
+      conditionMutationRules: [],
+      arithmeticMutationRules: [],
+      contextualArithmeticMutationRules: [],
+      returnMutationRules: [],
+      voidCallMutationRules: [],
+      sourceMutationDisplayRules: [])
+    let cache = SwiftmutSourceLookupCache(config: config)
+
+    XCTAssertEqual(cache.sourceLine(path: source.path, line: 1), "alpha")
+    XCTAssertEqual(cache.sourceLine(path: source.path, line: 2), "béta")
+    XCTAssertEqual(cache.sourceLine(path: source.path, line: 3), "")
+    XCTAssertNil(cache.sourceLine(path: source.path, line: 4))
   }
 }

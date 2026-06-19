@@ -251,6 +251,11 @@ let sourceReadSeconds = elapsed {
     _ = swiftmutRead(membershipFixture.path)
   }
 }
+let cachedSourceLineSeconds = elapsed {
+  for _ in 0..<options.iterations {
+    _ = membershipFixture.cache.sourceLine(path: membershipFixture.path, line: 1_000)
+  }
+}
 membershipFixture.cleanup()
 let endLineFixture = functionEndLineFixture()
 let sourceLineSeconds = elapsed {
@@ -296,6 +301,7 @@ print(String(format: "source suffix lookup: %.6fs", suffixLookupSeconds))
 print(String(format: "source membership cached: %.6fs", membershipSeconds))
 print(String(format: "source read: %.6fs", sourceReadSeconds))
 print(String(format: "source line: %.6fs", sourceLineSeconds))
+print(String(format: "source line cached: %.6fs", cachedSourceLineSeconds))
 print(String(format: "function end-line scan: %.6fs", endLineSeconds))
 print("function end-line comparison iterations: \(endLineComparisonIterations)")
 print(String(format: "function end-line repeated scan: %.6fs", repeatedEndLineSeconds))

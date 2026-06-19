@@ -288,6 +288,13 @@ public final class SwiftmutSourceLookupCache {
     sourceTextIndexByPath[sourcePath] = index
     return index
   }
+
+  public func sourceLine(path: String, line: Int) -> String? {
+    guard let sourceTextIndex = readIndex(path) else {
+      return nil
+    }
+    return sourceTextIndex.lineText(line: line)
+  }
 }
 
 public func swiftmutFunctionSourceLocation(
@@ -348,6 +355,16 @@ public func swiftmutSourceLine(
     return String(decoding: bytes[lineStart..<bytes.count], as: UTF8.self)
   }
   return nil
+}
+
+public func swiftmutCachedSourceLine(path: String, line: Int) -> String? {
+  if let cache = swiftmutSharedSourceLookupCacheStorage {
+    return cache.sourceLine(path: path, line: line)
+  }
+  guard let text = swiftmutRead(path) else {
+    return nil
+  }
+  return swiftmutSourceLine(in: text, line: line)
 }
 
 public func swiftmutSourceLineBelongsToFunction(
@@ -420,6 +437,21 @@ public struct SwiftmutSourceTextIndex {
       return currentLine
     }
     return nil
+  }
+
+  public func lineText(line: Int) -> String? {
+    guard line > 0,
+          line <= lineStartOffsets.count else {
+      return nil
+    }
+    let start = lineStartOffsets[line - 1]
+    let end: Int
+    if line < lineStartOffsets.count {
+      end = max(start, lineStartOffsets[line] - 1)
+    } else {
+      end = bytes.count
+    }
+    return String(decoding: bytes[start..<end], as: UTF8.self)
   }
 }
 

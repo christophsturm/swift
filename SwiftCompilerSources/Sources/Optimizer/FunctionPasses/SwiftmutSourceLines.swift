@@ -53,10 +53,8 @@ func swiftmutSourceLine(
 }
 
 func swiftmutAbsoluteSourceLine(path: String, line: Int) -> String? {
-  guard line > 0,
-        let text = swiftmutRead(path) else {
+  guard line > 0 else {
     return nil
   }
-
-  return SwiftmutSupport.swiftmutSourceLine(in: text, line: line)
+  return SwiftmutSupport.swiftmutCachedSourceLine(path: path, line: line)
 }

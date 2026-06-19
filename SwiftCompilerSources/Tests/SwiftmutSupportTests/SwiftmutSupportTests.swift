@@ -227,6 +227,38 @@ final class SwiftmutSupportTests: XCTestCase {
       "/repo/Sources/App/Feature.swift")
   }
 
+  func testIncludedSourcePathResolvesSuffixWithoutScanningEveryTime() {
+    let config = SwiftmutConfig(
+      mode: .discover,
+      activeMutantID: "",
+      mutantsPath: "/repo/.swiftmut/manifest.json",
+      manifestFragmentsDirectory: "",
+      compilerEventsPath: "",
+      packageRoot: "/repo",
+      excludePathFragments: ["Generated"],
+      sourceFiles: [
+        "/repo/Sources/App/Generated/Feature.swift",
+        "/repo/Sources/App/Feature.swift",
+      ],
+      enabledMutators: [],
+      conditionMutationRules: [],
+      arithmeticMutationRules: [],
+      contextualArithmeticMutationRules: [],
+      returnMutationRules: [],
+      voidCallMutationRules: [],
+      sourceMutationDisplayRules: [])
+
+    let cache = SwiftmutSourceLookupCache(config: config)
+
+    XCTAssertEqual(
+      cache.includedSourcePath("App/Feature.swift"),
+      "/repo/Sources/App/Feature.swift")
+    XCTAssertEqual(
+      cache.includedSourcePath("/Sources/App/Feature.swift"),
+      "/repo/Sources/App/Feature.swift")
+    XCTAssertNil(cache.includedSourcePath("Generated/Feature.swift"))
+  }
+
   func testSourceLineBelongsToFunctionUsesExtractedBraceScan() {
     let source = """
     func first() {

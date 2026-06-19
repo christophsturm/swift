@@ -21,6 +21,7 @@ public final class SwiftmutSourceLookupCache {
   private var sourcePaths: [String]?
   private var sourcePathSet: Set<String>?
   private var sourcePathByRelativePath: [String: String]?
+  private var sourcePathBySuffix: [String: String]?
   private var includedSourcePathByInput: [String: String] = [:]
   private var missingIncludedSourcePathInputs = Set<String>()
   private var sourceTextByPath: [String: String] = [:]
@@ -75,13 +76,7 @@ public final class SwiftmutSourceLookupCache {
       return path
     }
     let suffix = path.hasPrefix("/") ? path : "/" + path
-    for sourceFile in config.sourceFiles {
-      if sourceFile.hasSuffix(suffix),
-         pathIsIncludedConfiguredSource(sourceFile) {
-        return sourceFile
-      }
-    }
-    return nil
+    return suffixSourcePathMap()[suffix]
   }
 
   public func trimPackageRoot(_ path: String) -> String {
@@ -233,6 +228,31 @@ public final class SwiftmutSourceLookupCache {
       }
     }
     sourcePathByRelativePath = computed
+    return computed
+  }
+
+  private func suffixSourcePathMap() -> [String: String] {
+    if let sourcePathBySuffix {
+      return sourcePathBySuffix
+    }
+
+    var computed: [String: String] = [:]
+    for sourceFile in config.sourceFiles {
+      guard pathIsIncludedConfiguredSource(sourceFile) else {
+        continue
+      }
+      var index = sourceFile.startIndex
+      while index < sourceFile.endIndex {
+        if sourceFile[index] == "/" {
+          let suffix = String(sourceFile[index...])
+          if computed[suffix] == nil {
+            computed[suffix] = sourceFile
+          }
+        }
+        index = sourceFile.index(after: index)
+      }
+    }
+    sourcePathBySuffix = computed
     return computed
   }
 

@@ -26,6 +26,7 @@ public final class SwiftmutSourceLookupCache {
   private var functionLocationByDescription: [String: (path: String, line: Int)] = [:]
   private var missingFunctionLocationDescriptions = Set<String>()
   private var functionEndLineByPathAndStartLine: [String: [Int: Int]] = [:]
+  private var lastFunctionRange: (path: String, startLine: Int, endLine: Int)?
   private var packageRootBytes: [UInt8]?
 
   public init(config: SwiftmutConfig) {
@@ -254,7 +255,13 @@ public final class SwiftmutSourceLookupCache {
     guard line >= functionLocation.line else {
       return false
     }
+    if let lastFunctionRange,
+       lastFunctionRange.path == path,
+       lastFunctionRange.startLine == functionLocation.line {
+      return line <= lastFunctionRange.endLine
+    }
     if let endLine = functionEndLineByPathAndStartLine[path]?[functionLocation.line] {
+      lastFunctionRange = (path, functionLocation.line, endLine)
       return line <= endLine
     }
     guard let sourceTextIndex = readIndex(path) else {
@@ -268,6 +275,7 @@ public final class SwiftmutSourceLookupCache {
     var endLineByStartLine = functionEndLineByPathAndStartLine[path] ?? [:]
     endLineByStartLine[functionLocation.line] = endLine
     functionEndLineByPathAndStartLine[path] = endLineByStartLine
+    lastFunctionRange = (path, functionLocation.line, endLine)
     return line <= endLine
   }
 

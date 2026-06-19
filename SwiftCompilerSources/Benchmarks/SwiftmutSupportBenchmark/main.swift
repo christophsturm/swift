@@ -173,6 +173,15 @@ func topLevelScanFixture() -> [UInt8] {
   return Array(segments.joined(separator: ", ").utf8)
 }
 
+func balancedExpressionFixture() -> [UInt8] {
+  var nested = "value("
+  for index in 0..<100 {
+    nested += "call\(index)([\"ignored )\", value\(index)]), "
+  }
+  nested += "tail)"
+  return Array(nested.utf8)
+}
+
 let options = parseOptions(CommandLine.arguments)
 let loaded: (json: String?, config: SwiftmutConfig)
 if let configPath = options.configPath {
@@ -328,6 +337,16 @@ let expressionCompleteSeconds = elapsed {
       end: topLevelFixture.count)
   }
 }
+let balancedFixture = balancedExpressionFixture()
+let balancedExpressionSeconds = elapsed {
+  for _ in 0..<options.iterations {
+    _ = swiftmutBalancedExpressionEnd(
+      in: balancedFixture,
+      openIndex: 5,
+      close: UInt8(ascii: ")"),
+      lineEnd: balancedFixture.count)
+  }
+}
 
 print("swiftmut support benchmark")
 print("config: \(configPath)")
@@ -351,3 +370,4 @@ print(String(format: "function end-line indexed: %.6fs", indexedEndLineSeconds))
 print(String(format: "top-level byte scan: %.6fs", topLevelByteSeconds))
 print(String(format: "top-level ascii scan: %.6fs", topLevelASCIISeconds))
 print(String(format: "expression complete scan: %.6fs", expressionCompleteSeconds))
+print(String(format: "balanced expression scan: %.6fs", balancedExpressionSeconds))

@@ -315,6 +315,37 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertFalse(swiftmutLineOpensFunctionBody("let value = call({ nested() })"))
   }
 
+  func testBalancedExpressionEndHandlesNestedDelimitersAndQuotes() {
+    let call = Array(#"value(["ignored )"], nested(1 + 2)) + tail"#.utf8)
+
+    XCTAssertEqual(
+      swiftmutBalancedExpressionEnd(
+        in: call,
+        openIndex: 5,
+        close: UInt8(ascii: ")"),
+        lineEnd: call.count),
+      35)
+
+    let closure = Array(#"{ text = "}" ; nested { value } } trailing"#.utf8)
+    XCTAssertEqual(
+      swiftmutBalancedExpressionEnd(
+        in: closure,
+        openIndex: 0,
+        close: UInt8(ascii: "}"),
+        lineEnd: closure.count),
+      33)
+  }
+
+  func testBalancedExpressionEndReturnsNilForUnclosedExpression() {
+    let bytes = Array(#"value("unterminated")"#.utf8)
+
+    XCTAssertNil(swiftmutBalancedExpressionEnd(
+      in: bytes,
+      openIndex: 5,
+      close: UInt8(ascii: ")"),
+      lineEnd: bytes.count - 1))
+  }
+
   func testFunctionEndLineFindsClosingBraceWithoutTrailingNewline() {
     let source = """
     func value() {

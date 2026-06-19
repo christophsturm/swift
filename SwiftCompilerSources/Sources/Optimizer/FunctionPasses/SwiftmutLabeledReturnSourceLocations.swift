@@ -11,6 +11,7 @@
 
 import AST
 import SIL
+import SwiftmutSupport
 
 func swiftmutBalancedExpressionEnd(
   in bytes: [UInt8],
@@ -18,40 +19,11 @@ func swiftmutBalancedExpressionEnd(
   close: UInt8,
   lineEnd: Int
 ) -> Int? {
-  let open = bytes[openIndex]
-  var depth = 0
-  var index = openIndex
-  var quote: UInt8?
-  var escaped = false
-  while index < lineEnd {
-    let byte = bytes[index]
-    if let activeQuote = quote {
-      if escaped {
-        escaped = false
-      } else if byte == 92 {
-        escaped = true
-      } else if byte == activeQuote {
-        quote = nil
-      }
-      index += 1
-      continue
-    }
-    if byte == 34 || byte == 39 {
-      quote = byte
-      index += 1
-      continue
-    }
-    if byte == open {
-      depth += 1
-    } else if byte == close {
-      depth -= 1
-      if depth == 0 {
-        return index + 1
-      }
-    }
-    index += 1
-  }
-  return nil
+  SwiftmutSupport.swiftmutBalancedExpressionEnd(
+    in: bytes,
+    openIndex: openIndex,
+    close: close,
+    lineEnd: lineEnd)
 }
 
 func swiftmutFindLabeledValueExpressionSourceLocation(
@@ -188,4 +160,3 @@ func swiftmutStandaloneValueExpression(
     sourceOriginal,
     swiftmutImplicitReturnSourceMutation(for: mutation))
 }
-

@@ -529,26 +529,6 @@ private func swiftmutFunctionBodyLine(
   return nil
 }
 
-private func swiftmutByteOffset(of pattern: String, in line: String) -> Int? {
-  let bytes = Array(line.utf8)
-  let patternBytes = Array(pattern.utf8)
-  guard !patternBytes.isEmpty else {
-    return nil
-  }
-  var index = 0
-  while index + patternBytes.count <= bytes.count {
-    var offset = 0
-    while offset < patternBytes.count, bytes[index + offset] == patternBytes[offset] {
-      offset += 1
-    }
-    if offset == patternBytes.count {
-      return index
-    }
-    index += 1
-  }
-  return nil
-}
-
 func swiftmutInjectLogicalConnectorSite(
   _ site: SwiftmutLogicalConnectorSite,
   _ context: FunctionPassContext

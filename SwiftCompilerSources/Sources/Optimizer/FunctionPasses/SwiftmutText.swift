@@ -87,6 +87,10 @@ func swiftmutASCIIIndex(_ bytes: [UInt8], start: Int, end: Int, pattern: String)
   SwiftmutSupport.swiftmutASCIIIndex(bytes, start: start, end: end, pattern: pattern)
 }
 
+func swiftmutByteOffset(of pattern: String, in text: String) -> Int? {
+  SwiftmutSupport.swiftmutByteOffset(of: pattern, in: text)
+}
+
 func swiftmutASCIIHasExactPrefix(_ bytes: [UInt8], start: Int, prefix: String) -> Bool {
   SwiftmutSupport.swiftmutASCIIHasExactPrefix(bytes, start: start, prefix: prefix)
 }

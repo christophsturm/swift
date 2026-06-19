@@ -841,6 +841,26 @@ public func swiftmutASCIIIndex(_ bytes: [UInt8], start: Int, end: Int, pattern: 
   return nil
 }
 
+public func swiftmutByteOffset(of pattern: String, in text: String) -> Int? {
+  let bytes = Array(text.utf8)
+  let patternBytes = Array(pattern.utf8)
+  guard !patternBytes.isEmpty else {
+    return nil
+  }
+  var index = 0
+  while index + patternBytes.count <= bytes.count {
+    var offset = 0
+    while offset < patternBytes.count, bytes[index + offset] == patternBytes[offset] {
+      offset += 1
+    }
+    if offset == patternBytes.count {
+      return index
+    }
+    index += 1
+  }
+  return nil
+}
+
 public func swiftmutASCIIHasExactPrefix(_ bytes: [UInt8], start: Int, prefix: String) -> Bool {
   let prefixBytes = Array(prefix.utf8)
   guard start >= 0 && start + prefixBytes.count <= bytes.count else {

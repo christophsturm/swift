@@ -842,14 +842,32 @@ public func swiftmutASCIIIndex(_ bytes: [UInt8], start: Int, end: Int, pattern: 
 }
 
 public func swiftmutByteOffset(of pattern: String, in text: String) -> Int? {
-  let bytes = Array(text.utf8)
-  let patternBytes = Array(pattern.utf8)
+  var sourceText = text
+  var patternText = pattern
+  return sourceText.withUTF8 { bytes in
+    patternText.withUTF8 { patternBytes in
+      swiftmutByteOffset(of: patternBytes, in: bytes)
+    }
+  }
+}
+
+private func swiftmutByteOffset(
+  of patternBytes: UnsafeBufferPointer<UInt8>,
+  in bytes: UnsafeBufferPointer<UInt8>
+) -> Int? {
   guard !patternBytes.isEmpty else {
     return nil
   }
-  var index = 0
-  while index + patternBytes.count <= bytes.count {
-    var offset = 0
+  let firstPatternByte = patternBytes[0]
+  var index = bytes.startIndex
+  while index + patternBytes.count <= bytes.endIndex {
+    while index + patternBytes.count <= bytes.endIndex && bytes[index] != firstPatternByte {
+      index += 1
+    }
+    guard index + patternBytes.count <= bytes.endIndex else {
+      break
+    }
+    var offset = 1
     while offset < patternBytes.count, bytes[index + offset] == patternBytes[offset] {
       offset += 1
     }

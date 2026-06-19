@@ -358,10 +358,19 @@ public func swiftmutSourceLine(
   in text: String,
   line targetLine: Int
 ) -> String? {
+  var sourceText = text
+  return sourceText.withUTF8 { bytes in
+    swiftmutSourceLine(in: bytes, line: targetLine)
+  }
+}
+
+private func swiftmutSourceLine(
+  in bytes: UnsafeBufferPointer<UInt8>,
+  line targetLine: Int
+) -> String? {
   guard targetLine > 0 else {
     return nil
   }
-  let bytes = Array(text.utf8)
   var currentLine = 1
   var lineStart = 0
   var index = 0
@@ -614,7 +623,16 @@ public func swiftmutFunctionEndLineByScanning(
   functionLocationLine: Int,
   text: String
 ) -> Int? {
-  let bytes = Array(text.utf8)
+  var sourceText = text
+  return sourceText.withUTF8 { bytes in
+    swiftmutFunctionEndLineByScanning(functionLocationLine: functionLocationLine, bytes: bytes)
+  }
+}
+
+private func swiftmutFunctionEndLineByScanning(
+  functionLocationLine: Int,
+  bytes: UnsafeBufferPointer<UInt8>
+) -> Int? {
   var currentLine = 1
   var braceDepth = 0
   var sawOpeningBrace = false

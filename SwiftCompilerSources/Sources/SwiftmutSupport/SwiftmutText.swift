@@ -30,6 +30,9 @@ public func swiftmutTopLevelASCIIIndex(
         patternBytes.count <= end - start else {
     return nil
   }
+  if patternBytes.count == 1 {
+    return swiftmutTopLevelByteIndex(bytes, start: start, end: end, byte: patternBytes[0])
+  }
   let firstPatternByte = patternBytes[0]
   var parenDepth = 0
   var bracketDepth = 0

@@ -365,6 +365,7 @@ final class SwiftmutSupportTests: XCTestCase {
     let bytes = Array(#"call(a, ["ignored, comma"], nested(value)) , trailing"#.utf8)
 
     XCTAssertEqual(swiftmutTopLevelByteIndex(bytes, start: 0, end: bytes.count, byte: 44), 43)
+    XCTAssertEqual(swiftmutTopLevelASCIIIndex(bytes, start: 0, end: bytes.count, pattern: ","), 43)
     XCTAssertEqual(swiftmutTopLevelASCIIIndex(bytes, start: 0, end: bytes.count, pattern: "trailing"), 45)
     XCTAssertTrue(swiftmutTopLevelASCIIContains(bytes, start: 0, end: bytes.count, pattern: "trailing"))
     XCTAssertFalse(swiftmutTopLevelASCIIContains(bytes, start: 0, end: bytes.count, pattern: "ignored"))

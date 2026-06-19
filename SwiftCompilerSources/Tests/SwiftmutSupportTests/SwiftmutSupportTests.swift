@@ -105,6 +105,31 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertEqual(cache.swiftSourcePaths(), ["/repo/Sources/App/Feature.swift"])
   }
 
+  func testSourceLookupTreatsUnconfiguredAbsolutePackagePathAsMissing() {
+    let config = SwiftmutConfig(
+      mode: .discover,
+      activeMutantID: "",
+      mutantsPath: "/repo/.swiftmut/manifest.json",
+      manifestFragmentsDirectory: "",
+      compilerEventsPath: "",
+      packageRoot: "/repo",
+      excludePathFragments: [],
+      sourceFiles: ["/repo/Sources/App/Feature.swift"],
+      enabledMutators: [],
+      conditionMutationRules: [],
+      arithmeticMutationRules: [],
+      contextualArithmeticMutationRules: [],
+      returnMutationRules: [],
+      voidCallMutationRules: [],
+      sourceMutationDisplayRules: [])
+
+    let cache = SwiftmutSourceLookupCache(config: config)
+    let location = cache.functionSourceLocation(
+      in: "debug location: /repo/Sources/Missing/Feature.swift:42:9")
+
+    XCTAssertNil(location)
+  }
+
   func testSourceLineBelongsToFunctionUsesExtractedBraceScan() {
     let source = """
     func first() {

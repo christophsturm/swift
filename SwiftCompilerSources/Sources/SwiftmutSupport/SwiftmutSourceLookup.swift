@@ -10,6 +10,12 @@
 //===----------------------------------------------------------------------===//
 
 public final class SwiftmutSourceLookupCache {
+  private enum DirectFunctionSourceLocationResult {
+    case found(path: String, line: Int)
+    case notPresent
+    case unknown
+  }
+
   public let config: SwiftmutConfig
 
   private var sourcePaths: [String]?
@@ -90,8 +96,13 @@ public final class SwiftmutSourceLookupCache {
   private func computeFunctionSourceLocation(
     in locationDescription: String
   ) -> (path: String, line: Int)? {
-    if let direct = directFunctionSourceLocation(in: locationDescription) {
-      return direct
+    switch directFunctionSourceLocation(in: locationDescription) {
+    case .found(let path, let line):
+      return (path, line)
+    case .notPresent:
+      return nil
+    case .unknown:
+      break
     }
     for path in swiftSourcePaths() {
       guard locationDescription.contains(path),
@@ -105,15 +116,15 @@ public final class SwiftmutSourceLookupCache {
 
   private func directFunctionSourceLocation(
     in locationDescription: String
-  ) -> (path: String, line: Int)? {
+  ) -> DirectFunctionSourceLocationResult {
     guard !config.packageRoot.isEmpty else {
-      return nil
+      return .unknown
     }
 
     let locationBytes = Array(locationDescription.utf8)
     let rootBytes = cachedPackageRootBytes()
     guard let rootIndex = swiftmutFind(rootBytes, in: locationBytes, startingAt: 0) else {
-      return nil
+      return .unknown
     }
 
     var pathEnd = rootIndex + rootBytes.count
@@ -122,15 +133,17 @@ public final class SwiftmutSourceLookupCache {
     }
 
     guard pathEnd < locationBytes.count else {
-      return nil
+      return .unknown
     }
 
     let candidate = String(decoding: locationBytes[rootIndex..<pathEnd], as: UTF8.self)
-    guard let includedPath = exactlyIncludedSourcePath(candidate),
-          let line = swiftmutLineNumber(in: locationBytes, afterPathEnd: pathEnd) else {
-      return nil
+    guard let line = swiftmutLineNumber(in: locationBytes, afterPathEnd: pathEnd) else {
+      return .unknown
     }
-    return (includedPath, line)
+    guard let includedPath = exactlyIncludedSourcePath(candidate) else {
+      return .notPresent
+    }
+    return .found(path: includedPath, line: line)
   }
 
   private func cachedPackageRootBytes() -> [UInt8] {

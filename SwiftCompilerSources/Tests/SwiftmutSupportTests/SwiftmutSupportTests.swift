@@ -14,6 +14,36 @@ import Foundation
 @testable import SwiftmutSupport
 
 final class SwiftmutSupportTests: XCTestCase {
+  func testTopLevelJSONParserReadsStringsAndStringArrays() {
+    let fields = SwiftmutJSONTopLevelObject("""
+    {
+      "name": "swift\\nmut",
+      "sourceFiles": ["/repo/A.swift", "/repo/B.swift"],
+      "ignored": {"nested": "value"},
+      "numbers": [1, 2, 3]
+    }
+    """)
+
+    XCTAssertEqual(fields.stringValue("name"), "swift\nmut")
+    XCTAssertEqual(fields.stringArray("sourceFiles"), ["/repo/A.swift", "/repo/B.swift"])
+    XCTAssertNil(fields.stringValue("nested"))
+    XCTAssertEqual(fields.stringArray("numbers"), [])
+  }
+
+  func testTopLevelJSONParserKeepsFirstDuplicateValueForCompatibility() {
+    let fields = SwiftmutJSONTopLevelObject("""
+    {
+      "mode": "discover",
+      "mode": "apply",
+      "sourceFiles": ["/repo/A.swift"],
+      "sourceFiles": ["/repo/B.swift"]
+    }
+    """)
+
+    XCTAssertEqual(fields.stringValue("mode"), "discover")
+    XCTAssertEqual(fields.stringArray("sourceFiles"), ["/repo/A.swift"])
+  }
+
   func testConfigLoadParsesRulesWithoutCompilerModules() throws {
     let json = """
     {

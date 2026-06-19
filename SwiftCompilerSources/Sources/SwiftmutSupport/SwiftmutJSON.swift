@@ -82,6 +82,98 @@ public func swiftmutJSONStringArray(_ key: String, in json: String) -> [String] 
   return values
 }
 
+public struct SwiftmutJSONTopLevelObject {
+  private var stringValues: [String: String] = [:]
+  private var stringArrays: [String: [String]] = [:]
+
+  public init(_ json: String) {
+    let bytes = Array(json.utf8)
+    var index = 0
+    swiftmutSkipJSONWhitespace(in: bytes, index: &index)
+    guard index < bytes.count, bytes[index] == 123 else {
+      return
+    }
+    index += 1
+
+    while index < bytes.count {
+      swiftmutSkipJSONWhitespace(in: bytes, index: &index)
+      if index >= bytes.count || bytes[index] == 125 {
+        return
+      }
+      guard let key = swiftmutParseJSONString(in: bytes, index: &index) else {
+        index += 1
+        continue
+      }
+      swiftmutSkipJSONWhitespace(in: bytes, index: &index)
+      guard index < bytes.count, bytes[index] == 58 else {
+        continue
+      }
+      index += 1
+      swiftmutSkipJSONWhitespace(in: bytes, index: &index)
+      guard index < bytes.count else {
+        return
+      }
+
+      if bytes[index] == 34 {
+        if let value = swiftmutParseJSONString(in: bytes, index: &index),
+           stringValues[key] == nil {
+          stringValues[key] = value
+        }
+      } else if bytes[index] == 91 {
+        if stringArrays[key] == nil {
+          stringArrays[key] = swiftmutParseJSONStringArray(in: bytes, index: &index)
+        } else {
+          swiftmutSkipJSONValue(in: bytes, index: &index)
+        }
+      } else {
+        swiftmutSkipJSONValue(in: bytes, index: &index)
+      }
+
+      swiftmutSkipJSONWhitespace(in: bytes, index: &index)
+      if index < bytes.count, bytes[index] == 44 {
+        index += 1
+      }
+    }
+  }
+
+  public func stringValue(_ key: String) -> String? {
+    stringValues[key]
+  }
+
+  public func stringArray(_ key: String) -> [String] {
+    stringArrays[key] ?? []
+  }
+}
+
+public func swiftmutParseJSONStringArray(in bytes: [UInt8], index: inout Int) -> [String] {
+  guard index < bytes.count, bytes[index] == 91 else {
+    return []
+  }
+  index += 1
+
+  var values: [String] = []
+  while index < bytes.count {
+    swiftmutSkipJSONWhitespace(in: bytes, index: &index)
+    guard index < bytes.count else {
+      break
+    }
+    if bytes[index] == 93 {
+      index += 1
+      break
+    }
+    if let value = swiftmutParseJSONString(in: bytes, index: &index) {
+      values.append(value)
+    } else {
+      swiftmutSkipJSONValue(in: bytes, index: &index)
+    }
+    swiftmutSkipJSONWhitespace(in: bytes, index: &index)
+    if index < bytes.count, bytes[index] == 44 {
+      index += 1
+    }
+  }
+  return values
+}
+
 public func swiftmutParseJSONString(in bytes: [UInt8], index: inout Int) -> String? {
   guard index < bytes.count, bytes[index] == 34 else {
     return nil
@@ -126,6 +218,58 @@ public func swiftmutSkipJSONWhitespace(in bytes: [UInt8], index: inout Int) {
       index += 1
     default:
       return
+    }
+  }
+}
+
+public func swiftmutSkipJSONValue(in bytes: [UInt8], index: inout Int) {
+  guard index < bytes.count else {
+    return
+  }
+  if bytes[index] == 34 {
+    _ = swiftmutParseJSONString(in: bytes, index: &index)
+    return
+  }
+  if bytes[index] == 91 {
+    index += 1
+    var depth = 1
+    while index < bytes.count && depth > 0 {
+      if bytes[index] == 34 {
+        _ = swiftmutParseJSONString(in: bytes, index: &index)
+        continue
+      }
+      if bytes[index] == 91 {
+        depth += 1
+      } else if bytes[index] == 93 {
+        depth -= 1
+      }
+      index += 1
+    }
+    return
+  }
+  if bytes[index] == 123 {
+    index += 1
+    var depth = 1
+    while index < bytes.count && depth > 0 {
+      if bytes[index] == 34 {
+        _ = swiftmutParseJSONString(in: bytes, index: &index)
+        continue
+      }
+      if bytes[index] == 123 {
+        depth += 1
+      } else if bytes[index] == 125 {
+        depth -= 1
+      }
+      index += 1
+    }
+    return
+  }
+  while index < bytes.count {
+    switch bytes[index] {
+    case 44, 93, 125:
+      return
+    default:
+      index += 1
     }
   }
 }

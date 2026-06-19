@@ -216,8 +216,11 @@ public struct SwiftmutConfig {
     configPath: String,
     read: (String) -> String? = swiftmutRead
   ) -> SwiftmutConfig? {
-    guard let json = read(configPath),
-          let rawMode = swiftmutJSONStringValue("mode", in: json) else {
+    guard let json = read(configPath) else {
+      return nil
+    }
+    let fields = SwiftmutJSONTopLevelObject(json)
+    guard let rawMode = fields.stringValue("mode") else {
       return nil
     }
 
@@ -233,34 +236,34 @@ public struct SwiftmutConfig {
       return nil
     }
 
-    guard let mutantsPath = swiftmutJSONStringValue("manifestPath", in: json),
+    guard let mutantsPath = fields.stringValue("manifestPath"),
           !mutantsPath.isEmpty else {
       return nil
     }
 
-    let activeMutantID = swiftmutJSONStringValue("activeMutantID", in: json) ?? ""
-    let manifestFragmentsDirectory = swiftmutJSONStringValue("manifestFragmentsDirectory", in: json) ?? ""
-    let compilerEventsPath = swiftmutJSONStringValue("compilerEventsPath", in: json) ?? ""
-    let packageRoot = swiftmutJSONStringValue("packageRoot", in: json) ?? ""
-    let excludePaths = swiftmutJSONStringArray("excludePaths", in: json)
-    let sourceFiles = swiftmutJSONStringArray("sourceFiles", in: json)
-    let enabledMutators = swiftmutJSONStringArray("enabledMutators", in: json)
-    let conditionMutationRules = swiftmutJSONStringArray("conditionMutationRules", in: json).compactMap {
+    let activeMutantID = fields.stringValue("activeMutantID") ?? ""
+    let manifestFragmentsDirectory = fields.stringValue("manifestFragmentsDirectory") ?? ""
+    let compilerEventsPath = fields.stringValue("compilerEventsPath") ?? ""
+    let packageRoot = fields.stringValue("packageRoot") ?? ""
+    let excludePaths = fields.stringArray("excludePaths")
+    let sourceFiles = fields.stringArray("sourceFiles")
+    let enabledMutators = fields.stringArray("enabledMutators")
+    let conditionMutationRules = fields.stringArray("conditionMutationRules").compactMap {
       SwiftmutConditionMutationRule(wireFormat: $0)
     }
-    let arithmeticMutationRules = swiftmutJSONStringArray("arithmeticMutationRules", in: json).compactMap {
+    let arithmeticMutationRules = fields.stringArray("arithmeticMutationRules").compactMap {
       SwiftmutArithmeticMutationRule(wireFormat: $0)
     }
-    let contextualArithmeticMutationRules = swiftmutJSONStringArray("contextualArithmeticMutationRules", in: json).compactMap {
+    let contextualArithmeticMutationRules = fields.stringArray("contextualArithmeticMutationRules").compactMap {
       SwiftmutContextualArithmeticMutationRule(wireFormat: $0)
     }
-    let returnMutationRules = swiftmutJSONStringArray("returnMutationRules", in: json).compactMap {
+    let returnMutationRules = fields.stringArray("returnMutationRules").compactMap {
       SwiftmutReturnMutationRule(wireFormat: $0)
     }
-    let voidCallMutationRules = swiftmutJSONStringArray("voidCallMutationRules", in: json).compactMap {
+    let voidCallMutationRules = fields.stringArray("voidCallMutationRules").compactMap {
       SwiftmutVoidCallMutationRule(wireFormat: $0)
     }
-    let sourceMutationDisplayRules = swiftmutJSONStringArray("sourceMutationDisplayRules", in: json).compactMap {
+    let sourceMutationDisplayRules = fields.stringArray("sourceMutationDisplayRules").compactMap {
       SwiftmutSourceMutationDisplayRule(wireFormat: $0)
     }
 

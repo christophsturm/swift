@@ -9,6 +9,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+import SwiftmutSupport
+
 func swiftmutFindDescribedSourceOperator(
   moduleName: String,
   functionLocation: String,
@@ -458,88 +460,10 @@ func swiftmutTernaryConditionStart(
   before questionIndex: Int,
   lineStart: Int
 ) -> Int {
-  var index = questionIndex
-  var parenDepth = 0
-  var bracketDepth = 0
-  var braceDepth = 0
-  var quote: UInt8?
-  var escaped = false
-  while index > lineStart {
-    index -= 1
-    let byte = bytes[index]
-    if let activeQuote = quote {
-      if escaped {
-        escaped = false
-      } else if byte == 92 {
-        escaped = true
-      } else if byte == activeQuote {
-        quote = nil
-      }
-      continue
-    }
-    if byte == 34 || byte == 39 {
-      quote = byte
-      continue
-    }
-    switch byte {
-    case 41:
-      parenDepth += 1
-    case 40:
-      if parenDepth > 0 {
-        parenDepth -= 1
-      }
-    case 93:
-      bracketDepth += 1
-    case 91:
-      if bracketDepth > 0 {
-        bracketDepth -= 1
-      }
-    case 125:
-      braceDepth += 1
-    case 123:
-      if braceDepth > 0 {
-        braceDepth -= 1
-      }
-    case 61:
-      if parenDepth == 0
-          && bracketDepth == 0
-          && braceDepth == 0
-          && swiftmutTernaryConditionStartEqualsIsBoundary(
-            bytes: bytes,
-            index: index,
-            lineStart: lineStart,
-            questionIndex: questionIndex
-          ) {
-        return index + 1
-      }
-    case 44:
-      if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 {
-        return index + 1
-      }
-    default:
-      break
-    }
-  }
-  return lineStart
-}
-
-func swiftmutTernaryConditionStartEqualsIsBoundary(
-  bytes: [UInt8],
-  index: Int,
-  lineStart: Int,
-  questionIndex: Int
-) -> Bool {
-  if index > lineStart {
-    let previous = bytes[index - 1]
-    if previous == 33 || previous == 60 || previous == 61 || previous == 62 {
-      return false
-    }
-  }
-  if index + 1 < questionIndex,
-     bytes[index + 1] == 61 {
-    return false
-  }
-  return true
+  SwiftmutSupport.swiftmutTernaryConditionStart(
+    bytes: bytes,
+    before: questionIndex,
+    lineStart: lineStart)
 }
 
 func swiftmutSourceOperatorNeedleContainsOperator(_ needle: String) -> Bool {

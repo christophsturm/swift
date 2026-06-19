@@ -375,6 +375,19 @@ let ternaryScanSeconds = elapsed {
     }
   }
 }
+let ternaryStartSeconds = elapsed {
+  for _ in 0..<options.iterations {
+    if let question = swiftmutTopLevelTernaryQuestionIndex(
+      bytes: ternaryFixture,
+      start: 0,
+      end: ternaryFixture.count) {
+      _ = swiftmutTernaryConditionStart(
+        bytes: ternaryFixture,
+        before: question,
+        lineStart: 0)
+    }
+  }
+}
 
 print("swiftmut support benchmark")
 print("config: \(configPath)")
@@ -400,3 +413,4 @@ print(String(format: "top-level ascii scan: %.6fs", topLevelASCIISeconds))
 print(String(format: "expression complete scan: %.6fs", expressionCompleteSeconds))
 print(String(format: "balanced expression scan: %.6fs", balancedExpressionSeconds))
 print(String(format: "ternary boundary scan: %.6fs", ternaryScanSeconds))
+print(String(format: "ternary start scan: %.6fs", ternaryStartSeconds))

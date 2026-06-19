@@ -373,6 +373,33 @@ final class SwiftmutSupportTests: XCTestCase {
       5)
   }
 
+  func testTernaryConditionStartUsesTopLevelAssignmentBoundary() {
+    let bytes = Array(#"target = object.value ? yes : no"#.utf8)
+    let question = swiftmutTopLevelTernaryQuestionIndex(bytes: bytes, start: 0, end: bytes.count)!
+
+    XCTAssertEqual(
+      swiftmutTernaryConditionStart(bytes: bytes, before: question, lineStart: 0),
+      8)
+  }
+
+  func testTernaryConditionStartUsesTopLevelCommaBoundary() {
+    let bytes = Array(#"prefix(value: 1), object.value ? yes : no"#.utf8)
+    let question = swiftmutTopLevelTernaryQuestionIndex(bytes: bytes, start: 0, end: bytes.count)!
+
+    XCTAssertEqual(
+      swiftmutTernaryConditionStart(bytes: bytes, before: question, lineStart: 0),
+      17)
+  }
+
+  func testTernaryConditionStartIgnoresNestedAndComparisonEquals() {
+    let bytes = Array(#"lhs == rhs && call(value = "ignored ?") ? yes : no"#.utf8)
+    let question = swiftmutTopLevelTernaryQuestionIndex(bytes: bytes, start: 0, end: bytes.count)!
+
+    XCTAssertEqual(
+      swiftmutTernaryConditionStart(bytes: bytes, before: question, lineStart: 0),
+      0)
+  }
+
   func testFunctionEndLineFindsClosingBraceWithoutTrailingNewline() {
     let source = """
     func value() {

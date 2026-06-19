@@ -253,11 +253,11 @@ public final class SwiftmutSourceLookupCache {
     guard line >= functionLocation.line else {
       return false
     }
-    guard let text = read(path) else {
-      return true
-    }
     if let endLine = functionEndLineByPathAndStartLine[path]?[functionLocation.line] {
       return line <= endLine
+    }
+    guard let text = read(path) else {
+      return true
     }
     guard let endLine = swiftmutFunctionEndLine(
       functionLocationLine: functionLocation.line,

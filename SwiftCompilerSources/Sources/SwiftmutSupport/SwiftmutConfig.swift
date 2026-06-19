@@ -16,29 +16,32 @@ public enum SwiftmutMode {
 }
 
 public func swiftmutPipeFields(_ value: String, count expectedCount: Int) -> [String]? {
-  var fields: [String] = []
-  fields.reserveCapacity(expectedCount)
-  var fieldStart = value.startIndex
-  var index = value.startIndex
+  var wireFormat = value
+  return wireFormat.withUTF8 { bytes in
+    var fields: [String] = []
+    fields.reserveCapacity(expectedCount)
+    var fieldStart = 0
+    var index = 0
 
-  while index < value.endIndex {
-    if value[index] == "|" {
-      fields.append(String(value[fieldStart..<index]))
-      guard fields.count < expectedCount else {
-        return nil
+    while index < bytes.count {
+      if bytes[index] == 124 {
+        fields.append(String(decoding: bytes[fieldStart..<index], as: UTF8.self))
+        guard fields.count < expectedCount else {
+          return nil
+        }
+        index += 1
+        fieldStart = index
+        continue
       }
-      index = value.index(after: index)
-      fieldStart = index
-      continue
+      index += 1
     }
-    index = value.index(after: index)
-  }
 
-  fields.append(String(value[fieldStart..<value.endIndex]))
-  guard fields.count == expectedCount else {
-    return nil
+    fields.append(String(decoding: bytes[fieldStart..<bytes.count], as: UTF8.self))
+    guard fields.count == expectedCount else {
+      return nil
+    }
+    return fields
   }
-  return fields
 }
 
 public struct SwiftmutConditionMutationRule {

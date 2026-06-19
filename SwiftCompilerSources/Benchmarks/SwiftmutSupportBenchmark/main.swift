@@ -218,6 +218,16 @@ func defaultArgumentDeclarationFixture() -> (bytes: [UInt8], keywordOffsets: [In
   return (Array(source.utf8), keywordOffsets)
 }
 
+func pipeFieldFixture() -> [String] {
+  var values: [String] = []
+  for index in 0..<1_000 {
+    values.append("builtin\(index)|condition|mutated\(index)|==|!=")
+    values.append("context\(index)|returnFalse|false|true|false|integer_literal 0")
+  }
+  values.append("unicode|bé|c|d|e")
+  return values
+}
+
 let options = parseOptions(CommandLine.arguments)
 let loaded: (json: String?, config: SwiftmutConfig)
 if let configPath = options.configPath {
@@ -248,6 +258,16 @@ let mutatorEnabledSeconds = elapsed {
   for _ in 0..<options.iterations {
     for mutator in mutatorsToCheck {
       _ = swiftmutMutatorIsEnabled(mutator, config: loaded.config)
+    }
+  }
+}
+let pipeFields = pipeFieldFixture()
+let pipeFieldIterations = max(1, options.iterations / 100)
+let pipeFieldSeconds = elapsed {
+  for _ in 0..<pipeFieldIterations {
+    for value in pipeFields {
+      _ = swiftmutPipeFields(value, count: 5)
+      _ = swiftmutPipeFields(value, count: 6)
     }
   }
 }
@@ -453,6 +473,8 @@ print("iterations: \(options.iterations)")
 print("source files: \(sourcePaths.count)")
 print(String(format: "config parse: %.6fs", parseSeconds))
 print(String(format: "mutator enabled: %.6fs", mutatorEnabledSeconds))
+print("pipe field iterations: \(pipeFieldIterations)")
+print(String(format: "pipe field split: %.6fs", pipeFieldSeconds))
 print(String(format: "source lookup cold: %.6fs", coldLookupSeconds))
 print(String(format: "source lookup warm: %.6fs", warmLookupSeconds))
 print(String(format: "source lookup missing: %.6fs", missingLookupSeconds))

@@ -15,6 +15,32 @@ public enum SwiftmutMode {
   case metamutant
 }
 
+public func swiftmutPipeFields(_ value: String, count expectedCount: Int) -> [String]? {
+  var fields: [String] = []
+  fields.reserveCapacity(expectedCount)
+  var fieldStart = value.startIndex
+  var index = value.startIndex
+
+  while index < value.endIndex {
+    if value[index] == "|" {
+      fields.append(String(value[fieldStart..<index]))
+      guard fields.count < expectedCount else {
+        return nil
+      }
+      index = value.index(after: index)
+      fieldStart = index
+      continue
+    }
+    index = value.index(after: index)
+  }
+
+  fields.append(String(value[fieldStart..<value.endIndex]))
+  guard fields.count == expectedCount else {
+    return nil
+  }
+  return fields
+}
+
 public struct SwiftmutConditionMutationRule {
   public let builtinID: String
   public let mutator: String
@@ -23,8 +49,7 @@ public struct SwiftmutConditionMutationRule {
   public let sourceMutated: String
 
   public init?(wireFormat: String) {
-    let fields = wireFormat.split(separator: "|", omittingEmptySubsequences: false).map { String($0) }
-    guard fields.count == 5 else {
+    guard let fields = swiftmutPipeFields(wireFormat, count: 5) else {
       return nil
     }
     builtinID = fields[0]
@@ -42,8 +67,7 @@ public struct SwiftmutArithmeticMutationRule {
   public let sourceMutated: String
 
   public init?(wireFormat: String) {
-    let fields = wireFormat.split(separator: "|", omittingEmptySubsequences: false).map { String($0) }
-    guard fields.count == 4 else {
+    guard let fields = swiftmutPipeFields(wireFormat, count: 4) else {
       return nil
     }
     builtinID = fields[0]
@@ -62,8 +86,7 @@ public struct SwiftmutContextualArithmeticMutationRule {
   public let sourceMutated: String
 
   public init?(wireFormat: String) {
-    let fields = wireFormat.split(separator: "|", omittingEmptySubsequences: false).map { String($0) }
-    guard fields.count == 6 else {
+    guard let fields = swiftmutPipeFields(wireFormat, count: 6) else {
       return nil
     }
     builtinID = fields[0]
@@ -84,8 +107,7 @@ public struct SwiftmutReturnMutationRule {
   public let silMutated: String
 
   public init?(wireFormat: String) {
-    let fields = wireFormat.split(separator: "|", omittingEmptySubsequences: false).map { String($0) }
-    guard fields.count == 6 else {
+    guard let fields = swiftmutPipeFields(wireFormat, count: 6) else {
       return nil
     }
     context = fields[0]
@@ -105,8 +127,7 @@ public struct SwiftmutVoidCallMutationRule {
   public let silMutated: String
 
   public init?(wireFormat: String) {
-    let fields = wireFormat.split(separator: "|", omittingEmptySubsequences: false).map { String($0) }
-    guard fields.count == 5 else {
+    guard let fields = swiftmutPipeFields(wireFormat, count: 5) else {
       return nil
     }
     mutator = fields[0]
@@ -139,8 +160,7 @@ public struct SwiftmutSourceMutationDisplayRule {
   }
 
   public init?(wireFormat: String) {
-    let fields = wireFormat.split(separator: "|", omittingEmptySubsequences: false).map { String($0) }
-    guard fields.count == 5 else {
+    guard let fields = swiftmutPipeFields(wireFormat, count: 5) else {
       return nil
     }
     mutator = fields[0]

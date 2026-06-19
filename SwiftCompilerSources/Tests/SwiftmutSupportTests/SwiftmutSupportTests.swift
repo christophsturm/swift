@@ -14,6 +14,12 @@ import Foundation
 @testable import SwiftmutSupport
 
 final class SwiftmutSupportTests: XCTestCase {
+  func testPipeFieldsPreservesEmptyFieldsAndRejectsWrongCount() {
+    XCTAssertEqual(swiftmutPipeFields("a||c|", count: 4), ["a", "", "c", ""])
+    XCTAssertNil(swiftmutPipeFields("a|b|c", count: 2))
+    XCTAssertNil(swiftmutPipeFields("a|b", count: 3))
+  }
+
   func testTopLevelJSONParserReadsStringsAndStringArrays() {
     let fields = SwiftmutJSONTopLevelObject("""
     {

@@ -85,6 +85,10 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertTrue(swiftmutBytesAreIdentifier(Array("value_1".utf8), start: 0, end: 7))
     XCTAssertFalse(swiftmutBytesAreIdentifier(Array("value-name".utf8), start: 0, end: 10))
     XCTAssertFalse(swiftmutBytesAreIdentifier(Array("".utf8), start: 0, end: 0))
+    Array("prefix_value".utf8).withUnsafeBufferPointer { bytes in
+      XCTAssertTrue(swiftmutBytesAreIdentifier(bytes, start: 0, end: 12))
+      XCTAssertTrue(swiftmutBytesAreIdentifier(bytes, start: 7, end: 12))
+    }
   }
 
   func testMangledNameIdentifierMatchingUsesCamelCaseFallbacks() {

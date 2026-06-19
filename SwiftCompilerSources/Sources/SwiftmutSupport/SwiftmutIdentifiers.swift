@@ -10,33 +10,35 @@
 //===----------------------------------------------------------------------===//
 
 public func swiftmutMangledIdentifiers(in name: String) -> [String] {
-  let bytes = Array(name.utf8)
-  var identifiers: [String] = []
-  var index = 0
-  while index < bytes.count {
-    guard bytes[index] >= 48 && bytes[index] <= 57 else {
-      index += 1
-      continue
+  var mangledName = name
+  return mangledName.withUTF8 { bytes in
+    var identifiers: [String] = []
+    var index = 0
+    while index < bytes.count {
+      guard bytes[index] >= 48 && bytes[index] <= 57 else {
+        index += 1
+        continue
+      }
+      var length = 0
+      var cursor = index
+      while cursor < bytes.count && bytes[cursor] >= 48 && bytes[cursor] <= 57 {
+        length = (length * 10) + Int(bytes[cursor] - 48)
+        cursor += 1
+      }
+      guard length > 0,
+            cursor + length <= bytes.count,
+            swiftmutBytesAreIdentifier(bytes, start: cursor, end: cursor + length) else {
+        index += 1
+        continue
+      }
+      let identifier = String(decoding: bytes[cursor..<(cursor + length)], as: UTF8.self)
+      if !identifiers.contains(identifier) {
+        identifiers.append(identifier)
+      }
+      index = cursor + length
     }
-    var length = 0
-    var cursor = index
-    while cursor < bytes.count && bytes[cursor] >= 48 && bytes[cursor] <= 57 {
-      length = (length * 10) + Int(bytes[cursor] - 48)
-      cursor += 1
-    }
-    guard length > 0,
-          cursor + length <= bytes.count,
-          swiftmutBytesAreIdentifier(bytes, start: cursor, end: cursor + length) else {
-      index += 1
-      continue
-    }
-    let identifier = String(decoding: bytes[cursor..<(cursor + length)], as: UTF8.self)
-    if !identifiers.contains(identifier) {
-      identifiers.append(identifier)
-    }
-    index = cursor + length
+    return identifiers
   }
-  return identifiers
 }
 
 public func swiftmutIdentifierLooksLikeSourceExpression(_ identifier: String) -> Bool {
@@ -47,6 +49,16 @@ public func swiftmutIdentifierLooksLikeSourceExpression(_ identifier: String) ->
 }
 
 public func swiftmutBytesAreIdentifier(_ bytes: [UInt8], start: Int, end: Int) -> Bool {
+  bytes.withUnsafeBufferPointer { buffer in
+    swiftmutBytesAreIdentifier(buffer, start: start, end: end)
+  }
+}
+
+public func swiftmutBytesAreIdentifier(
+  _ bytes: UnsafeBufferPointer<UInt8>,
+  start: Int,
+  end: Int
+) -> Bool {
   guard start < end else {
     return false
   }
@@ -104,24 +116,26 @@ public func swiftmutMangledNameContainsIdentifierWords(
 }
 
 public func swiftmutCamelCaseIdentifierWords(_ identifier: String) -> [String] {
-  let bytes = Array(identifier.utf8)
-  guard !bytes.isEmpty else {
-    return []
-  }
-
-  var words: [String] = []
-  var start = 0
-  var index = 1
-  while index < bytes.count {
-    if swiftmutIsASCIIUppercase(bytes[index])
-        && swiftmutIsASCIILowercase(bytes[index - 1]) {
-      words.append(String(decoding: bytes[start..<index], as: UTF8.self))
-      start = index
+  var identifierText = identifier
+  return identifierText.withUTF8 { bytes in
+    guard !bytes.isEmpty else {
+      return []
     }
-    index += 1
+
+    var words: [String] = []
+    var start = 0
+    var index = 1
+    while index < bytes.count {
+      if swiftmutIsASCIIUppercase(bytes[index])
+          && swiftmutIsASCIILowercase(bytes[index - 1]) {
+        words.append(String(decoding: bytes[start..<index], as: UTF8.self))
+        start = index
+      }
+      index += 1
+    }
+    words.append(String(decoding: bytes[start..<bytes.count], as: UTF8.self))
+    return words.filter { !$0.isEmpty }
   }
-  words.append(String(decoding: bytes[start..<bytes.count], as: UTF8.self))
-  return words.filter { !$0.isEmpty }
 }
 
 public func swiftmutIsASCIIUppercase(_ byte: UInt8) -> Bool {

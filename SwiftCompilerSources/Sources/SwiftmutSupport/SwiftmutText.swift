@@ -341,6 +341,104 @@ public func swiftmutLastTopLevelByteBefore(bytes: [UInt8], start: Int, end: Int,
   return result
 }
 
+public struct SwiftmutTopLevelTernaryParts: Equatable {
+  public let question: Int
+  public let colonAfterQuestion: Int
+  public let assignmentBeforeQuestion: Int?
+  public let labelColonBeforeQuestion: Int?
+
+  public init(
+    question: Int,
+    colonAfterQuestion: Int,
+    assignmentBeforeQuestion: Int?,
+    labelColonBeforeQuestion: Int?
+  ) {
+    self.question = question
+    self.colonAfterQuestion = colonAfterQuestion
+    self.assignmentBeforeQuestion = assignmentBeforeQuestion
+    self.labelColonBeforeQuestion = labelColonBeforeQuestion
+  }
+}
+
+public func swiftmutTopLevelTernaryParts(
+  bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> SwiftmutTopLevelTernaryParts? {
+  var parenDepth = 0
+  var bracketDepth = 0
+  var braceDepth = 0
+  var quote: UInt8?
+  var escaped = false
+  var question: Int?
+  var assignmentBeforeQuestion: Int?
+  var labelColonBeforeQuestion: Int?
+  var index = start
+  while index < end {
+    let byte = bytes[index]
+    if let activeQuote = quote {
+      if escaped {
+        escaped = false
+      } else if byte == 92 {
+        escaped = true
+      } else if byte == activeQuote {
+        quote = nil
+      }
+      index += 1
+      continue
+    }
+    if byte == 34 || byte == 39 {
+      quote = byte
+      index += 1
+      continue
+    }
+    let atTopLevel = parenDepth == 0 && bracketDepth == 0 && braceDepth == 0
+    if atTopLevel {
+      if let questionIndex = question {
+        if byte == 58 {
+          return SwiftmutTopLevelTernaryParts(
+            question: questionIndex,
+            colonAfterQuestion: index,
+            assignmentBeforeQuestion: assignmentBeforeQuestion,
+            labelColonBeforeQuestion: labelColonBeforeQuestion)
+        }
+      } else if byte == 63 {
+        let previous = index > start ? bytes[index - 1] : 0
+        let next = index + 1 < end ? bytes[index + 1] : 0
+        if previous != 63 && next != 63 {
+          question = index
+        }
+      } else if byte == 61 {
+        let previous = index > start ? bytes[index - 1] : 0
+        let next = index + 1 < end ? bytes[index + 1] : 0
+        if previous != 33 && previous != 60 && previous != 61 && previous != 62 && next != 61 {
+          assignmentBeforeQuestion = index
+        }
+      } else if byte == 58 {
+        labelColonBeforeQuestion = index
+      }
+    }
+    switch byte {
+    case 40:
+      parenDepth += 1
+    case 41:
+      if parenDepth > 0 { parenDepth -= 1 }
+    case 91:
+      bracketDepth += 1
+    case 93:
+      if bracketDepth > 0 { bracketDepth -= 1 }
+    case 123:
+      braceDepth += 1
+    case 125:
+      if braceDepth > 0 { braceDepth -= 1 }
+    default:
+      break
+    }
+    index += 1
+  }
+  return nil
+}
+
 public func swiftmutTernaryConditionStart(
   bytes: [UInt8],
   before questionIndex: Int,

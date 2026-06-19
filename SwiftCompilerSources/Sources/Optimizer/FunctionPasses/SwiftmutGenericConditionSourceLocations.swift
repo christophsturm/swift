@@ -810,8 +810,7 @@ func swiftmutTernaryConditionRange(
   start: Int,
   end: Int
 ) -> (start: Int, end: Int)? {
-  guard let question = swiftmutTopLevelTernaryQuestionIndex(bytes: bytes, start: start, end: end),
-        swiftmutTopLevelByteIndex(bytes, start: question + 1, end: end, byte: 58) != nil else {
+  guard let ternary = swiftmutTopLevelTernaryParts(bytes: bytes, start: start, end: end) else {
     return nil
   }
 
@@ -819,14 +818,16 @@ func swiftmutTernaryConditionRange(
   if swiftmutASCIIHasPrefix(bytes, start: conditionStart, prefix: "return ") {
     conditionStart = swiftmutSkipHorizontalWhitespace(bytes, from: conditionStart + 7)
   }
-  if let assignment = swiftmutLastTopLevelAssignmentEqualsBefore(bytes: bytes, start: conditionStart, end: question) {
+  if let assignment = ternary.assignmentBeforeQuestion,
+     assignment >= conditionStart {
     conditionStart = swiftmutSkipHorizontalWhitespace(bytes, from: assignment + 1)
   }
-  if let labelColon = swiftmutLastTopLevelByteBefore(bytes: bytes, start: conditionStart, end: question, byte: 58) {
+  if let labelColon = ternary.labelColonBeforeQuestion,
+     labelColon >= conditionStart {
     conditionStart = swiftmutSkipHorizontalWhitespace(bytes, from: labelColon + 1)
   }
 
-  let conditionEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: question)
+  let conditionEnd = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: ternary.question)
   guard conditionStart < conditionEnd else {
     return nil
   }

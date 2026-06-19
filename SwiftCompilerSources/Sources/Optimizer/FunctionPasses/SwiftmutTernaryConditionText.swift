@@ -19,3 +19,11 @@ func swiftmutLastTopLevelAssignmentEqualsBefore(bytes: [UInt8], start: Int, end:
 func swiftmutLastTopLevelByteBefore(bytes: [UInt8], start: Int, end: Int, byte: UInt8) -> Int? {
   SwiftmutSupport.swiftmutLastTopLevelByteBefore(bytes: bytes, start: start, end: end, byte: byte)
 }
+
+func swiftmutTopLevelTernaryParts(
+  bytes: [UInt8],
+  start: Int,
+  end: Int
+) -> SwiftmutSupport.SwiftmutTopLevelTernaryParts? {
+  SwiftmutSupport.swiftmutTopLevelTernaryParts(bytes: bytes, start: start, end: end)
+}

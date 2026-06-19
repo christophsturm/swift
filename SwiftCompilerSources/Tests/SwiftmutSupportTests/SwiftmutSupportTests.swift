@@ -453,6 +453,27 @@ final class SwiftmutSupportTests: XCTestCase {
       5)
   }
 
+  func testTopLevelTernaryPartsScansQuestionColonAssignmentAndLabelTogether() {
+    let source = #"target = label: call([1: 2], text: ":") ? yes : no"#
+    let bytes = Array(source.utf8)
+
+    XCTAssertEqual(
+      swiftmutTopLevelTernaryParts(bytes: bytes, start: 0, end: bytes.count),
+      SwiftmutTopLevelTernaryParts(
+        question: swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: " ? ")! + 1,
+        colonAfterQuestion: swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: " : no")! + 1,
+        assignmentBeforeQuestion: swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: " = ")! + 1,
+        labelColonBeforeQuestion: swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: "label:")! + 5))
+  }
+
+  func testTopLevelTernaryPartsRejectsMissingColonAndNilCoalescing() {
+    let missingColon = Array(#"value ? yes"#.utf8)
+    let nilCoalescing = Array(#"value ?? fallback"#.utf8)
+
+    XCTAssertNil(swiftmutTopLevelTernaryParts(bytes: missingColon, start: 0, end: missingColon.count))
+    XCTAssertNil(swiftmutTopLevelTernaryParts(bytes: nilCoalescing, start: 0, end: nilCoalescing.count))
+  }
+
   func testTernaryConditionStartUsesTopLevelAssignmentBoundary() {
     let bytes = Array(#"target = object.value ? yes : no"#.utf8)
     let question = swiftmutTopLevelTernaryQuestionIndex(bytes: bytes, start: 0, end: bytes.count)!

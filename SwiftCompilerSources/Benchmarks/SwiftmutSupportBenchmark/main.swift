@@ -386,19 +386,13 @@ let balancedExpressionSeconds = elapsed {
 let ternaryFixture = ternaryScanFixture()
 let ternaryScanSeconds = elapsed {
   for _ in 0..<options.iterations {
-    if let question = swiftmutTopLevelTernaryQuestionIndex(
+    if let parts = swiftmutTopLevelTernaryParts(
       bytes: ternaryFixture,
       start: 0,
       end: ternaryFixture.count) {
-      _ = swiftmutLastTopLevelAssignmentEqualsBefore(
-        bytes: ternaryFixture,
-        start: 0,
-        end: question)
-      _ = swiftmutLastTopLevelByteBefore(
-        bytes: ternaryFixture,
-        start: 0,
-        end: question,
-        byte: UInt8(ascii: ":"))
+      _ = parts.assignmentBeforeQuestion
+      _ = parts.labelColonBeforeQuestion
+      _ = parts.colonAfterQuestion
     }
   }
 }

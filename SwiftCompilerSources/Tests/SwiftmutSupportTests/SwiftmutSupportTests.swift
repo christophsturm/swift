@@ -38,6 +38,11 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertEqual(swiftmutJSONStringArrayInitialCapacity(remainingByteCount: 0), 0)
     XCTAssertEqual(swiftmutJSONStringArrayInitialCapacity(remainingByteCount: 47), 1)
     XCTAssertEqual(swiftmutJSONStringArrayInitialCapacity(remainingByteCount: 480), 10)
+
+    var emptyIndex = 0
+    let emptyArrayBytes = Array("[ \n ] trailing".utf8)
+    XCTAssertEqual(swiftmutParseJSONStringArray(in: emptyArrayBytes, index: &emptyIndex), [])
+    XCTAssertEqual(emptyIndex, 5)
   }
 
   func testTopLevelJSONParserKeepsFirstDuplicateValueForCompatibility() {

@@ -63,6 +63,10 @@ public func swiftmutJSONStringArray(_ key: String, in json: String) -> [String] 
     return []
   }
   index += 1
+  swiftmutSkipJSONWhitespace(in: bytes, index: &index)
+  if index < bytes.count, bytes[index] == 93 {
+    return []
+  }
 
   var values: [String] = []
   values.reserveCapacity(swiftmutJSONStringArrayInitialCapacity(remainingByteCount: bytes.count - index))
@@ -154,6 +158,11 @@ public func swiftmutParseJSONStringArray(in bytes: [UInt8], index: inout Int) ->
     return []
   }
   index += 1
+  swiftmutSkipJSONWhitespace(in: bytes, index: &index)
+  if index < bytes.count, bytes[index] == 93 {
+    index += 1
+    return []
+  }
 
   var values: [String] = []
   values.reserveCapacity(swiftmutJSONStringArrayInitialCapacity(remainingByteCount: bytes.count - index))

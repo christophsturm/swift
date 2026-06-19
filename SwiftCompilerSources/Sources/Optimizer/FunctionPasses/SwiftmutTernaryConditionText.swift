@@ -6,39 +6,16 @@
 // See http://swift.org/LICENSE.txt for license information
 // See http://swift.org/CONTRIBUTORS.txt for Swift project authors
 
+import SwiftmutSupport
+
 func swiftmutTopLevelTernaryQuestionIndex(bytes: [UInt8], start: Int, end: Int) -> Int? {
-  var searchStart = start
-  while let question = swiftmutTopLevelByteIndex(bytes, start: searchStart, end: end, byte: 63) {
-    let previous = question > start ? bytes[question - 1] : 0
-    let next = question + 1 < end ? bytes[question + 1] : 0
-    if previous != 63 && next != 63 {
-      return question
-    }
-    searchStart = question + 1
-  }
-  return nil
+  SwiftmutSupport.swiftmutTopLevelTernaryQuestionIndex(bytes: bytes, start: start, end: end)
 }
 
 func swiftmutLastTopLevelAssignmentEqualsBefore(bytes: [UInt8], start: Int, end: Int) -> Int? {
-  var searchStart = start
-  var result: Int?
-  while let equals = swiftmutTopLevelByteIndex(bytes, start: searchStart, end: end, byte: 61) {
-    let previous = equals > start ? bytes[equals - 1] : 0
-    let next = equals + 1 < end ? bytes[equals + 1] : 0
-    if previous != 33 && previous != 60 && previous != 61 && previous != 62 && next != 61 {
-      result = equals
-    }
-    searchStart = equals + 1
-  }
-  return result
+  SwiftmutSupport.swiftmutLastTopLevelAssignmentEqualsBefore(bytes: bytes, start: start, end: end)
 }
 
 func swiftmutLastTopLevelByteBefore(bytes: [UInt8], start: Int, end: Int, byte: UInt8) -> Int? {
-  var searchStart = start
-  var result: Int?
-  while let index = swiftmutTopLevelByteIndex(bytes, start: searchStart, end: end, byte: byte) {
-    result = index
-    searchStart = index + 1
-  }
-  return result
+  SwiftmutSupport.swiftmutLastTopLevelByteBefore(bytes: bytes, start: start, end: end, byte: byte)
 }

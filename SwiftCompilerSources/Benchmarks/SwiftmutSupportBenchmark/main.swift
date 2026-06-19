@@ -182,6 +182,15 @@ func balancedExpressionFixture() -> [UInt8] {
   return Array(nested.utf8)
 }
 
+func ternaryScanFixture() -> [UInt8] {
+  var source = "label: value0 == other0, "
+  for index in 1..<150 {
+    source += "call\(index)(value: [left\(index) ? right\(index) : fallback\(index)]), "
+  }
+  source += "target = object.value ? yes : no"
+  return Array(source.utf8)
+}
+
 let options = parseOptions(CommandLine.arguments)
 let loaded: (json: String?, config: SwiftmutConfig)
 if let configPath = options.configPath {
@@ -347,6 +356,25 @@ let balancedExpressionSeconds = elapsed {
       lineEnd: balancedFixture.count)
   }
 }
+let ternaryFixture = ternaryScanFixture()
+let ternaryScanSeconds = elapsed {
+  for _ in 0..<options.iterations {
+    if let question = swiftmutTopLevelTernaryQuestionIndex(
+      bytes: ternaryFixture,
+      start: 0,
+      end: ternaryFixture.count) {
+      _ = swiftmutLastTopLevelAssignmentEqualsBefore(
+        bytes: ternaryFixture,
+        start: 0,
+        end: question)
+      _ = swiftmutLastTopLevelByteBefore(
+        bytes: ternaryFixture,
+        start: 0,
+        end: question,
+        byte: UInt8(ascii: ":"))
+    }
+  }
+}
 
 print("swiftmut support benchmark")
 print("config: \(configPath)")
@@ -371,3 +399,4 @@ print(String(format: "top-level byte scan: %.6fs", topLevelByteSeconds))
 print(String(format: "top-level ascii scan: %.6fs", topLevelASCIISeconds))
 print(String(format: "expression complete scan: %.6fs", expressionCompleteSeconds))
 print(String(format: "balanced expression scan: %.6fs", balancedExpressionSeconds))
+print(String(format: "ternary boundary scan: %.6fs", ternaryScanSeconds))

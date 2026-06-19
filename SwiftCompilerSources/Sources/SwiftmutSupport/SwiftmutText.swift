@@ -184,6 +184,163 @@ public func swiftmutBalancedExpressionEnd(
   return nil
 }
 
+public func swiftmutTopLevelTernaryQuestionIndex(bytes: [UInt8], start: Int, end: Int) -> Int? {
+  var parenDepth = 0
+  var bracketDepth = 0
+  var braceDepth = 0
+  var quote: UInt8?
+  var escaped = false
+  var index = start
+  while index < end {
+    let byte = bytes[index]
+    if let activeQuote = quote {
+      if escaped {
+        escaped = false
+      } else if byte == 92 {
+        escaped = true
+      } else if byte == activeQuote {
+        quote = nil
+      }
+      index += 1
+      continue
+    }
+    if byte == 34 || byte == 39 {
+      quote = byte
+      index += 1
+      continue
+    }
+    if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 && byte == 63 {
+      let previous = index > start ? bytes[index - 1] : 0
+      let next = index + 1 < end ? bytes[index + 1] : 0
+      if previous != 63 && next != 63 {
+        return index
+      }
+    }
+    switch byte {
+    case 40:
+      parenDepth += 1
+    case 41:
+      if parenDepth > 0 { parenDepth -= 1 }
+    case 91:
+      bracketDepth += 1
+    case 93:
+      if bracketDepth > 0 { bracketDepth -= 1 }
+    case 123:
+      braceDepth += 1
+    case 125:
+      if braceDepth > 0 { braceDepth -= 1 }
+    default:
+      break
+    }
+    index += 1
+  }
+  return nil
+}
+
+public func swiftmutLastTopLevelAssignmentEqualsBefore(bytes: [UInt8], start: Int, end: Int) -> Int? {
+  var parenDepth = 0
+  var bracketDepth = 0
+  var braceDepth = 0
+  var quote: UInt8?
+  var escaped = false
+  var result: Int?
+  var index = start
+  while index < end {
+    let byte = bytes[index]
+    if let activeQuote = quote {
+      if escaped {
+        escaped = false
+      } else if byte == 92 {
+        escaped = true
+      } else if byte == activeQuote {
+        quote = nil
+      }
+      index += 1
+      continue
+    }
+    if byte == 34 || byte == 39 {
+      quote = byte
+      index += 1
+      continue
+    }
+    if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 && byte == 61 {
+      let previous = index > start ? bytes[index - 1] : 0
+      let next = index + 1 < end ? bytes[index + 1] : 0
+      if previous != 33 && previous != 60 && previous != 61 && previous != 62 && next != 61 {
+        result = index
+      }
+    }
+    switch byte {
+    case 40:
+      parenDepth += 1
+    case 41:
+      if parenDepth > 0 { parenDepth -= 1 }
+    case 91:
+      bracketDepth += 1
+    case 93:
+      if bracketDepth > 0 { bracketDepth -= 1 }
+    case 123:
+      braceDepth += 1
+    case 125:
+      if braceDepth > 0 { braceDepth -= 1 }
+    default:
+      break
+    }
+    index += 1
+  }
+  return result
+}
+
+public func swiftmutLastTopLevelByteBefore(bytes: [UInt8], start: Int, end: Int, byte: UInt8) -> Int? {
+  var parenDepth = 0
+  var bracketDepth = 0
+  var braceDepth = 0
+  var quote: UInt8?
+  var escaped = false
+  var result: Int?
+  var index = start
+  while index < end {
+    let currentByte = bytes[index]
+    if let activeQuote = quote {
+      if escaped {
+        escaped = false
+      } else if currentByte == 92 {
+        escaped = true
+      } else if currentByte == activeQuote {
+        quote = nil
+      }
+      index += 1
+      continue
+    }
+    if currentByte == 34 || currentByte == 39 {
+      quote = currentByte
+      index += 1
+      continue
+    }
+    if parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 && currentByte == byte {
+      result = index
+    }
+    switch currentByte {
+    case 40:
+      parenDepth += 1
+    case 41:
+      if parenDepth > 0 { parenDepth -= 1 }
+    case 91:
+      bracketDepth += 1
+    case 93:
+      if bracketDepth > 0 { bracketDepth -= 1 }
+    case 123:
+      braceDepth += 1
+    case 125:
+      if braceDepth > 0 { braceDepth -= 1 }
+    default:
+      break
+    }
+    index += 1
+  }
+  return result
+}
+
 public func swiftmutFirstTopLevelIndex(
   _ bytes: [UInt8],
   start: Int,

@@ -346,6 +346,33 @@ final class SwiftmutSupportTests: XCTestCase {
       lineEnd: bytes.count - 1))
   }
 
+  func testTopLevelTernaryQuestionSkipsNilCoalescingAndNestedQuestions() {
+    let bytes = Array(#"value ?? fallback ? yes([ignored ? value]) : no"#.utf8)
+
+    XCTAssertEqual(
+      swiftmutTopLevelTernaryQuestionIndex(bytes: bytes, start: 0, end: bytes.count),
+      18)
+  }
+
+  func testLastTopLevelAssignmentEqualsSkipsComparisonsAndNestedEquals() {
+    let bytes = Array(#"label: lhs == rhs ? x : object.assign(value = 1) = result"#.utf8)
+    let question = swiftmutTopLevelTernaryQuestionIndex(bytes: bytes, start: 0, end: bytes.count)!
+
+    XCTAssertNil(swiftmutLastTopLevelAssignmentEqualsBefore(bytes: bytes, start: 0, end: question))
+    XCTAssertEqual(
+      swiftmutLastTopLevelAssignmentEqualsBefore(bytes: bytes, start: question + 1, end: bytes.count),
+      49)
+  }
+
+  func testLastTopLevelByteBeforeIgnoresNestedBytes() {
+    let bytes = Array(#"label: call([1: 2], text: ":") ? yes : no"#.utf8)
+    let question = swiftmutTopLevelTernaryQuestionIndex(bytes: bytes, start: 0, end: bytes.count)!
+
+    XCTAssertEqual(
+      swiftmutLastTopLevelByteBefore(bytes: bytes, start: 0, end: question, byte: UInt8(ascii: ":")),
+      5)
+  }
+
   func testFunctionEndLineFindsClosingBraceWithoutTrailingNewline() {
     let source = """
     func value() {

@@ -131,6 +131,15 @@ func makeMembershipFixture() -> (cache: SwiftmutSourceLookupCache, path: String,
   )
 }
 
+func functionEndLineFixture() -> String {
+  var lines = ["func benchmark() {"]
+  for index in 0..<2_000 {
+    lines.append("  let value\(index) = \(index)")
+  }
+  lines.append("}")
+  return lines.joined(separator: "\n")
+}
+
 let options = parseOptions(CommandLine.arguments)
 let loaded: (json: String?, config: SwiftmutConfig)
 if let configPath = options.configPath {
@@ -193,6 +202,12 @@ let membershipSeconds = elapsed {
   }
 }
 membershipFixture.cleanup()
+let endLineFixture = functionEndLineFixture()
+let endLineSeconds = elapsed {
+  for _ in 0..<options.iterations {
+    _ = swiftmutFunctionEndLine(functionLocationLine: 1, text: endLineFixture)
+  }
+}
 
 print("swiftmut support benchmark")
 print("config: \(configPath)")
@@ -203,3 +218,4 @@ print(String(format: "source lookup cold: %.6fs", coldLookupSeconds))
 print(String(format: "source lookup warm: %.6fs", warmLookupSeconds))
 print(String(format: "source lookup missing: %.6fs", missingLookupSeconds))
 print(String(format: "source membership cached: %.6fs", membershipSeconds))
+print(String(format: "function end-line scan: %.6fs", endLineSeconds))

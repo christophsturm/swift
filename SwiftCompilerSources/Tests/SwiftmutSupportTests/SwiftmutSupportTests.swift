@@ -146,6 +146,16 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertEqual(swiftmutFunctionEndLine(functionLocationLine: 1, text: source), 3)
   }
 
+  func testFunctionEndLineFindsClosingBraceWithoutTrailingNewline() {
+    let source = """
+    func value() {
+      return 1
+    }
+    """
+
+    XCTAssertEqual(swiftmutFunctionEndLine(functionLocationLine: 1, text: source), 3)
+  }
+
   func testSharedSourceLookupCacheCachesConfiguredSourceReads() throws {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
       .appendingPathComponent("swiftmut-support-tests-\(UUID().uuidString)")

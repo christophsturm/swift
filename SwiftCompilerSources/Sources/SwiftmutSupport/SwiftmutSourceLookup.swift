@@ -292,16 +292,11 @@ public func swiftmutFunctionEndLine(
   text: String
 ) -> Int? {
   var currentLine = 1
-  var lineStart = text.startIndex
-  var index = text.startIndex
   var braceDepth = 0
   var sawOpeningBrace = false
 
-  func inspectLine(_ lineText: String, lineNumber: Int) -> Int? {
-    guard lineNumber >= functionLocationLine else {
-      return nil
-    }
-    for byte in lineText.utf8 {
+  for byte in text.utf8 {
+    if currentLine >= functionLocationLine {
       if byte == 123 {
         braceDepth += 1
         sawOpeningBrace = true
@@ -309,23 +304,17 @@ public func swiftmutFunctionEndLine(
         braceDepth -= 1
       }
     }
-    if sawOpeningBrace && braceDepth <= 0 {
-      return lineNumber
-    }
-    return nil
-  }
-
-  while index < text.endIndex {
-    if text[index] == "\n" {
-      if let endLine = inspectLine(String(text[lineStart..<index]), lineNumber: currentLine) {
-        return endLine
+    if byte == 10 {
+      if sawOpeningBrace && braceDepth <= 0 {
+        return currentLine
       }
       currentLine += 1
-      lineStart = text.index(after: index)
     }
-    index = text.index(after: index)
   }
-  return inspectLine(String(text[lineStart..<text.endIndex]), lineNumber: currentLine)
+  if sawOpeningBrace && braceDepth <= 0 {
+    return currentLine
+  }
+  return nil
 }
 
 private var swiftmutSharedSourceLookupCacheStorage: SwiftmutSourceLookupCache?

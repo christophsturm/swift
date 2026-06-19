@@ -161,21 +161,8 @@ func swiftmutFindUniqueMultilineExplicitConditionSourceLocation(
       config: config))
 }
 
-func swiftmutTrimmedHorizontalWhitespace(_ text: String) -> String {
-  let bytes = Array(text.utf8)
-  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
-  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
-  guard start < end else {
-    return ""
-  }
-  return String(decoding: bytes[start..<end], as: UTF8.self)
-}
-
 func swiftmutLineContainsTopLevelOpeningBrace(_ line: String) -> Bool {
-  let bytes = Array(line.utf8)
-  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
-  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
-  return swiftmutTopLevelByteIndex(bytes, start: start, end: end, byte: 123) != nil
+  swiftmutLineOpensFunctionBody(line)
 }
 
 func swiftmutGenericConditionSourceContainsTopLevelLogicalOperator(_ source: String) -> Bool {

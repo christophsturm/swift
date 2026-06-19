@@ -797,6 +797,16 @@ public func swiftmutTrimTrailingHorizontalWhitespace(_ bytes: [UInt8], end: Int)
   return index
 }
 
+public func swiftmutTrimmedHorizontalWhitespace(_ text: String) -> String {
+  let bytes = Array(text.utf8)
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard start < end else {
+    return ""
+  }
+  return String(decoding: bytes[start..<end], as: UTF8.self)
+}
+
 public func swiftmutSkipHorizontalWhitespace(_ bytes: [UInt8], from start: Int) -> Int {
   var index = start
   while index < bytes.count && swiftmutIsHorizontalWhitespace(bytes[index]) {

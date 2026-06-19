@@ -71,6 +71,10 @@ func swiftmutTrimTrailingHorizontalWhitespace(_ bytes: [UInt8], end: Int) -> Int
   SwiftmutSupport.swiftmutTrimTrailingHorizontalWhitespace(bytes, end: end)
 }
 
+func swiftmutTrimmedHorizontalWhitespace(_ text: String) -> String {
+  SwiftmutSupport.swiftmutTrimmedHorizontalWhitespace(text)
+}
+
 func swiftmutSkipHorizontalWhitespace(_ bytes: [UInt8], from start: Int) -> Int {
   SwiftmutSupport.swiftmutSkipHorizontalWhitespace(bytes, from: start)
 }

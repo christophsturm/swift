@@ -483,13 +483,7 @@ private func swiftmutLogicalConnectorSourceLocation(
 }
 
 private func swiftmutTrimmedSnippet(_ snippet: String) -> String {
-  let bytes = Array(snippet.utf8)
-  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
-  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
-  guard start < end else {
-    return ""
-  }
-  return String(decoding: bytes[start..<end], as: UTF8.self)
+  swiftmutTrimmedHorizontalWhitespace(snippet)
 }
 
 /// Finds the n-th line inside the function body whose trimmed text starts

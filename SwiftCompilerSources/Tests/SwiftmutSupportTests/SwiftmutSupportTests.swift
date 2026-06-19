@@ -338,6 +338,8 @@ final class SwiftmutSupportTests: XCTestCase {
 
     XCTAssertEqual(swiftmutSkipHorizontalWhitespace(bytes, from: 0), 2)
     XCTAssertEqual(swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count), 12)
+    XCTAssertEqual(swiftmutTrimmedHorizontalWhitespace("  béta  "), "béta")
+    XCTAssertEqual(swiftmutTrimmedHorizontalWhitespace(" \t "), "")
     XCTAssertEqual(swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: "beta"), 8)
     XCTAssertTrue(swiftmutASCIIContains(bytes, start: 0, end: bytes.count, pattern: "Alpha"))
     XCTAssertTrue(swiftmutASCIIHasPrefix(bytes, start: 2, prefix: "alpha"))

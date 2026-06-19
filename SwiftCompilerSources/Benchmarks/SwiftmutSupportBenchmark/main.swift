@@ -218,6 +218,16 @@ func defaultArgumentDeclarationFixture() -> (bytes: [UInt8], keywordOffsets: [In
   return (Array(source.utf8), keywordOffsets)
 }
 
+func trimTextFixture() -> [String] {
+  var values: [String] = []
+  for index in 0..<2_000 {
+    values.append("    value\(index) == other\(index)    ")
+  }
+  values.append(" \t ")
+  values.append("  béta value  ")
+  return values
+}
+
 func pipeFieldFixture() -> [String] {
   var values: [String] = []
   for index in 0..<1_000 {
@@ -268,6 +278,15 @@ let pipeFieldSeconds = elapsed {
     for value in pipeFields {
       _ = swiftmutPipeFields(value, count: 5)
       _ = swiftmutPipeFields(value, count: 6)
+    }
+  }
+}
+let trimTexts = trimTextFixture()
+let trimTextIterations = max(1, options.iterations / 100)
+let trimTextSeconds = elapsed {
+  for _ in 0..<trimTextIterations {
+    for value in trimTexts {
+      _ = swiftmutTrimmedHorizontalWhitespace(value)
     }
   }
 }
@@ -490,6 +509,8 @@ print(String(format: "config parse: %.6fs", parseSeconds))
 print(String(format: "mutator enabled: %.6fs", mutatorEnabledSeconds))
 print("pipe field iterations: \(pipeFieldIterations)")
 print(String(format: "pipe field split: %.6fs", pipeFieldSeconds))
+print("trim text iterations: \(trimTextIterations)")
+print(String(format: "trim horizontal whitespace: %.6fs", trimTextSeconds))
 print(String(format: "source lookup cold: %.6fs", coldLookupSeconds))
 print(String(format: "source lookup warm: %.6fs", warmLookupSeconds))
 print(String(format: "source lookup missing: %.6fs", missingLookupSeconds))

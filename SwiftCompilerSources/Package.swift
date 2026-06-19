@@ -64,7 +64,10 @@ let package = Package(
     .library(
       name: "swiftCompilerModules",
       type: .static,
-      targets: ["Basic", "AST", "SIL", "Optimizer"]),
+      targets: ["Basic", "AST", "SIL", "SwiftmutSupport", "Optimizer"]),
+    .library(
+      name: "SwiftmutSupport",
+      targets: ["SwiftmutSupport"]),
   ],
   dependencies: [
   ],
@@ -80,9 +83,21 @@ let package = Package(
     .compilerModuleTarget(
       name: "SIL",
       dependencies: ["Basic", "AST"]),
+    .target(
+      name: "SwiftmutSupport",
+      path: "Sources/SwiftmutSupport",
+      exclude: ["CMakeLists.txt"]),
     .compilerModuleTarget(
       name: "Optimizer",
-      dependencies: ["Basic", "AST", "SIL"]),
+      dependencies: ["Basic", "AST", "SIL", "SwiftmutSupport"]),
+    .executableTarget(
+      name: "SwiftmutSupportBenchmark",
+      dependencies: ["SwiftmutSupport"],
+      path: "Benchmarks/SwiftmutSupportBenchmark"),
+    .testTarget(
+      name: "SwiftmutSupportTests",
+      dependencies: ["SwiftmutSupport"],
+      path: "Tests/SwiftmutSupportTests"),
   ],
   cxxLanguageStandard: .cxx17
 )

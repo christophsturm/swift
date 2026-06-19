@@ -26,6 +26,10 @@ func swiftmutExclusionReason(
     || swiftmutIsGeneratedSpecializationFunctionName(function.name.string) {
     return "generatedSpecialization"
   }
+  if !config.sourceFiles.isEmpty,
+     swiftmutFunctionSourceLocation(for: function, config: config) == nil {
+    return "outsideSourceScope"
+  }
   if swiftmutIsGeneratedStoredPropertyGetter(function: function, config: config) {
     return "generatedStoredPropertyGetter"
   }

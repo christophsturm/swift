@@ -11,6 +11,7 @@
 
 import AST
 import SIL
+import SwiftmutSupport
 
 func swiftmutSourceMutationDisplayRules(
   for mutation: SwiftmutMutation,
@@ -157,28 +158,7 @@ func swiftmutFindOperatorMatches(
 }
 
 func swiftmutPreferredLine(in location: String, path: String) -> Int? {
-  let locationBytes = Array(location.utf8)
-  let pathBytes = Array(path.utf8)
-  guard let pathIndex = swiftmutFind(pathBytes, in: locationBytes, startingAt: 0) else {
-    return nil
-  }
-  var index = pathIndex + pathBytes.count
-  guard index < locationBytes.count, locationBytes[index] == 58 else {
-    return nil
-  }
-  index += 1
-  var value = 0
-  var hasDigit = false
-  while index < locationBytes.count {
-    let byte = locationBytes[index]
-    guard byte >= 48 && byte <= 57 else {
-      break
-    }
-    value = value * 10 + Int(byte - 48)
-    hasDigit = true
-    index += 1
-  }
-  return hasDigit ? value : nil
+  SwiftmutSupport.swiftmutPreferredLine(in: location, path: path)
 }
 
 func swiftmutLineDistance(_ lhs: Int, _ rhs: Int) -> Int {

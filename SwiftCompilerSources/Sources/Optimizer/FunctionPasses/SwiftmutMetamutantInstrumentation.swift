@@ -235,6 +235,7 @@ func swiftmutInstrumentMetamutantSites(
     returnSites: returnSites,
     returnBranchSites: returnBranchSites,
     voidCallSites: voidCallSites,
+    originalFunction: function,
     context
   )
   swiftmutLogEvent(
@@ -273,4 +274,3 @@ func swiftmutInstrumentMetamutantSites(
   }
   return changed
 }
-

@@ -26,7 +26,7 @@ var swiftmutGenericConditionNonExplicitSourceLocationSamples = 0
 let swiftmut = FunctionPass(name: "swiftmut") {
   (function: Function, context: FunctionPassContext) in
 
-  guard let config = SwiftmutConfig.load() else {
+  guard let config = swiftmutLoadedConfig() else {
     return
   }
 

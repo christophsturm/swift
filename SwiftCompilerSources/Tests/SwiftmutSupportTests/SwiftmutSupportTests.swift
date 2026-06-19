@@ -1,0 +1,132 @@
+//===--- SwiftmutSupportTests.swift ---------------------------------===//
+//
+// This source file is part of the Swift.org open source project
+//
+// Copyright (c) 2026 swiftmut contributors
+// Licensed under Apache License v2.0 with Runtime Library Exception
+//
+// See https://swift.org/LICENSE.txt for license information
+//
+//===----------------------------------------------------------------------===//
+
+import XCTest
+import Foundation
+@testable import SwiftmutSupport
+
+final class SwiftmutSupportTests: XCTestCase {
+  func testConfigLoadParsesRulesWithoutCompilerModules() throws {
+    let json = """
+    {
+      "mode": "discover",
+      "manifestPath": "/tmp/manifest.json",
+      "manifestFragmentsDirectory": "/tmp/fragments",
+      "compilerEventsPath": "/tmp/events.jsonl",
+      "packageRoot": "/repo",
+      "excludePaths": ["Tests"],
+      "sourceFiles": ["/repo/Sources/App/File.swift"],
+      "enabledMutators": ["condition"],
+      "conditionMutationRules": ["cmp_eq_Int64|condition|cmp_ne_Int64|==|!="],
+      "arithmeticMutationRules": ["sadd_with_overflow_Int64|ssub_with_overflow_Int64|+|-"],
+      "contextualArithmeticMutationRules": ["sadd_with_overflow_Int64|assignment|arithmetic|ssub_with_overflow_Int64|+|-"],
+      "returnMutationRules": ["Bool|returnFalse|false|true|false|integer_literal 0"],
+      "voidCallMutationRules": ["removeVoidCall|none|call()||"],
+      "sourceMutationDisplayRules": ["condition|cmp_eq_Int64|==|!=|!=="]
+    }
+    """
+
+    let config = try XCTUnwrap(SwiftmutConfig.load(configPath: "config.json") { path in
+      path == "config.json" ? json : nil
+    })
+
+    XCTAssertEqual(config.mode, .discover)
+    XCTAssertEqual(config.packageRoot, "/repo")
+    XCTAssertEqual(config.sourceFiles, ["/repo/Sources/App/File.swift"])
+    XCTAssertEqual(config.conditionMutationRules.first?.sourceMutated, "!=")
+    XCTAssertEqual(config.sourceMutationDisplayRules.first?.sourceMutatedOverride, "!==")
+  }
+
+  func testSourceLookupFindsFunctionLocationWithoutCompilerModules() {
+    let config = SwiftmutConfig(
+      mode: .discover,
+      activeMutantID: "",
+      mutantsPath: "/repo/.swiftmut/manifest.json",
+      manifestFragmentsDirectory: "",
+      compilerEventsPath: "",
+      packageRoot: "/repo",
+      excludePathFragments: ["Generated"],
+      sourceFiles: [
+        "/repo/Sources/App/Feature.swift",
+        "/repo/Sources/App/Generated/File.swift",
+      ],
+      enabledMutators: [],
+      conditionMutationRules: [],
+      arithmeticMutationRules: [],
+      contextualArithmeticMutationRules: [],
+      returnMutationRules: [],
+      voidCallMutationRules: [],
+      sourceMutationDisplayRules: [])
+
+    let cache = SwiftmutSourceLookupCache(config: config)
+    let location = cache.functionSourceLocation(
+      in: "sil hidden @foo : $@convention(thin) () -> () // /repo/Sources/App/Feature.swift:42:9")
+
+    XCTAssertEqual(location?.path, "/repo/Sources/App/Feature.swift")
+    XCTAssertEqual(location?.line, 42)
+    XCTAssertEqual(cache.swiftSourcePaths(), ["/repo/Sources/App/Feature.swift"])
+  }
+
+  func testSourceLineBelongsToFunctionUsesExtractedBraceScan() {
+    let source = """
+    func first() {
+      let x = 1
+    }
+
+    func second() {
+      let y = 2
+    }
+    """
+
+    XCTAssertTrue(swiftmutSourceLineBelongsToFunction(2, functionLocationLine: 1, text: source))
+    XCTAssertFalse(swiftmutSourceLineBelongsToFunction(5, functionLocationLine: 1, text: source))
+  }
+
+  func testSharedSourceLookupCacheCachesConfiguredSourceReads() throws {
+    let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("swiftmut-support-tests-\(UUID().uuidString)")
+    let source = directory
+      .appendingPathComponent("Sources")
+      .appendingPathComponent("App")
+      .appendingPathComponent("Feature.swift")
+    try FileManager.default.createDirectory(
+      at: source.deletingLastPathComponent(),
+      withIntermediateDirectories: true)
+    try "first".write(to: source, atomically: true, encoding: .utf8)
+    defer {
+      try? FileManager.default.removeItem(at: directory)
+      swiftmutResetSourceLookupCache()
+    }
+
+    let config = SwiftmutConfig(
+      mode: .discover,
+      activeMutantID: "",
+      mutantsPath: directory.appendingPathComponent("manifest.json").path,
+      manifestFragmentsDirectory: "",
+      compilerEventsPath: "",
+      packageRoot: directory.path,
+      excludePathFragments: [],
+      sourceFiles: [source.path],
+      enabledMutators: [],
+      conditionMutationRules: [],
+      arithmeticMutationRules: [],
+      contextualArithmeticMutationRules: [],
+      returnMutationRules: [],
+      voidCallMutationRules: [],
+      sourceMutationDisplayRules: [])
+
+    _ = swiftmutSharedSourceLookupCache(config: config)
+    XCTAssertEqual(swiftmutCachedRead(source.path), "first")
+
+    try "second".write(to: source, atomically: true, encoding: .utf8)
+    XCTAssertEqual(swiftmutCachedRead(source.path), "first")
+  }
+}

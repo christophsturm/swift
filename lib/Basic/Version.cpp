@@ -269,7 +269,19 @@ std::string getSwiftFullVersion(Version effectiveVersion) {
   OS << SWIFT_VENDOR " ";
 #endif
 
-  OS << "Swift version " SWIFT_VERSION_STRING " (swift-6.3.3-RELEASE)";
+  OS << "Swift version " SWIFT_VERSION_STRING;
+  if (effectiveVersion != Version::getCurrentLanguageVersion())
+    OS << " effective-" << effectiveVersion;
+  OS << " (";
+#ifdef SWIFT_TOOLCHAIN_VERSION
+  OS << SWIFT_TOOLCHAIN_VERSION;
+#else
+  OS << "swift-6.3.3-RELEASE";
+#endif
+#ifdef CLANG_COMPILER_VERSION
+  OS << " clang-" CLANG_COMPILER_VERSION;
+#endif
+  OS << ")";
   return OS.str();
 }
 
@@ -315,10 +327,11 @@ std::string getCompilerVersion() {
   std::string buf;
   llvm::raw_string_ostream OS(buf);
 
- // TODO: This should print SWIFT_COMPILER_VERSION when
- // available, but to do that we need to switch from
- // llvm::VersionTuple to swift::Version.
+#ifdef SWIFT_COMPILER_VERSION
+ OS << SWIFT_COMPILER_VERSION;
+#else
  OS << SWIFT_VERSION_STRING;
+#endif
 
   return OS.str();
 }

@@ -33,6 +33,10 @@ func swiftmutShouldLog(
   if config.compilerEventsPath.isEmpty {
     return false
   }
+  if !config.sourceFiles.isEmpty,
+     swiftmutFunctionSourceLocation(for: function, config: config) == nil {
+    return false
+  }
   if swiftmutFunctionName(function.name.string, belongsToModule: moduleName) {
     return true
   }

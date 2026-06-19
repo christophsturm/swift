@@ -559,7 +559,11 @@ func swiftmutInjectLogicalConnectorSite(
   _ site: SwiftmutLogicalConnectorSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+  guard let visitFunction = swiftmutRuntimeVisitFunction(
+          named: site.runtimeFunctionName,
+          context,
+          originalFunction: site.branch.parentFunction
+        ),
         let siteID = swiftmutMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,

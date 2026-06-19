@@ -12,20 +12,53 @@
 import AST
 import SIL
 
-func swiftmutRuntimeVisitFunction(_ context: FunctionPassContext) -> Function? {
+func swiftmutRuntimeVisitFunction(
+  _ context: FunctionPassContext,
+  originalFunction: Function
+) -> Function? {
   context.lookupFunction(name: "__swiftmut_visit")
     ?? context.lookupFunction(name: "@__swiftmut_visit")
     ?? context.loadFunction(name: "__swiftmut_visit", loadCalleesRecursively: false)
     ?? context.loadFunction(name: "@__swiftmut_visit", loadCalleesRecursively: false)
+    ?? swiftmutCreateRuntimeVisitFunction(context, originalFunction: originalFunction)
 }
 
 func swiftmutRuntimeVisitFunction(
   named functionName: String,
-  _ context: FunctionPassContext
+  _ context: FunctionPassContext,
+  originalFunction: Function
 ) -> Function? {
   context.lookupFunction(name: functionName)
     ?? context.lookupFunction(name: "@\(functionName)")
-    ?? swiftmutRuntimeVisitFunction(context)
+    ?? swiftmutRuntimeVisitFunction(context, originalFunction: originalFunction)
+}
+
+private func swiftmutCreateRuntimeVisitFunction(
+  _ context: FunctionPassContext,
+  originalFunction: Function
+) -> Function {
+  let siteIDType = context.getBuiltinIntegerType(bitWidth: 64).canonicalType
+  let choiceType = context.getBuiltinIntegerType(bitWidth: 32).canonicalType
+  return context.createPublicExternalFunctionDeclaration(
+    name: "__swiftmut_visit",
+    parameters: [
+      ParameterInfo(
+        type: siteIDType,
+        convention: .directUnowned,
+        options: 0,
+        hasLoweredAddresses: originalFunction.hasLoweredAddresses
+      )
+    ],
+    results: [
+      ResultInfo(
+        type: choiceType,
+        convention: .unowned,
+        options: 0,
+        hasLoweredAddresses: originalFunction.hasLoweredAddresses
+      )
+    ],
+    from: originalFunction
+  )
 }
 
 func swiftmutAnyRuntimeVisitFunctionAvailable(
@@ -38,36 +71,82 @@ func swiftmutAnyRuntimeVisitFunctionAvailable(
   returnSites: [SwiftmutReturnSite],
   returnBranchSites: [SwiftmutReturnBranchSite],
   voidCallSites: [SwiftmutVoidCallSite],
+  originalFunction: Function,
   _ context: FunctionPassContext
 ) -> Bool {
-  for site in conditionSites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+  for site in conditionSites
+    where swiftmutRuntimeVisitFunction(
+      named: site.runtimeFunctionName,
+      context,
+      originalFunction: originalFunction
+    ) != nil {
     return true
   }
-  for site in logicalConnectorSites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+  for site in logicalConnectorSites
+    where swiftmutRuntimeVisitFunction(
+      named: site.runtimeFunctionName,
+      context,
+      originalFunction: originalFunction
+    ) != nil {
     return true
   }
-  for site in arithmeticSites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+  for site in arithmeticSites
+    where swiftmutRuntimeVisitFunction(
+      named: site.runtimeFunctionName,
+      context,
+      originalFunction: originalFunction
+    ) != nil {
     return true
   }
-  for site in scalarValueSites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+  for site in scalarValueSites
+    where swiftmutRuntimeVisitFunction(
+      named: site.runtimeFunctionName,
+      context,
+      originalFunction: originalFunction
+    ) != nil {
     return true
   }
-  for site in valueApplySites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+  for site in valueApplySites
+    where swiftmutRuntimeVisitFunction(
+      named: site.runtimeFunctionName,
+      context,
+      originalFunction: originalFunction
+    ) != nil {
     return true
   }
-  for site in assignmentValueSites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+  for site in assignmentValueSites
+    where swiftmutRuntimeVisitFunction(
+      named: site.runtimeFunctionName,
+      context,
+      originalFunction: originalFunction
+    ) != nil {
     return true
   }
-  for site in returnSites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+  for site in returnSites
+    where swiftmutRuntimeVisitFunction(
+      named: site.runtimeFunctionName,
+      context,
+      originalFunction: originalFunction
+    ) != nil {
     return true
   }
-  for site in returnBranchSites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+  for site in returnBranchSites
+    where swiftmutRuntimeVisitFunction(
+      named: site.runtimeFunctionName,
+      context,
+      originalFunction: originalFunction
+    ) != nil {
     return true
   }
-  for site in voidCallSites where swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context) != nil {
+  for site in voidCallSites
+    where swiftmutRuntimeVisitFunction(
+      named: site.runtimeFunctionName,
+      context,
+      originalFunction: originalFunction
+    ) != nil {
     return true
   }
-  return swiftmutRuntimeVisitFunction(context) != nil
+  return swiftmutRuntimeVisitFunction(context, originalFunction: originalFunction) != nil
 }
 
 func swiftmutRuntimeVisitThunkName(file: String, config: SwiftmutConfig) -> String {
@@ -304,4 +383,3 @@ func swiftmutRuntimeChoiceRawValue(
   }
   return builder.createStructExtract(struct: choice, fieldIndex: 0)
 }
-

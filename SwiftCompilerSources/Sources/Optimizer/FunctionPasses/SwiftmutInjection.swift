@@ -16,7 +16,11 @@ func swiftmutInjectConditionSite(
   _ site: SwiftmutConditionSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+  guard let visitFunction = swiftmutRuntimeVisitFunction(
+          named: site.runtimeFunctionName,
+          context,
+          originalFunction: site.branch.parentFunction
+        ),
         let siteID = swiftmutMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,
@@ -116,7 +120,11 @@ func swiftmutInjectReturnSite(
   _ site: SwiftmutReturnSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+  guard let visitFunction = swiftmutRuntimeVisitFunction(
+          named: site.runtimeFunctionName,
+          context,
+          originalFunction: site.returnInst.parentFunction
+        ),
         let siteID = swiftmutMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,
@@ -215,7 +223,11 @@ func swiftmutInjectReturnBranchSite(
   _ site: SwiftmutReturnBranchSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+  guard let visitFunction = swiftmutRuntimeVisitFunction(
+          named: site.runtimeFunctionName,
+          context,
+          originalFunction: site.branch.parentFunction
+        ),
         let siteID = swiftmutMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,
@@ -311,7 +323,11 @@ func swiftmutInjectArithmeticSite(
   _ site: SwiftmutArithmeticSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+  guard let visitFunction = swiftmutRuntimeVisitFunction(
+          named: site.runtimeFunctionName,
+          context,
+          originalFunction: site.builtin.parentFunction
+        ),
         let siteID = swiftmutMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,
@@ -401,7 +417,11 @@ func swiftmutInjectScalarValueSite(
   _ site: SwiftmutScalarValueSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+  guard let visitFunction = swiftmutRuntimeVisitFunction(
+          named: site.runtimeFunctionName,
+          context,
+          originalFunction: site.value.parentFunction
+        ),
         let siteID = swiftmutMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,
@@ -492,7 +512,11 @@ func swiftmutInjectValueApplySite(
   _ site: SwiftmutValueApplySite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+  guard let visitFunction = swiftmutRuntimeVisitFunction(
+          named: site.runtimeFunctionName,
+          context,
+          originalFunction: site.apply.parentFunction
+        ),
         let siteID = swiftmutMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,
@@ -607,7 +631,11 @@ func swiftmutInjectAssignmentValueSite(
   _ site: SwiftmutAssignmentValueSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+  guard let visitFunction = swiftmutRuntimeVisitFunction(
+          named: site.runtimeFunctionName,
+          context,
+          originalFunction: site.store.parentFunction
+        ),
         let siteID = swiftmutMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,
@@ -710,7 +738,11 @@ func swiftmutInjectVoidCallSite(
   _ site: SwiftmutVoidCallSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = swiftmutRuntimeVisitFunction(named: site.runtimeFunctionName, context),
+  guard let visitFunction = swiftmutRuntimeVisitFunction(
+          named: site.runtimeFunctionName,
+          context,
+          originalFunction: site.apply.parentFunction
+        ),
         let siteID = swiftmutMakeRuntimeSiteID(
           site.siteID,
           visitFunction: visitFunction,

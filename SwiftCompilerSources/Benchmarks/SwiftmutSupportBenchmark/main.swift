@@ -199,6 +199,25 @@ func mangledIdentifierFixture() -> [String] {
   return names
 }
 
+func defaultArgumentDeclarationFixture() -> (bytes: [UInt8], keywordOffsets: [Int]) {
+  var source = ""
+  var keywordOffsets: [Int] = []
+  for index in 0..<300 {
+    keywordOffsets.append(source.utf8.count)
+    source += """
+    func make\(index)<T: Comparable>(
+      value: Int = call\(index)([")", nested(value: \(index))], other: T.self),
+      label: String = "text, with = signs",
+      flag: Bool = value\(index) == other\(index)
+    ) -> T {
+      fatalError()
+    }
+
+    """
+  }
+  return (Array(source.utf8), keywordOffsets)
+}
+
 let options = parseOptions(CommandLine.arguments)
 let loaded: (json: String?, config: SwiftmutConfig)
 if let configPath = options.configPath {
@@ -406,6 +425,25 @@ let mangledIdentifierSeconds = elapsed {
     }
   }
 }
+let defaultArgumentFixture = defaultArgumentDeclarationFixture()
+let defaultArgumentIterations = max(1, options.iterations / 100)
+let defaultArgumentDeclarationSeconds = elapsed {
+  for _ in 0..<defaultArgumentIterations {
+    for keywordOffset in defaultArgumentFixture.keywordOffsets {
+      if swiftmutSourceDeclarationKeywordAt(
+        bytes: defaultArgumentFixture.bytes,
+        index: keywordOffset),
+        let list = swiftmutSourceDeclarationParameterList(
+          bytes: defaultArgumentFixture.bytes,
+          from: keywordOffset) {
+        _ = swiftmutTopLevelEquals(
+          bytes: defaultArgumentFixture.bytes,
+          start: list.start,
+          end: list.end)
+      }
+    }
+  }
+}
 
 print("swiftmut support benchmark")
 print("config: \(configPath)")
@@ -434,3 +472,5 @@ print(String(format: "ternary boundary scan: %.6fs", ternaryScanSeconds))
 print(String(format: "ternary start scan: %.6fs", ternaryStartSeconds))
 print("mangled identifier iterations: \(mangledIdentifierIterations)")
 print(String(format: "mangled identifier scan: %.6fs", mangledIdentifierSeconds))
+print("default argument declaration iterations: \(defaultArgumentIterations)")
+print(String(format: "default argument declaration scan: %.6fs", defaultArgumentDeclarationSeconds))

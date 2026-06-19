@@ -9,6 +9,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+import SwiftmutSupport
+
 func swiftmutFindOrdinalDefaultArgumentReturnSourceLocation(
   functionName: String,
   mutation: SwiftmutMutation,
@@ -126,70 +128,18 @@ func swiftmutDefaultArgumentExpressions(
 }
 
 func swiftmutSourceDeclarationKeywordAt(bytes: [UInt8], index: Int) -> Bool {
-  if swiftmutASCIIHasExactPrefix(bytes, start: index, prefix: "func ") {
-    return index == 0 || !swiftmutIsASCIILetterNumberOrUnderscore(bytes[index - 1])
-  }
-  if swiftmutASCIIHasExactPrefix(bytes, start: index, prefix: "init(") {
-    return index == 0 || !swiftmutIsASCIILetterNumberOrUnderscore(bytes[index - 1])
-  }
-  if swiftmutASCIIHasExactPrefix(bytes, start: index, prefix: "init?(") {
-    return index == 0 || !swiftmutIsASCIILetterNumberOrUnderscore(bytes[index - 1])
-  }
-  if swiftmutASCIIHasExactPrefix(bytes, start: index, prefix: "init!(") {
-    return index == 0 || !swiftmutIsASCIILetterNumberOrUnderscore(bytes[index - 1])
-  }
-  return false
+  SwiftmutSupport.swiftmutSourceDeclarationKeywordAt(bytes: bytes, index: index)
 }
 
 func swiftmutSourceDeclarationParameterList(
   bytes: [UInt8],
   from keywordStart: Int
 ) -> (start: Int, end: Int)? {
-  guard let openParen = swiftmutFindDeclarationOpenParen(bytes: bytes, from: keywordStart),
-        let closeParen = swiftmutFindMatchingSourceDelimiter(
-          bytes: bytes,
-          openOffset: openParen,
-          open: 40,
-          close: 41
-        ) else {
-    return nil
-  }
-  return (openParen + 1, closeParen)
+  SwiftmutSupport.swiftmutSourceDeclarationParameterList(bytes: bytes, from: keywordStart)
 }
 
 func swiftmutFindDeclarationOpenParen(bytes: [UInt8], from offset: Int) -> Int? {
-  var index = offset
-  let limit = min(bytes.count, offset + 320)
-  var angleDepth = 0
-  var inString = false
-  var escaped = false
-  while index < limit {
-    let byte = bytes[index]
-    if inString {
-      if escaped {
-        escaped = false
-      } else if byte == 92 {
-        escaped = true
-      } else if byte == 34 {
-        inString = false
-      }
-      index += 1
-      continue
-    }
-    if byte == 34 {
-      inString = true
-    } else if byte == 10 || byte == 123 {
-      return nil
-    } else if byte == 60 {
-      angleDepth += 1
-    } else if byte == 62 && angleDepth > 0 {
-      angleDepth -= 1
-    } else if byte == 40 && angleDepth == 0 {
-      return index
-    }
-    index += 1
-  }
-  return nil
+  SwiftmutSupport.swiftmutFindDeclarationOpenParen(bytes: bytes, from: offset)
 }
 
 func swiftmutFindMatchingSourceDelimiter(
@@ -198,36 +148,11 @@ func swiftmutFindMatchingSourceDelimiter(
   open: UInt8,
   close: UInt8
 ) -> Int? {
-  var depth = 0
-  var index = openOffset
-  var inString = false
-  var escaped = false
-  while index < bytes.count {
-    let byte = bytes[index]
-    if inString {
-      if escaped {
-        escaped = false
-      } else if byte == 92 {
-        escaped = true
-      } else if byte == 34 {
-        inString = false
-      }
-      index += 1
-      continue
-    }
-    if byte == 34 {
-      inString = true
-    } else if byte == open {
-      depth += 1
-    } else if byte == close {
-      depth -= 1
-      if depth == 0 {
-        return index
-      }
-    }
-    index += 1
-  }
-  return nil
+  SwiftmutSupport.swiftmutFindMatchingSourceDelimiter(
+    bytes: bytes,
+    openOffset: openOffset,
+    open: open,
+    close: close)
 }
 
 func swiftmutDefaultArgumentExpression(
@@ -300,45 +225,7 @@ func swiftmutDefaultArgumentExpression(
 }
 
 func swiftmutTopLevelEquals(bytes: [UInt8], start: Int, end: Int) -> Int? {
-  var index = start
-  var squareDepth = 0
-  var parenDepth = 0
-  var braceDepth = 0
-  var inString = false
-  var escaped = false
-  while index < end {
-    let byte = bytes[index]
-    if inString {
-      if escaped {
-        escaped = false
-      } else if byte == 92 {
-        escaped = true
-      } else if byte == 34 {
-        inString = false
-      }
-      index += 1
-      continue
-    }
-    if byte == 34 {
-      inString = true
-    } else if byte == 91 {
-      squareDepth += 1
-    } else if byte == 93 {
-      squareDepth -= 1
-    } else if byte == 40 {
-      parenDepth += 1
-    } else if byte == 41 {
-      parenDepth -= 1
-    } else if byte == 123 {
-      braceDepth += 1
-    } else if byte == 125 {
-      braceDepth -= 1
-    } else if byte == 61 && squareDepth == 0 && parenDepth == 0 && braceDepth == 0 {
-      return index
-    }
-    index += 1
-  }
-  return nil
+  SwiftmutSupport.swiftmutTopLevelEquals(bytes: bytes, start: start, end: end)
 }
 
 func swiftmutIsASCIIDigit(_ byte: UInt8) -> Bool {

@@ -335,6 +335,60 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertTrue(swiftmutIsHorizontalWhitespace(UInt8(ascii: "\t")))
   }
 
+  func testSourceDeclarationKeywordAtFindsFunctionsAndInitializers() {
+    let source = "myfunc value\nfunc make()\ninit(value: Int)\ninit?(value: Int)\ninit!(value: Int)"
+    let bytes = Array(source.utf8)
+
+    XCTAssertFalse(swiftmutSourceDeclarationKeywordAt(bytes: bytes, index: 2))
+    XCTAssertTrue(swiftmutSourceDeclarationKeywordAt(
+      bytes: bytes,
+      index: swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: "func make")!))
+    XCTAssertTrue(swiftmutSourceDeclarationKeywordAt(
+      bytes: bytes,
+      index: swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: "init(value")!))
+    XCTAssertTrue(swiftmutSourceDeclarationKeywordAt(
+      bytes: bytes,
+      index: swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: "init?(value")!))
+    XCTAssertTrue(swiftmutSourceDeclarationKeywordAt(
+      bytes: bytes,
+      index: swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: "init!(value")!))
+  }
+
+  func testSourceDeclarationParameterListHandlesGenericsAndNestedDefaults() {
+    let source = #"func make<T: Comparable>(value: Int = call([")"], other: T.self), label: String = "x,y") -> T {"#
+    let bytes = Array(source.utf8)
+    let keyword = swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: "func make")!
+
+    let list = swiftmutSourceDeclarationParameterList(bytes: bytes, from: keyword)
+
+    XCTAssertEqual(
+      list.map { String(decoding: bytes[$0.start..<$0.end], as: UTF8.self) },
+      #"value: Int = call([")"], other: T.self), label: String = "x,y""#)
+  }
+
+  func testFindMatchingSourceDelimiterIgnoresCloseDelimiterInStrings() {
+    let source = #"call(")") trailing"#
+    let bytes = Array(source.utf8)
+    let open = swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: "(")!
+    let trailing = swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: " trailing")!
+
+    XCTAssertEqual(
+      swiftmutFindMatchingSourceDelimiter(
+        bytes: bytes,
+        openOffset: open,
+        open: UInt8(ascii: "("),
+        close: UInt8(ascii: ")")),
+      trailing - 1)
+  }
+
+  func testTopLevelEqualsIgnoresNestedEqualsAndStrings() {
+    let source = #"value: [String: Int] = ["ignored =": call(value = 1)], label: String = "target""#
+    let bytes = Array(source.utf8)
+    let expected = swiftmutASCIIIndex(bytes, start: 0, end: bytes.count, pattern: " = [")!
+
+    XCTAssertEqual(swiftmutTopLevelEquals(bytes: bytes, start: 0, end: bytes.count), expected + 1)
+  }
+
   func testLineOpensFunctionBodyUsesTopLevelBraceOnly() {
     XCTAssertTrue(swiftmutLineOpensFunctionBody("func value() {"))
     XCTAssertFalse(swiftmutLineOpensFunctionBody("let text = \"{\""))

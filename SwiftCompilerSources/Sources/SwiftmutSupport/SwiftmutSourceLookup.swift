@@ -513,7 +513,12 @@ public func swiftmutSourceLineAndColumn(
   var column = 1
   var index = 0
   while index < offset && index < bytes.count {
-    swiftmutAdvanceSourcePosition(bytes[index], line: &line, column: &column)
+    if bytes[index] == 10 {
+      line += 1
+      column = 1
+    } else {
+      column += 1
+    }
     index += 1
   }
   return (line, column)
@@ -575,7 +580,12 @@ private func swiftmutSourceSnippetMatches(
   var index = 0
   for offset in offsets {
     while index < offset && index < source.count {
-      swiftmutAdvanceSourcePosition(source[index], line: &line, column: &column)
+      if source[index] == 10 {
+        line += 1
+        column = 1
+      } else {
+        column += 1
+      }
       index += 1
     }
     matches.append(SwiftmutSourceSnippetMatch(line: line, column: column, offset: offset))
@@ -591,7 +601,12 @@ private func swiftmutSourceLineAndColumn(
   var column = 1
   var index = 0
   while index < offset && index < bytes.count {
-    swiftmutAdvanceSourcePosition(bytes[index], line: &line, column: &column)
+    if bytes[index] == 10 {
+      line += 1
+      column = 1
+    } else {
+      column += 1
+    }
     index += 1
   }
   return (line, column)

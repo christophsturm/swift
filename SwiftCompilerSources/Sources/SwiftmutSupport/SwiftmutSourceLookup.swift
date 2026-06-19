@@ -47,12 +47,12 @@ public final class SwiftmutSourceLookupCache {
   }
 
   public func includedSourcePath(_ path: String) -> String? {
-    if pathIsIncluded(path) {
-      return path
-    }
     if !path.hasPrefix("/"),
        let sourcePath = relativeSourcePathMap()[path] {
       return sourcePath
+    }
+    if pathIsIncluded(path) {
+      return path
     }
     let suffix = path.hasPrefix("/") ? path : "/" + path
     for sourceFile in config.sourceFiles {

@@ -87,6 +87,9 @@ public struct SwiftmutJSONTopLevelObject {
   private var stringArrays: [String: [String]] = [:]
 
   public init(_ json: String) {
+    stringValues.reserveCapacity(8)
+    stringArrays.reserveCapacity(10)
+
     let bytes = Array(json.utf8)
     var index = 0
     swiftmutSkipJSONWhitespace(in: bytes, index: &index)

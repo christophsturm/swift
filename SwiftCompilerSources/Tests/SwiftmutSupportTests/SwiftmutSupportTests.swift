@@ -217,6 +217,20 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertEqual(swiftmutFunctionEndLine(functionLocationLine: 1, text: source), 3)
   }
 
+  func testSourceLineExtractsTextByLineNumber() {
+    let source = """
+    alpha
+    béta
+    gamma
+    """
+
+    XCTAssertEqual(swiftmutSourceLine(in: source, line: 1), "alpha")
+    XCTAssertEqual(swiftmutSourceLine(in: source, line: 2), "béta")
+    XCTAssertEqual(swiftmutSourceLine(in: "last", line: 1), "last")
+    XCTAssertNil(swiftmutSourceLine(in: source, line: 0))
+    XCTAssertNil(swiftmutSourceLine(in: source, line: 99))
+  }
+
   func testFunctionEndLineFindsClosingBraceWithoutTrailingNewline() {
     let source = """
     func value() {

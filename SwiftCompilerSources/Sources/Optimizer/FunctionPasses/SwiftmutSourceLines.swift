@@ -9,6 +9,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+import SwiftmutSupport
+
 func swiftmutNumberedSourceLines(_ text: String) -> [(number: Int, text: String)] {
   var result: [(number: Int, text: String)] = []
   var currentLine = 1
@@ -56,22 +58,5 @@ func swiftmutAbsoluteSourceLine(path: String, line: Int) -> String? {
     return nil
   }
 
-  var currentLine = 1
-  var lineStart = text.startIndex
-  var index = text.startIndex
-  while index < text.endIndex {
-    if text[index] == "\n" {
-      if currentLine == line {
-        return String(text[lineStart..<index])
-      }
-      currentLine += 1
-      lineStart = text.index(after: index)
-    }
-    index = text.index(after: index)
-  }
-
-  if currentLine == line {
-    return String(text[lineStart..<text.endIndex])
-  }
-  return nil
+  return SwiftmutSupport.swiftmutSourceLine(in: text, line: line)
 }

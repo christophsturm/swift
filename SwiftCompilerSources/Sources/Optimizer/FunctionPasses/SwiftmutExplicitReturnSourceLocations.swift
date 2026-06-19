@@ -11,6 +11,7 @@
 
 import AST
 import SIL
+import SwiftmutSupport
 
 func swiftmutReturnSourceLocationIsUsable(
   _ location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String),
@@ -572,28 +573,7 @@ func swiftmutSnippetExpressionStartOffset(_ snippet: String) -> Int {
 }
 
 func swiftmutSourceLine(_ text: String, line targetLine: Int) -> String? {
-  guard targetLine > 0 else {
-    return nil
-  }
-
-  var currentLine = 1
-  var lineStart = text.startIndex
-  var index = text.startIndex
-  while index < text.endIndex {
-    if text[index] == "\n" {
-      if currentLine == targetLine {
-        return String(text[lineStart..<index])
-      }
-      currentLine += 1
-      lineStart = text.index(after: index)
-    }
-    index = text.index(after: index)
-  }
-
-  if currentLine == targetLine {
-    return String(text[lineStart..<text.endIndex])
-  }
-  return nil
+  SwiftmutSupport.swiftmutSourceLine(in: text, line: targetLine)
 }
 
 func swiftmutSourceLineAndColumn(

@@ -322,6 +322,34 @@ public func swiftmutPreferredLine(in location: String, path: String) -> Int? {
   return hasDigit ? value : nil
 }
 
+public func swiftmutSourceLine(
+  in text: String,
+  line targetLine: Int
+) -> String? {
+  guard targetLine > 0 else {
+    return nil
+  }
+  let bytes = Array(text.utf8)
+  var currentLine = 1
+  var lineStart = 0
+  var index = 0
+  while index < bytes.count {
+    if bytes[index] == 10 {
+      if currentLine == targetLine {
+        return String(decoding: bytes[lineStart..<index], as: UTF8.self)
+      }
+      currentLine += 1
+      lineStart = index + 1
+    }
+    index += 1
+  }
+
+  if currentLine == targetLine {
+    return String(decoding: bytes[lineStart..<bytes.count], as: UTF8.self)
+  }
+  return nil
+}
+
 public func swiftmutSourceLineBelongsToFunction(
   _ line: Int,
   functionLocationLine: Int,

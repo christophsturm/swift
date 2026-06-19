@@ -51,6 +51,15 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertEqual(fields.stringArray("sourceFiles"), ["/repo/A.swift"])
   }
 
+  func testByteFindSkipsToFirstNeedleByte() {
+    let bytes = Array("alpha béta beta".utf8)
+
+    XCTAssertEqual(swiftmutFind(Array("béta".utf8), in: bytes, startingAt: 0), 6)
+    XCTAssertEqual(swiftmutFind(Array("beta".utf8), in: bytes, startingAt: 7), 12)
+    XCTAssertNil(swiftmutFind(Array("missing".utf8), in: bytes, startingAt: 0))
+    XCTAssertNil(swiftmutFind(Array("alpha".utf8), in: bytes, startingAt: bytes.count))
+  }
+
   func testMangledIdentifiersExtractsUniqueLengthPrefixedIdentifiers() {
     XCTAssertEqual(
       swiftmutMangledIdentifiers(in: "$s5ModelV4nameSSvg5Model4name"),

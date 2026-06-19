@@ -295,10 +295,18 @@ public func swiftmutFind(_ needle: [UInt8], in haystack: [UInt8], startingAt sta
   guard !needle.isEmpty, haystack.count >= needle.count, start <= haystack.count - needle.count else {
     return nil
   }
+  let firstNeedleByte = needle[0]
+  let lastStart = haystack.count - needle.count
   var index = start
-  while index <= haystack.count - needle.count {
+  while index <= lastStart {
+    while index <= lastStart && haystack[index] != firstNeedleByte {
+      index += 1
+    }
+    guard index <= lastStart else {
+      break
+    }
     var matched = true
-    for needleIndex in 0..<needle.count {
+    for needleIndex in 1..<needle.count {
       if haystack[index + needleIndex] != needle[needleIndex] {
         matched = false
         break

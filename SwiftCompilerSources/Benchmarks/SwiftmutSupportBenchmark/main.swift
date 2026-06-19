@@ -239,6 +239,18 @@ func byteOffsetFixture() -> [(pattern: String, text: String)] {
   return values
 }
 
+func byteFindFixture() -> [(needle: [UInt8], haystack: [UInt8])] {
+  var values: [(needle: [UInt8], haystack: [UInt8])] = []
+  for index in 0..<2_000 {
+    let haystack = "prefix value \(index) " + String(repeating: "x", count: 80) + " target\(index) suffix"
+    values.append((
+      needle: Array("target\(index)".utf8),
+      haystack: Array(haystack.utf8)))
+  }
+  values.append((needle: Array("missing".utf8), haystack: Array(String(repeating: "x", count: 120).utf8)))
+  return values
+}
+
 func pipeFieldFixture() -> [String] {
   var values: [String] = []
   for index in 0..<1_000 {
@@ -307,6 +319,15 @@ let byteOffsetSeconds = elapsed {
   for _ in 0..<byteOffsetIterations {
     for value in byteOffsets {
       _ = swiftmutByteOffset(of: value.pattern, in: value.text)
+    }
+  }
+}
+let byteFinds = byteFindFixture()
+let byteFindIterations = max(1, options.iterations / 100)
+let byteFindSeconds = elapsed {
+  for _ in 0..<byteFindIterations {
+    for value in byteFinds {
+      _ = swiftmutFind(value.needle, in: value.haystack, startingAt: 0)
     }
   }
 }
@@ -533,6 +554,8 @@ print("trim text iterations: \(trimTextIterations)")
 print(String(format: "trim horizontal whitespace: %.6fs", trimTextSeconds))
 print("byte offset iterations: \(byteOffsetIterations)")
 print(String(format: "byte offset scan: %.6fs", byteOffsetSeconds))
+print("byte find iterations: \(byteFindIterations)")
+print(String(format: "byte find scan: %.6fs", byteFindSeconds))
 print(String(format: "source lookup cold: %.6fs", coldLookupSeconds))
 print(String(format: "source lookup warm: %.6fs", warmLookupSeconds))
 print(String(format: "source lookup missing: %.6fs", missingLookupSeconds))

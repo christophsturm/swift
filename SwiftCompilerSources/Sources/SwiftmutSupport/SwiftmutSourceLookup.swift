@@ -398,8 +398,33 @@ public func swiftmutSourceSnippetMatches(
   _ snippet: String,
   in text: String
 ) -> [SwiftmutSourceSnippetMatch] {
-  let source = Array(text.utf8)
-  let pattern = Array(snippet.utf8)
+  var sourceText = text
+  var snippetText = snippet
+  return sourceText.withUTF8 { source in
+    snippetText.withUTF8 { pattern in
+      swiftmutSourceSnippetMatches(source: source, pattern: pattern)
+    }
+  }
+}
+
+public func swiftmutSourceLineAndColumn(
+  _ bytes: [UInt8],
+  offset: Int
+) -> (line: Int, column: Int) {
+  var line = 1
+  var column = 1
+  var index = 0
+  while index < offset && index < bytes.count {
+    swiftmutAdvanceSourcePosition(bytes[index], line: &line, column: &column)
+    index += 1
+  }
+  return (line, column)
+}
+
+private func swiftmutSourceSnippetMatches(
+  source: UnsafeBufferPointer<UInt8>,
+  pattern: UnsafeBufferPointer<UInt8>
+) -> [SwiftmutSourceSnippetMatch] {
   guard !pattern.isEmpty,
         pattern.count <= source.count else {
     return []
@@ -433,22 +458,8 @@ public func swiftmutSourceSnippetMatches(
   return swiftmutSourceSnippetMatches(source: source, offsets: offsets)
 }
 
-public func swiftmutSourceLineAndColumn(
-  _ bytes: [UInt8],
-  offset: Int
-) -> (line: Int, column: Int) {
-  var line = 1
-  var column = 1
-  var index = 0
-  while index < offset && index < bytes.count {
-    swiftmutAdvanceSourcePosition(bytes[index], line: &line, column: &column)
-    index += 1
-  }
-  return (line, column)
-}
-
 private func swiftmutSourceSnippetMatches(
-  source: [UInt8],
+  source: UnsafeBufferPointer<UInt8>,
   offsets: [Int]
 ) -> [SwiftmutSourceSnippetMatch] {
   if offsets.count == 1,
@@ -472,6 +483,20 @@ private func swiftmutSourceSnippetMatches(
     matches.append(SwiftmutSourceSnippetMatch(line: line, column: column, offset: offset))
   }
   return matches
+}
+
+private func swiftmutSourceLineAndColumn(
+  _ bytes: UnsafeBufferPointer<UInt8>,
+  offset: Int
+) -> (line: Int, column: Int) {
+  var line = 1
+  var column = 1
+  var index = 0
+  while index < offset && index < bytes.count {
+    swiftmutAdvanceSourcePosition(bytes[index], line: &line, column: &column)
+    index += 1
+  }
+  return (line, column)
 }
 
 private func swiftmutAdvanceSourcePosition(

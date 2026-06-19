@@ -11,79 +11,32 @@
 
 import AST
 import SIL
+import SwiftmutSupport
 
 func swiftmutMangledNameContainsIdentifier(
   _ functionName: String,
   identifier: String
 ) -> Bool {
-  guard identifier != "init" else {
-    return functionName.contains("cf")
-  }
-  if identifier.count <= 3 {
-    return functionName.contains(identifier)
-  }
-  if functionName.contains(identifier) {
-    return true
-  }
-  if swiftmutMangledNameContainsIdentifierWords(functionName, identifier: identifier) {
-    return true
-  }
-  let prefixLength = min(identifier.count, 8)
-  let prefix = String(identifier.prefix(prefixLength))
-  return prefix.count >= 4 && functionName.contains(prefix)
+  SwiftmutSupport.swiftmutMangledNameContainsIdentifier(functionName, identifier: identifier)
 }
 
 func swiftmutMangledNameContainsIdentifierWords(
   _ functionName: String,
   identifier: String
 ) -> Bool {
-  let words = swiftmutCamelCaseIdentifierWords(identifier)
-  guard words.count >= 2,
-        let first = words.first,
-        let last = words.last,
-        last.count >= 4 else {
-    return false
-  }
-  if first.count < 3,
-     words.count >= 3 {
-    let firstPair = words[0] + words[1]
-    if firstPair.count >= 4 {
-      return functionName.contains(firstPair) && functionName.contains(last)
-    }
-  }
-  guard first.count >= 3 else {
-    return false
-  }
-  return functionName.contains(first) && functionName.contains(last)
+  SwiftmutSupport.swiftmutMangledNameContainsIdentifierWords(functionName, identifier: identifier)
 }
 
 func swiftmutCamelCaseIdentifierWords(_ identifier: String) -> [String] {
-  let bytes = Array(identifier.utf8)
-  guard !bytes.isEmpty else {
-    return []
-  }
-
-  var words: [String] = []
-  var start = 0
-  var index = 1
-  while index < bytes.count {
-    if swiftmutIsASCIIUppercase(bytes[index])
-        && swiftmutIsASCIILowercase(bytes[index - 1]) {
-      words.append(String(decoding: bytes[start..<index], as: UTF8.self))
-      start = index
-    }
-    index += 1
-  }
-  words.append(String(decoding: bytes[start..<bytes.count], as: UTF8.self))
-  return words.filter { !$0.isEmpty }
+  SwiftmutSupport.swiftmutCamelCaseIdentifierWords(identifier)
 }
 
 func swiftmutIsASCIIUppercase(_ byte: UInt8) -> Bool {
-  byte >= 65 && byte <= 90
+  SwiftmutSupport.swiftmutIsASCIIUppercase(byte)
 }
 
 func swiftmutIsASCIILowercase(_ byte: UInt8) -> Bool {
-  byte >= 97 && byte <= 122
+  SwiftmutSupport.swiftmutIsASCIILowercase(byte)
 }
 
 func swiftmutFindNearestPriorImplicitReturnSourceLocation(

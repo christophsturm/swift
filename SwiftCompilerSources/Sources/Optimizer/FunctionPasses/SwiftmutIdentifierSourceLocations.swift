@@ -11,6 +11,7 @@
 
 import AST
 import SIL
+import SwiftmutSupport
 
 func swiftmutSourceExpressionIdentifiers(for apply: ApplyInst) -> [String] {
   swiftmutSourceCalleeIdentifiers(for: apply).filter(swiftmutIdentifierLooksLikeSourceExpression)
@@ -26,52 +27,15 @@ func swiftmutSourceCalleeIdentifiers(for apply: ApplyInst) -> [String] {
 }
 
 func swiftmutMangledIdentifiers(in name: String) -> [String] {
-  let bytes = Array(name.utf8)
-  var identifiers: [String] = []
-  var index = 0
-  while index < bytes.count {
-    guard bytes[index] >= 48 && bytes[index] <= 57 else {
-      index += 1
-      continue
-    }
-    var length = 0
-    var cursor = index
-    while cursor < bytes.count && bytes[cursor] >= 48 && bytes[cursor] <= 57 {
-      length = (length * 10) + Int(bytes[cursor] - 48)
-      cursor += 1
-    }
-    guard length > 0,
-          cursor + length <= bytes.count,
-          swiftmutBytesAreIdentifier(bytes, start: cursor, end: cursor + length) else {
-      index += 1
-      continue
-    }
-    let identifier = String(decoding: bytes[cursor..<(cursor + length)], as: UTF8.self)
-    if !identifiers.contains(identifier) {
-      identifiers.append(identifier)
-    }
-    index = cursor + length
-  }
-  return identifiers
+  SwiftmutSupport.swiftmutMangledIdentifiers(in: name)
 }
 
 func swiftmutIdentifierLooksLikeSourceExpression(_ identifier: String) -> Bool {
-  guard let first = identifier.utf8.first else {
-    return false
-  }
-  return (first >= 97 && first <= 122) || first == 95
+  SwiftmutSupport.swiftmutIdentifierLooksLikeSourceExpression(identifier)
 }
 
 func swiftmutBytesAreIdentifier(_ bytes: [UInt8], start: Int, end: Int) -> Bool {
-  guard start < end else {
-    return false
-  }
-  for index in start..<end {
-    if !swiftmutIsASCIILetterNumberOrUnderscore(bytes[index]) {
-      return false
-    }
-  }
-  return true
+  SwiftmutSupport.swiftmutBytesAreIdentifier(bytes, start: start, end: end)
 }
 
 func swiftmutSourceLineContainsExpressionIdentifier(_ line: String, identifiers: [String]) -> Bool {

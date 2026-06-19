@@ -191,6 +191,14 @@ func ternaryScanFixture() -> [UInt8] {
   return Array(source.utf8)
 }
 
+func mangledIdentifierFixture() -> [String] {
+  var names: [String] = []
+  for index in 0..<500 {
+    names.append("$s7Module6value\(index)5ModelV6updateyyF6value\(index)5Model")
+  }
+  return names
+}
+
 let options = parseOptions(CommandLine.arguments)
 let loaded: (json: String?, config: SwiftmutConfig)
 if let configPath = options.configPath {
@@ -388,6 +396,16 @@ let ternaryStartSeconds = elapsed {
     }
   }
 }
+let mangledNames = mangledIdentifierFixture()
+let mangledIdentifierIterations = max(1, options.iterations / 100)
+let mangledIdentifierSeconds = elapsed {
+  for _ in 0..<mangledIdentifierIterations {
+    for name in mangledNames {
+      _ = swiftmutMangledIdentifiers(in: name)
+      _ = swiftmutMangledNameContainsIdentifier(name, identifier: "valueModel")
+    }
+  }
+}
 
 print("swiftmut support benchmark")
 print("config: \(configPath)")
@@ -414,3 +432,5 @@ print(String(format: "expression complete scan: %.6fs", expressionCompleteSecond
 print(String(format: "balanced expression scan: %.6fs", balancedExpressionSeconds))
 print(String(format: "ternary boundary scan: %.6fs", ternaryScanSeconds))
 print(String(format: "ternary start scan: %.6fs", ternaryStartSeconds))
+print("mangled identifier iterations: \(mangledIdentifierIterations)")
+print(String(format: "mangled identifier scan: %.6fs", mangledIdentifierSeconds))

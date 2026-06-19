@@ -51,6 +51,32 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertEqual(fields.stringArray("sourceFiles"), ["/repo/A.swift"])
   }
 
+  func testMangledIdentifiersExtractsUniqueLengthPrefixedIdentifiers() {
+    XCTAssertEqual(
+      swiftmutMangledIdentifiers(in: "$s5ModelV4nameSSvg5Model4name"),
+      ["Model", "name"])
+    XCTAssertEqual(swiftmutMangledIdentifiers(in: "$s10toolong"), [])
+    XCTAssertTrue(swiftmutIdentifierLooksLikeSourceExpression("value"))
+    XCTAssertTrue(swiftmutIdentifierLooksLikeSourceExpression("_value"))
+    XCTAssertFalse(swiftmutIdentifierLooksLikeSourceExpression("Value"))
+  }
+
+  func testIdentifierByteValidationRejectsInvalidIdentifierBytes() {
+    XCTAssertTrue(swiftmutBytesAreIdentifier(Array("value_1".utf8), start: 0, end: 7))
+    XCTAssertFalse(swiftmutBytesAreIdentifier(Array("value-name".utf8), start: 0, end: 10))
+    XCTAssertFalse(swiftmutBytesAreIdentifier(Array("".utf8), start: 0, end: 0))
+  }
+
+  func testMangledNameIdentifierMatchingUsesCamelCaseFallbacks() {
+    XCTAssertEqual(swiftmutCamelCaseIdentifierWords("myHTTPClientValue"), ["my", "HTTPClient", "Value"])
+    XCTAssertTrue(swiftmutMangledNameContainsIdentifier("some myHTTPClient Value payload", identifier: "myHTTPClientValue"))
+    XCTAssertTrue(swiftmutMangledNameContainsIdentifier("prefix LongIdent suffix", identifier: "LongIdentifierName"))
+    XCTAssertTrue(swiftmutMangledNameContainsIdentifier("cf", identifier: "init"))
+    XCTAssertFalse(swiftmutMangledNameContainsIdentifier("unrelated", identifier: "myHTTPClientValue"))
+    XCTAssertTrue(swiftmutIsASCIIUppercase(UInt8(ascii: "A")))
+    XCTAssertTrue(swiftmutIsASCIILowercase(UInt8(ascii: "z")))
+  }
+
   func testConfigLoadParsesRulesWithoutCompilerModules() throws {
     let json = """
     {

@@ -502,14 +502,14 @@ private func swiftmutFunctionBodyLine(
 ) -> (line: Int, text: String)? {
   guard !snippet.isEmpty,
         occurrence > 0,
-        let text = swiftmutRead(path) else {
+        let lines = swiftmutNumberedSourceLines(path: path) else {
     return nil
   }
 
   var seen = 0
   var braceDepth = 0
   var sawOpeningBrace = false
-  for (number, lineText) in swiftmutNumberedSourceLines(text) {
+  for (number, lineText) in lines {
     guard number >= functionLine else {
       continue
     }

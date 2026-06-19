@@ -47,10 +47,9 @@ func swiftmutMultilineGenericConditionSourceLocation(
   config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard line > 0,
-        let text = swiftmutRead(path) else {
+        let lines = swiftmutNumberedSourceLines(path: path) else {
     return nil
   }
-  let lines = swiftmutNumberedSourceLines(text)
   guard line <= lines.count else {
     return nil
   }
@@ -117,10 +116,9 @@ func swiftmutFindUniqueMultilineExplicitConditionSourceLocation(
   config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   guard preferredLine > 0,
-        let text = swiftmutRead(path) else {
+        let lines = swiftmutNumberedSourceLines(path: path) else {
     return nil
   }
-  let lines = swiftmutNumberedSourceLines(text)
   var matches: [(line: Int, column: Int, sourceOriginal: String)] = []
   var index = 0
   while index < lines.count {
@@ -203,10 +201,9 @@ func swiftmutMultilineGenericConditionSourceIsExplicit(
     path = config.packageRoot + "/" + file
   }
   guard let matchedPath = swiftmutIncludedSourcePath(path, config: config),
-        let text = swiftmutRead(matchedPath) else {
+        let lines = swiftmutNumberedSourceLines(path: matchedPath) else {
     return false
   }
-  let lines = swiftmutNumberedSourceLines(text)
   guard line <= lines.count else {
     return false
   }

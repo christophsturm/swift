@@ -15,6 +15,10 @@ func swiftmutNumberedSourceLines(_ text: String) -> [(number: Int, text: String)
   SwiftmutSupport.swiftmutNumberedSourceLines(text)
 }
 
+func swiftmutNumberedSourceLines(path: String) -> [(number: Int, text: String)]? {
+  SwiftmutSupport.swiftmutCachedNumberedSourceLines(path: path)
+}
+
 func swiftmutSourceLine(
   file: String,
   line: Int,

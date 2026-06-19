@@ -22,6 +22,7 @@ public final class SwiftmutSourceLookupCache {
   private var sourcePathSet: Set<String>?
   private var sourcePathByRelativePath: [String: String]?
   private var sourceTextByPath: [String: String] = [:]
+  private var sourceTextIndexByPath: [String: SwiftmutSourceTextIndex] = [:]
   private var functionLocationByDescription: [String: (path: String, line: Int)] = [:]
   private var missingFunctionLocationDescriptions = Set<String>()
   private var functionEndLineByPathAndStartLine: [String: [Int: Int]] = [:]
@@ -256,18 +257,36 @@ public final class SwiftmutSourceLookupCache {
     if let endLine = functionEndLineByPathAndStartLine[path]?[functionLocation.line] {
       return line <= endLine
     }
-    guard let text = read(path) else {
+    guard let sourceTextIndex = readIndex(path) else {
       return true
     }
-    guard let endLine = swiftmutFunctionEndLine(
+    guard let endLine = sourceTextIndex.functionEndLine(
       functionLocationLine: functionLocation.line,
-      text: text) else {
+    ) else {
       return true
     }
     var endLineByStartLine = functionEndLineByPathAndStartLine[path] ?? [:]
     endLineByStartLine[functionLocation.line] = endLine
     functionEndLineByPathAndStartLine[path] = endLineByStartLine
     return line <= endLine
+  }
+
+  private func readIndex(_ path: String) -> SwiftmutSourceTextIndex? {
+    guard let sourcePath = includedSourcePath(path) else {
+      guard let text = swiftmutRead(path) else {
+        return nil
+      }
+      return SwiftmutSourceTextIndex(text: text)
+    }
+    if let cached = sourceTextIndexByPath[sourcePath] {
+      return cached
+    }
+    guard let text = read(sourcePath) else {
+      return nil
+    }
+    let index = SwiftmutSourceTextIndex(text: text)
+    sourceTextIndexByPath[sourcePath] = index
+    return index
   }
 }
 
@@ -320,6 +339,63 @@ public func swiftmutSourceLineBelongsToFunction(
 }
 
 public func swiftmutFunctionEndLine(
+  functionLocationLine: Int,
+  text: String
+) -> Int? {
+  SwiftmutSourceTextIndex(text: text).functionEndLine(functionLocationLine: functionLocationLine)
+}
+
+public struct SwiftmutSourceTextIndex {
+  private let bytes: [UInt8]
+  private let lineStartOffsets: [Int]
+
+  public init(text: String) {
+    bytes = Array(text.utf8)
+    var starts = [0]
+    var index = 0
+    while index < bytes.count {
+      if bytes[index] == 10 {
+        starts.append(index + 1)
+      }
+      index += 1
+    }
+    lineStartOffsets = starts
+  }
+
+  public func functionEndLine(functionLocationLine: Int) -> Int? {
+    guard functionLocationLine > 0,
+          functionLocationLine <= lineStartOffsets.count else {
+      return nil
+    }
+    var index = lineStartOffsets[functionLocationLine - 1]
+    var currentLine = functionLocationLine
+    var braceDepth = 0
+    var sawOpeningBrace = false
+
+    while index < bytes.count {
+      let byte = bytes[index]
+      if byte == 123 {
+        braceDepth += 1
+        sawOpeningBrace = true
+      } else if byte == 125 {
+        braceDepth -= 1
+      }
+      if byte == 10 {
+        if sawOpeningBrace && braceDepth <= 0 {
+          return currentLine
+        }
+        currentLine += 1
+      }
+      index += 1
+    }
+    if sawOpeningBrace && braceDepth <= 0 {
+      return currentLine
+    }
+    return nil
+  }
+}
+
+public func swiftmutFunctionEndLineSlowForTesting(
   functionLocationLine: Int,
   text: String
 ) -> Int? {

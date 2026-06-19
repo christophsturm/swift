@@ -188,6 +188,28 @@ final class SwiftmutSupportTests: XCTestCase {
     XCTAssertEqual(swiftmutFunctionEndLine(functionLocationLine: 1, text: source), 3)
   }
 
+  func testSourceTextIndexFindsLaterFunctionEndLine() {
+    let source = """
+    func first() {
+      let x = 1
+    }
+
+    func second() {
+      if Bool.random() {
+        let y = 2
+      }
+    }
+    """
+    let index = SwiftmutSourceTextIndex(text: source)
+
+    XCTAssertEqual(index.functionEndLine(functionLocationLine: 1), 3)
+    XCTAssertEqual(index.functionEndLine(functionLocationLine: 5), 9)
+    XCTAssertNil(index.functionEndLine(functionLocationLine: 99))
+    XCTAssertEqual(
+      index.functionEndLine(functionLocationLine: 5),
+      swiftmutFunctionEndLineSlowForTesting(functionLocationLine: 5, text: source))
+  }
+
   func testSharedSourceLookupCacheCachesConfiguredSourceReads() throws {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
       .appendingPathComponent("swiftmut-support-tests-\(UUID().uuidString)")

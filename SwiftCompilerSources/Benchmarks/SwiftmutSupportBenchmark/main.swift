@@ -149,6 +149,21 @@ func functionEndLineFixture() -> String {
   return lines.joined(separator: "\n")
 }
 
+func multiFunctionEndLineFixture() -> (text: String, startLines: [Int]) {
+  var lines: [String] = []
+  var startLines: [Int] = []
+  for functionIndex in 0..<200 {
+    startLines.append(lines.count + 1)
+    lines.append("func benchmark\(functionIndex)() {")
+    for lineIndex in 0..<20 {
+      lines.append("  let value\(lineIndex) = \(lineIndex)")
+    }
+    lines.append("}")
+    lines.append("")
+  }
+  return (lines.joined(separator: "\n"), startLines)
+}
+
 let options = parseOptions(CommandLine.arguments)
 let loaded: (json: String?, config: SwiftmutConfig)
 if let configPath = options.configPath {
@@ -227,6 +242,25 @@ let endLineSeconds = elapsed {
     _ = swiftmutFunctionEndLine(functionLocationLine: 1, text: endLineFixture)
   }
 }
+let multiFunctionFixture = multiFunctionEndLineFixture()
+let endLineComparisonIterations = max(1, options.iterations / 100)
+let repeatedEndLineSeconds = elapsed {
+  for _ in 0..<endLineComparisonIterations {
+    for line in multiFunctionFixture.startLines {
+      _ = swiftmutFunctionEndLineSlowForTesting(
+        functionLocationLine: line,
+        text: multiFunctionFixture.text)
+    }
+  }
+}
+let sourceTextIndex = SwiftmutSourceTextIndex(text: multiFunctionFixture.text)
+let indexedEndLineSeconds = elapsed {
+  for _ in 0..<endLineComparisonIterations {
+    for line in multiFunctionFixture.startLines {
+      _ = sourceTextIndex.functionEndLine(functionLocationLine: line)
+    }
+  }
+}
 
 print("swiftmut support benchmark")
 print("config: \(configPath)")
@@ -239,3 +273,6 @@ print(String(format: "source lookup missing: %.6fs", missingLookupSeconds))
 print(String(format: "source suffix lookup: %.6fs", suffixLookupSeconds))
 print(String(format: "source membership cached: %.6fs", membershipSeconds))
 print(String(format: "function end-line scan: %.6fs", endLineSeconds))
+print("function end-line comparison iterations: \(endLineComparisonIterations)")
+print(String(format: "function end-line repeated scan: %.6fs", repeatedEndLineSeconds))
+print(String(format: "function end-line indexed: %.6fs", indexedEndLineSeconds))

@@ -613,8 +613,7 @@ func swiftmutDiscoverScalarValueSites(
           config: config
         ) else {
           stats.sourceLocationMisses += 1
-          if stats.sourceLocationMissSamples < 500 {
-            stats.sourceLocationMissSamples += 1
+          if swiftmutShouldRecordSourceLocationMissSample(&stats.sourceLocationMissSamples) {
             swiftmutLogScalarValueSourceLocationMiss(
               value: structInst,
               mutation: mutation,
@@ -730,8 +729,7 @@ func swiftmutDiscoverValueApplySites(
           config: config
         ) else {
           stats.sourceLocationMisses += 1
-          if stats.sourceLocationMissSamples < 500 {
-            stats.sourceLocationMissSamples += 1
+          if swiftmutShouldRecordSourceLocationMissSample(&stats.sourceLocationMissSamples) {
             swiftmutLogValueApplySourceLocationMiss(
               apply: apply,
               mutation: mutation,
@@ -1013,8 +1011,7 @@ func swiftmutDiscoverAssignmentValueSites(
           config: config
         ) else {
           stats.sourceLocationMisses += 1
-          if stats.sourceLocationMissSamples < 500 {
-            stats.sourceLocationMissSamples += 1
+          if swiftmutShouldRecordSourceLocationMissSample(&stats.sourceLocationMissSamples) {
             swiftmutLogAssignmentValueSourceLocationMiss(
               store: store,
               mutation: mutation,

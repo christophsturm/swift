@@ -55,6 +55,10 @@ func swiftmutRead(_ path: String) -> String? {
   SwiftmutSupport.swiftmutCachedRead(path)
 }
 
+func swiftmutShouldRecordSourceLocationMissSample(_ samples: inout Int) -> Bool {
+  SwiftmutSupport.swiftmutShouldRecordSourceLocationMissSample(&samples)
+}
+
 func swiftmutWrite(
   _ text: String,
   to path: String,

@@ -14,6 +14,17 @@ import Foundation
 @testable import SwiftmutSupport
 
 final class SwiftmutSupportTests: XCTestCase {
+  func testSourceLocationMissSamplerCapsRecordedSamples() {
+    var samples = 0
+
+    XCTAssertTrue(swiftmutShouldRecordSourceLocationMissSample(&samples, limit: 2))
+    XCTAssertEqual(samples, 1)
+    XCTAssertTrue(swiftmutShouldRecordSourceLocationMissSample(&samples, limit: 2))
+    XCTAssertEqual(samples, 2)
+    XCTAssertFalse(swiftmutShouldRecordSourceLocationMissSample(&samples, limit: 2))
+    XCTAssertEqual(samples, 2)
+  }
+
   func testPipeFieldsPreservesEmptyFieldsAndRejectsWrongCount() {
     XCTAssertEqual(swiftmutPipeFields("a||c|", count: 4), ["a", "", "c", ""])
     XCTAssertEqual(swiftmutPipeFields("a|bé|c", count: 3), ["a", "bé", "c"])

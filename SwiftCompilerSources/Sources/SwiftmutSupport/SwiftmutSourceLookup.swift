@@ -801,6 +801,19 @@ private func swiftmutFunctionEndLineByScanning(
   return nil
 }
 
+public let swiftmutSourceLocationMissSampleLimit = 50
+
+public func swiftmutShouldRecordSourceLocationMissSample(
+  _ samples: inout Int,
+  limit: Int = swiftmutSourceLocationMissSampleLimit
+) -> Bool {
+  guard samples < limit else {
+    return false
+  }
+  samples += 1
+  return true
+}
+
 private var swiftmutSharedSourceLookupCacheStorage: SwiftmutSourceLookupCache?
 private var swiftmutSharedSourceLookupCacheSignature: String?
 

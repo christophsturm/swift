@@ -9,5 +9,7 @@ add_swift_compiler_module(SwiftmutSupport
   SOURCES
   SwiftmutConfig.swift
   SwiftmutFilesystem.swift
+  SwiftmutIdentifiers.swift
   SwiftmutJSON.swift
-  SwiftmutSourceLookup.swift)
+  SwiftmutSourceLookup.swift
+  SwiftmutText.swift)

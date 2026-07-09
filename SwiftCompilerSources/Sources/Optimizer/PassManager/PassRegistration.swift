@@ -100,6 +100,7 @@ private func registerSwiftPasses() {
   registerPass(stripObjectHeadersPass, { stripObjectHeadersPass.run($0) })
   registerPass(deadAccessScopeElimination, { deadAccessScopeElimination.run($0) })
   registerPass(deadStoreElimination, { deadStoreElimination.run($0) })
+  registerPass(swiftmut, { swiftmut.run($0) })
   registerPass(redundantLoadElimination, { redundantLoadElimination.run($0) })
   registerPass(mandatoryRedundantLoadElimination, { mandatoryRedundantLoadElimination.run($0) })
   registerPass(earlyRedundantLoadElimination, { earlyRedundantLoadElimination.run($0) })

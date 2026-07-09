@@ -11,4 +11,5 @@
 add_subdirectory(Basic)
 add_subdirectory(AST)
 add_subdirectory(SIL)
+add_subdirectory(SwiftmutSupport)
 add_subdirectory(Optimizer)

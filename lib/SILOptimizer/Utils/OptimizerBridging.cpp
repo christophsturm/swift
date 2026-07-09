@@ -482,6 +482,62 @@ createSpecializedFunctionDeclaration(BridgedStringRef specializedName,
   return {specializedApplySiteCallee};
 }
 
+BridgedFunction BridgedPassContext::
+createPublicExternalFunctionDeclaration(BridgedStringRef name,
+                                        const BridgedParameterInfo * _Nullable bridgedParams,
+                                        SwiftInt paramCount,
+                                        const BridgedResultInfo * _Nullable bridgedResults,
+                                        SwiftInt resultCount,
+                                        BridgedFunction bridgedOriginal) const {
+  auto *original = bridgedOriginal.getFunction();
+  auto *module = &original->getModule();
+
+  llvm::SmallVector<SILParameterInfo> params;
+  for (unsigned idx = 0; idx < paramCount; ++idx) {
+    params.push_back(bridgedParams[idx].unbridged());
+  }
+
+  llvm::SmallVector<SILResultInfo> results;
+  for (unsigned idx = 0; idx < resultCount; ++idx) {
+    results.push_back(bridgedResults[idx].unbridged());
+  }
+
+  auto functionType = SILFunctionType::get(
+      /*genericSig=*/nullptr,
+      SILFunctionType::ExtInfo::getThin(),
+      SILCoroutineKind::None,
+      ParameterConvention::Direct_Unowned,
+      params,
+      /*yields=*/{},
+      results,
+      /*errorResult=*/std::nullopt,
+      SubstitutionMap(),
+      SubstitutionMap(),
+      module->getASTContext());
+
+  SILOptFunctionBuilder functionBuilder(*invocation->getTransform());
+  auto *function = functionBuilder.getOrCreateFunction(
+      original->getLocation(),
+      name.unbridged(),
+      SILLinkage::PublicExternal,
+      functionType,
+      IsBare,
+      IsNotTransparent,
+      IsNotSerialized,
+      IsNotDynamic,
+      IsNotDistributed,
+      IsNotRuntimeAccessible,
+      ProfileCounter(),
+      IsNotThunk,
+      SubclassScope::NotApplicable);
+
+  if (!original->hasOwnership()) {
+    function->setOwnershipEliminated();
+  }
+
+  return {function};
+}
+
 bool BridgedPassContext::completeLifetime(BridgedValue value) const {
   SILValue v = value.getSILValue();
   SILFunction *f = v->getFunction();

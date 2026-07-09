@@ -300,6 +300,13 @@ struct BridgedPassContext {
                                                         BridgedASTType::FunctionTypeRepresentation representation,
                                                         bool makeBare,
                                                         bool preserveGenericSignature) const;
+  SWIFT_IMPORT_UNSAFE BridgedFunction createPublicExternalFunctionDeclaration(
+                                                        BridgedStringRef name,
+                                                        const BridgedParameterInfo * _Nullable bridgedParams,
+                                                        SwiftInt paramCount,
+                                                        const BridgedResultInfo *_Nullable bridgedResults,
+                                                        SwiftInt resultCount,
+                                                        BridgedFunction bridgedOriginal) const;
 
   bool completeLifetime(BridgedValue value) const;
 };

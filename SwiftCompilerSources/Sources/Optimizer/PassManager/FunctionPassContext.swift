@@ -210,6 +210,31 @@ struct FunctionPassContext : MutatingContext {
     }
   }
 
+  func createPublicExternalFunctionDeclaration(
+    name: String,
+    parameters: [ParameterInfo],
+    results: [ResultInfo],
+    from original: Function
+  ) -> Function {
+    return name._withBridgedStringRef { nameRef in
+      let bridgedParamInfos = parameters.map { $0._bridged }
+      let bridgedResultInfos = results.map { $0._bridged }
+
+      return bridgedParamInfos.withUnsafeBufferPointer { paramBuf in
+        return bridgedResultInfos.withUnsafeBufferPointer { resultBuf in
+          return bridgedPassContext.createPublicExternalFunctionDeclaration(
+            nameRef,
+            paramBuf.baseAddress,
+            paramBuf.count,
+            resultBuf.baseAddress,
+            resultBuf.count,
+            original.bridged
+          ).function
+        }
+      }
+    }
+  }
+
   func buildSpecializedFunction<T>(specializedFunction: Function, buildFn: (Function, FunctionPassContext) -> T) -> T {
     let nestedBridgedContext = bridgedPassContext.initializeNestedPassContext(specializedFunction.bridged)
     let nestedContext = FunctionPassContext(_bridged: nestedBridgedContext)

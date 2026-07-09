@@ -41,6 +41,61 @@ swift_compiler_sources(Optimizer
   SimplificationPasses.swift
   StackPromotion.swift
   StripObjectHeaders.swift
+  Swiftmut.swift
+  SwiftmutAssignmentSourceLocations.swift
+  SwiftmutAssignmentText.swift
+  SwiftmutBooleanNegationConditionSourceLocations.swift
+  SwiftmutClosureArgumentReturnSourceLocations.swift
+  SwiftmutConditionSiteMerging.swift
+  SwiftmutConfig.swift
+  SwiftmutComputedPropertyReturnSourceLocations.swift
+  SwiftmutDefaultArgumentReturnSourceLocations.swift
+  SwiftmutDefaultArgumentValueApplySourceLocations.swift
+  SwiftmutDescribedAssignmentSourceLocations.swift
+  SwiftmutDescribedOperatorSourceLocations.swift
+  SwiftmutDescribedValueSourceLocations.swift
+  SwiftmutDictionaryLiteralSourceLocations.swift
+  SwiftmutDiscovery.swift
+  SwiftmutExplicitReturnSourceLocations.swift
+  SwiftmutFilesystem.swift
+  SwiftmutFunctionSourceLocations.swift
+  SwiftmutGenericConditionSourceLocations.swift
+  SwiftmutGenericConditionSourceMutationText.swift
+  SwiftmutIdentifierSourceLocations.swift
+  SwiftmutImplicitReturnSourceLocations.swift
+  SwiftmutInjection.swift
+  SwiftmutJSON.swift
+  SwiftmutLabeledReturnSourceLocations.swift
+  SwiftmutLogicalConnector.swift
+  SwiftmutLogicalRHSValueApplySourceLocations.swift
+  SwiftmutManifest.swift
+  SwiftmutMetamutantInstrumentation.swift
+  SwiftmutMultilineCallSourceLocations.swift
+  SwiftmutMultilineImplicitReturnSourceLocations.swift
+  SwiftmutMutationBuilders.swift
+  SwiftmutMutationRules.swift
+  SwiftmutObservability.swift
+  SwiftmutOperatorSourceLocations.swift
+  SwiftmutOperatorText.swift
+  SwiftmutOperatorValueApplySourceLocations.swift
+  SwiftmutOrdinalConditionSourceLocations.swift
+  SwiftmutOrdinalOperatorSourceLocations.swift
+  SwiftmutReturnSourceLocations.swift
+  SwiftmutReturnText.swift
+  SwiftmutRuntimeChoice.swift
+  SwiftmutSites.swift
+  SwiftmutSourceLines.swift
+  SwiftmutStatementSourceLocations.swift
+  SwiftmutStoredPropertyReturnSourceLocations.swift
+  SwiftmutStringComparisonSourceLocations.swift
+  SwiftmutStringDescriptionSourceLocations.swift
+  SwiftmutStringInterpolationSourceLocations.swift
+  SwiftmutTernaryConditionText.swift
+  SwiftmutText.swift
+  SwiftmutTrailingExplicitReturnSourceLocations.swift
+  SwiftmutValueApplyAssignmentSourceLocations.swift
+  SwiftmutValueApplySourceLocations.swift
+  SwiftmutValueExpressionSourceLocations.swift
   TempLValueElimination.swift
   TempRValueElimination.swift
   PackSpecialization.swift

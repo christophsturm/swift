@@ -654,9 +654,6 @@ func swiftmutLogicalConnectorSiteJSON(_ site: SwiftmutLogicalConnectorSite) -> S
   fields.append(#""siteID":\#(site.siteID)"#)
   fields.append(#""module":"\#(swiftmutEscapeJSON(site.module))""#)
   fields.append(#""function":"\#(swiftmutEscapeJSON(site.function))""#)
-  if let demangledField = swiftmutDemangledFunctionJSONField(site.function) {
-    fields.append(demangledField)
-  }
   fields.append(
     #""sourceLocation":{"file":"\#(swiftmutEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#
   )

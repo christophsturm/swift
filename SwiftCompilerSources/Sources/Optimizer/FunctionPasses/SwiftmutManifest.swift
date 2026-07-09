@@ -12,47 +12,6 @@ import Darwin
 import Glibc
 #endif
 
-// Demangles through the Swift runtime hosted in this frontend process, so
-// emitted names always match the mangling scheme of this exact compiler.
-private typealias SwiftmutDemangleFunction = @convention(c) (
-  UnsafePointer<CChar>?,
-  Int,
-  UnsafeMutablePointer<CChar>?,
-  UnsafeMutablePointer<Int>?,
-  UInt32
-) -> UnsafeMutablePointer<CChar>?
-
-private let swiftmutRuntimeDemangle: SwiftmutDemangleFunction? = {
-  guard let handle = dlopen(nil, RTLD_NOW),
-        let symbol = dlsym(handle, "swift_demangle") else {
-    return nil
-  }
-  return unsafeBitCast(symbol, to: SwiftmutDemangleFunction.self)
-}()
-
-func swiftmutDemangledFunctionName(_ mangledName: String) -> String? {
-  guard mangledName.hasPrefix("$s") || mangledName.hasPrefix("_$s"),
-        let demangle = swiftmutRuntimeDemangle else {
-    return nil
-  }
-  return mangledName.withCString { cString in
-    guard let buffer = demangle(cString, strlen(cString), nil, nil, 0) else {
-      return nil
-    }
-    defer { free(buffer) }
-    let demangled = String(cString: buffer)
-    // The runtime echoes the input back when it cannot demangle.
-    return demangled == mangledName ? nil : demangled
-  }
-}
-
-func swiftmutDemangledFunctionJSONField(_ function: String) -> String? {
-  guard let demangled = swiftmutDemangledFunctionName(function) else {
-    return nil
-  }
-  return #""demangledFunction":"\#(swiftmutEscapeJSON(demangled))""#
-}
-
 func swiftmutWriteMetamutantFragment(
   _ siteJSON: [String],
   moduleName: String,
@@ -89,9 +48,6 @@ func swiftmutConditionSiteJSON(_ site: SwiftmutConditionSite) -> String {
   fields.append(#""siteID":\#(site.siteID)"#)
   fields.append(#""module":"\#(swiftmutEscapeJSON(site.module))""#)
   fields.append(#""function":"\#(swiftmutEscapeJSON(site.function))""#)
-  if let demangledField = swiftmutDemangledFunctionJSONField(site.function) {
-    fields.append(demangledField)
-  }
   fields.append(
     #""sourceLocation":{"file":"\#(swiftmutEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#
   )
@@ -220,9 +176,6 @@ func swiftmutVoidCallSiteJSON(_ site: SwiftmutVoidCallSite) -> String {
   fields.append(#""siteID":\#(site.siteID)"#)
   fields.append(#""module":"\#(swiftmutEscapeJSON(site.module))""#)
   fields.append(#""function":"\#(swiftmutEscapeJSON(site.function))""#)
-  if let demangledField = swiftmutDemangledFunctionJSONField(site.function) {
-    fields.append(demangledField)
-  }
   fields.append(
     #""sourceLocation":{"file":"\#(swiftmutEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#
   )
@@ -253,9 +206,6 @@ private func swiftmutValueSiteJSON(
   fields.append(#""siteID":\#(siteID)"#)
   fields.append(#""module":"\#(swiftmutEscapeJSON(module))""#)
   fields.append(#""function":"\#(swiftmutEscapeJSON(function))""#)
-  if let demangledField = swiftmutDemangledFunctionJSONField(function) {
-    fields.append(demangledField)
-  }
   fields.append(#""sourceLocation":{"file":"\#(swiftmutEscapeJSON(file))","line":\#(line),"column":\#(column)}"#)
   fields.append(#""siteKind":"\#(siteKind)""#)
   fields.append(#""resultKind":"value""#)
@@ -277,9 +227,6 @@ private func swiftmutReturnSiteJSON(
   fields.append(#""siteID":\#(siteID)"#)
   fields.append(#""module":"\#(swiftmutEscapeJSON(module))""#)
   fields.append(#""function":"\#(swiftmutEscapeJSON(function))""#)
-  if let demangledField = swiftmutDemangledFunctionJSONField(function) {
-    fields.append(demangledField)
-  }
   fields.append(
     #""sourceLocation":{"file":"\#(swiftmutEscapeJSON(file))","line":\#(line),"column":\#(column)}"#
   )

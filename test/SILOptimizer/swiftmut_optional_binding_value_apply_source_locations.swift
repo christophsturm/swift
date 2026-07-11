@@ -43,4 +43,5 @@ public func swiftmutOptionalBinding() -> Int {
 
 // CHECK: "siteKind":"valueApply"
 // CHECK-SAME: "valueTypeKind":"optional"
-// CHECK: "sourceOriginal":"swiftmutOptionalNumber()","sourceMutated":"nil"
+// CHECK-SAME: "valueCalleeFunction":"$s{{[^"]+}}"
+// CHECK-SAME: "sourceOriginal":"swiftmutOptionalNumber()","sourceMutated":"nil"

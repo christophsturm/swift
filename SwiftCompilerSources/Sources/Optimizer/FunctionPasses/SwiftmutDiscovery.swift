@@ -793,6 +793,7 @@ func swiftmutDiscoverValueApplySites(
         column: location.column,
         apply: apply,
         valueTypeKind: swiftmutValueTypeKind(apply.type),
+        valueCalleeFunction: apply.referencedFunction?.name.string,
         preservesOriginalApply: preservesOriginalApply,
         alternatives: alternatives
       ))

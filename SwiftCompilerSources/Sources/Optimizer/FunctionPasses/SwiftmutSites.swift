@@ -217,6 +217,9 @@ struct SwiftmutValueApplySite {
   /// A narrow semantic type fact for the consumer-side actionability policy.
   /// Keep source-policy decisions out of the compiler pass.
   let valueTypeKind: String?
+  /// Raw referenced SIL function. Core demangles this with the selected
+  /// toolchain and verifies that the displayed outer call belongs to it.
+  let valueCalleeFunction: String?
   /// Logical-chain clauses keep the original call and replace only its
   /// result: their applies take owned or indirect arguments, so branching
   /// around the call is not possible.

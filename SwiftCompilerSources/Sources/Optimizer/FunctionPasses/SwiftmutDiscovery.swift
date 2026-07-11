@@ -697,9 +697,6 @@ func swiftmutDiscoverValueApplySites(
         continue
       }
       stats.valueApplyInstructions += 1
-      guard apply.type.isTrivial(in: function) else {
-        continue
-      }
       let preservesOriginalApply: Bool
       if swiftmutValueApplyCanBypassOriginalApply(apply) {
         preservesOriginalApply = false
@@ -795,6 +792,7 @@ func swiftmutDiscoverValueApplySites(
         line: location.line,
         column: location.column,
         apply: apply,
+        valueTypeKind: swiftmutValueTypeKind(apply.type),
         preservesOriginalApply: preservesOriginalApply,
         alternatives: alternatives
       ))
@@ -802,6 +800,22 @@ func swiftmutDiscoverValueApplySites(
   }
 
   return SwiftmutValueApplyDiscoveryResult(sites: sites, stats: stats)
+}
+
+private func swiftmutValueTypeKind(_ type: Type) -> String? {
+  if type.isOptional {
+    return "optional"
+  }
+  if swiftmutIsStringType(type) {
+    return "string"
+  }
+  if swiftmutIsCollectionType(type, named: "Array") {
+    return "array"
+  }
+  if swiftmutIsCollectionType(type, named: "Dictionary") {
+    return "dictionary"
+  }
+  return nil
 }
 
 /// A logical-chain clause is the right-hand side of a short-circuiting

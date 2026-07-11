@@ -111,6 +111,7 @@ func swiftmutValueApplySiteJSON(_ site: SwiftmutValueApplySite) -> String {
     line: site.line,
     column: site.column,
     siteKind: "valueApply",
+    valueTypeKind: site.valueTypeKind,
     alternatives: site.alternatives.map(swiftmutValueApplyAlternativeJSON))
 }
 
@@ -200,6 +201,7 @@ private func swiftmutValueSiteJSON(
   line: Int,
   column: Int,
   siteKind: String,
+  valueTypeKind: String? = nil,
   alternatives: [String]
 ) -> String {
   var fields: [String] = []
@@ -209,6 +211,9 @@ private func swiftmutValueSiteJSON(
   fields.append(#""sourceLocation":{"file":"\#(swiftmutEscapeJSON(file))","line":\#(line),"column":\#(column)}"#)
   fields.append(#""siteKind":"\#(siteKind)""#)
   fields.append(#""resultKind":"value""#)
+  if let valueTypeKind {
+    fields.append(#""valueTypeKind":"\#(swiftmutEscapeJSON(valueTypeKind))""#)
+  }
   fields.append(#""alternatives":[\#(alternatives.joined(separator: ","))]"#)
   return "{\(fields.joined(separator: ","))}"
 }

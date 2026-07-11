@@ -214,6 +214,9 @@ struct SwiftmutValueApplySite {
   let line: Int
   let column: Int
   let apply: ApplyInst
+  /// A narrow semantic type fact for the consumer-side actionability policy.
+  /// Keep source-policy decisions out of the compiler pass.
+  let valueTypeKind: String?
   /// Logical-chain clauses keep the original call and replace only its
   /// result: their applies take owned or indirect arguments, so branching
   /// around the call is not possible.

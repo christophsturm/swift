@@ -646,13 +646,18 @@ func swiftmutIsBoolType(_ type: Type, in function: Function) -> Bool {
 
 func swiftmutIsIntegerStructType(_ type: Type, in function: Function) -> Bool {
   guard let nominal = type.nominal,
-        nominal.name.string != "Bool",
+        swiftmutIntegerTypeNames.contains(nominal.name.string),
         let fields = type.getNominalFields(in: function),
         fields.count == 1 else {
     return false
   }
   return fields[0].canonicalType.isBuiltinInteger
 }
+
+private let swiftmutIntegerTypeNames: Set<String> = [
+  "Int", "Int8", "Int16", "Int32", "Int64",
+  "UInt", "UInt8", "UInt16", "UInt32", "UInt64"
+]
 
 func swiftmutIsStringType(_ type: Type) -> Bool {
   guard let nominal = type.nominal else {

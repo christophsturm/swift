@@ -33,6 +33,10 @@ public func swiftmutSingleScalarValue(_ workers: Int) {
   swiftmutSinkScalarValue(normalized)
 }
 
+public func swiftmutStringIndexIsNotAnInteger(_ text: String) -> String.Index {
+  text.endIndex
+}
+
 @_silgen_name("__swiftmut_visit")
 public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
@@ -40,6 +44,7 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 
 // CHECK: "siteKind":"scalarValue"
 // CHECK-SAME: "sourceOriginal":"1","sourceMutated":"0"
+// CHECK-NOT: "sourceOriginal":"text.endIndex"
 
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutSingleScalarValueSourceLocations","function":"$s40SwiftmutSingleScalarValueSourceLocations08swiftmutbcD0
 // EVENTS-SAME: "scalarValueSites":"1"

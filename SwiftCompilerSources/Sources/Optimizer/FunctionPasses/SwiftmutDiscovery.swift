@@ -390,6 +390,7 @@ func swiftmutDiscoverReturnSites(
       line: location.line,
       column: location.column,
       returnInst: returnInst,
+      valueNominalType: swiftmutNominalTypeFact(returnType),
       alternatives: alternatives
     ))
   }
@@ -481,6 +482,7 @@ func swiftmutDiscoverReturnBranchSites(
       column: location.column,
       branch: branch,
       value: value,
+      valueNominalType: swiftmutNominalTypeFact(value.type),
       alternatives: alternatives
     ))
   }
@@ -669,6 +671,7 @@ func swiftmutDiscoverScalarValueSites(
         line: location.line,
         column: location.column,
         value: structInst,
+        valueNominalType: swiftmutNominalTypeFact(structInst.type),
         alternatives: alternatives
       ))
     }
@@ -793,6 +796,7 @@ func swiftmutDiscoverValueApplySites(
         column: location.column,
         apply: apply,
         valueTypeKind: swiftmutValueTypeKind(apply.type),
+        valueNominalType: swiftmutNominalTypeFact(apply.type),
         valueCalleeFunction: apply.referencedFunction?.name.string,
         preservesOriginalApply: preservesOriginalApply,
         alternatives: alternatives
@@ -1085,6 +1089,7 @@ func swiftmutDiscoverAssignmentValueSites(
         line: location.line,
         column: location.column,
         store: store,
+        valueNominalType: swiftmutNominalTypeFact(store.source.type),
         alternatives: alternatives
       ))
     }

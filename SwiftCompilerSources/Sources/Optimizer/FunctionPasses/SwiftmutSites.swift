@@ -87,6 +87,11 @@ struct SwiftmutScalarValueAlternative {
   let mutation: SwiftmutMutation
 }
 
+struct SwiftmutNominalTypeFact {
+  let module: String
+  let name: String
+}
+
 struct SwiftmutValueApplyAlternative {
   let mutantID: String
   let alternativeIndex: UInt32
@@ -114,6 +119,7 @@ struct SwiftmutReturnSite {
   let line: Int
   let column: Int
   let returnInst: ReturnInst
+  let valueNominalType: SwiftmutNominalTypeFact?
   let alternatives: [SwiftmutReturnAlternative]
 }
 
@@ -127,6 +133,7 @@ struct SwiftmutReturnBranchSite {
   let column: Int
   let branch: BranchInst
   let value: Value
+  let valueNominalType: SwiftmutNominalTypeFact?
   let alternatives: [SwiftmutReturnAlternative]
 }
 
@@ -189,6 +196,7 @@ struct SwiftmutScalarValueSite {
   let line: Int
   let column: Int
   let value: StructInst
+  let valueNominalType: SwiftmutNominalTypeFact?
   let alternatives: [SwiftmutScalarValueAlternative]
 }
 
@@ -217,6 +225,8 @@ struct SwiftmutValueApplySite {
   /// A narrow semantic type fact for the consumer-side actionability policy.
   /// Keep source-policy decisions out of the compiler pass.
   let valueTypeKind: String?
+  /// Raw nominal identity captured before instrumentation mutates the SIL.
+  let valueNominalType: SwiftmutNominalTypeFact?
   /// Raw referenced SIL function. Core demangles this with the selected
   /// toolchain and verifies that the displayed outer call belongs to it.
   let valueCalleeFunction: String?
@@ -250,6 +260,7 @@ struct SwiftmutAssignmentValueSite {
   let line: Int
   let column: Int
   let store: StoreInst
+  let valueNominalType: SwiftmutNominalTypeFact?
   let alternatives: [SwiftmutAssignmentValueAlternative]
 }
 

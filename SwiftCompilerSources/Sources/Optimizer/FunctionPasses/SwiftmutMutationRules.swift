@@ -158,7 +158,7 @@ func swiftmutScalarValueMutations(
     return mutations
   }
 
-  if swiftmutIsIntegerStructType(valueType, in: structInst.parentFunction),
+  if swiftmutIsBuiltinIntegerBackedStructType(valueType, in: structInst.parentFunction),
      swiftmutIntegerStructLiteralValue(structInst) != 0,
      let rule = swiftmutFirstReturnRule(context: "integerToZero", config: config) {
     mutations.append(swiftmutReturnMutation(rule, silOriginal: valueType.description))
@@ -352,7 +352,7 @@ func swiftmutValueReplacementMutations(
     return mutations
   }
 
-  if swiftmutIsIntegerStructType(valueType, in: function),
+  if swiftmutIsBuiltinIntegerBackedStructType(valueType, in: function),
      let rule = swiftmutFirstReturnRule(context: "integerToZero", config: config) {
     mutations.append(swiftmutReturnMutation(rule, silOriginal: valueType.description))
   }

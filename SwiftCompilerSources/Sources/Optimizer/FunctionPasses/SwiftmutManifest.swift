@@ -92,6 +92,7 @@ func swiftmutScalarValueSiteJSON(_ site: SwiftmutScalarValueSite) -> String {
     line: site.line,
     column: site.column,
     siteKind: "scalarValue",
+    valueNominalType: site.valueNominalType,
     alternatives: site.alternatives.map(swiftmutScalarValueAlternativeJSON))
 }
 
@@ -112,6 +113,7 @@ func swiftmutValueApplySiteJSON(_ site: SwiftmutValueApplySite) -> String {
     column: site.column,
     siteKind: "valueApply",
     valueTypeKind: site.valueTypeKind,
+    valueNominalType: site.valueNominalType,
     valueCalleeFunction: site.valueCalleeFunction,
     alternatives: site.alternatives.map(swiftmutValueApplyAlternativeJSON))
 }
@@ -132,6 +134,7 @@ func swiftmutAssignmentValueSiteJSON(_ site: SwiftmutAssignmentValueSite) -> Str
     line: site.line,
     column: site.column,
     siteKind: "assignmentValue",
+    valueNominalType: site.valueNominalType,
     alternatives: site.alternatives.map(swiftmutAssignmentValueAlternativeJSON))
 }
 
@@ -151,6 +154,7 @@ func swiftmutReturnSiteJSON(_ site: SwiftmutReturnSite) -> String {
     line: site.line,
     column: site.column,
     siteKind: "returnValue",
+    valueNominalType: site.valueNominalType,
     alternatives: site.alternatives.map(swiftmutReturnAlternativeJSON))
 }
 
@@ -163,6 +167,7 @@ func swiftmutReturnBranchSiteJSON(_ site: SwiftmutReturnBranchSite) -> String {
     line: site.line,
     column: site.column,
     siteKind: "returnBranchValue",
+    valueNominalType: site.valueNominalType,
     alternatives: site.alternatives.map(swiftmutReturnAlternativeJSON))
 }
 
@@ -203,6 +208,7 @@ private func swiftmutValueSiteJSON(
   column: Int,
   siteKind: String,
   valueTypeKind: String? = nil,
+  valueNominalType: SwiftmutNominalTypeFact? = nil,
   valueCalleeFunction: String? = nil,
   alternatives: [String]
 ) -> String {
@@ -215,6 +221,11 @@ private func swiftmutValueSiteJSON(
   fields.append(#""resultKind":"value""#)
   if let valueTypeKind {
     fields.append(#""valueTypeKind":"\#(swiftmutEscapeJSON(valueTypeKind))""#)
+  }
+  if let valueNominalType {
+    fields.append(
+      #""valueNominalType":{"module":"\#(swiftmutEscapeJSON(valueNominalType.module))","name":"\#(swiftmutEscapeJSON(valueNominalType.name))"}"#
+    )
   }
   if let valueCalleeFunction {
     fields.append(#""valueCalleeFunction":"\#(swiftmutEscapeJSON(valueCalleeFunction))""#)
@@ -231,6 +242,7 @@ private func swiftmutReturnSiteJSON(
   line: Int,
   column: Int,
   siteKind: String,
+  valueNominalType: SwiftmutNominalTypeFact? = nil,
   alternatives: [String]
 ) -> String {
   var fields: [String] = []
@@ -242,6 +254,11 @@ private func swiftmutReturnSiteJSON(
   )
   fields.append(#""siteKind":"\#(siteKind)""#)
   fields.append(#""resultKind":"returnValue""#)
+  if let valueNominalType {
+    fields.append(
+      #""valueNominalType":{"module":"\#(swiftmutEscapeJSON(valueNominalType.module))","name":"\#(swiftmutEscapeJSON(valueNominalType.name))"}"#
+    )
+  }
   fields.append(#""alternatives":[\#(alternatives.joined(separator: ","))]"#)
   return "{\(fields.joined(separator: ","))}"
 }

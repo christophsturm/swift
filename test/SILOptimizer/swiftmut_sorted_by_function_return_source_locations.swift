@@ -48,6 +48,7 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 // CHECK: "sourceOriginal":"lhs.weight < rhs.weight","sourceMutated":"false"
 // CHECK: "sourceOriginal":"lhs.weight < rhs.weight","sourceMutated":"true"
 // CHECK: "siteKind":"returnValue"
+// CHECK-SAME: "valueNominalType":{"module":"Swift","name":"Bool"}
 // CHECK: "sourceOriginal":"lhs.weight < rhs.weight","sourceMutated":"false"
 // CHECK: "sourceOriginal":"lhs.weight < rhs.weight","sourceMutated":"true"
 // EVENTS: "event":"functionVisit"

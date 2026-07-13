@@ -174,7 +174,7 @@ func swiftmutCanMakeReturnAlternative(
   case "return_nil":
     return returnType.isOptional
   case "return_zero":
-    return swiftmutIsIntegerStructType(returnType, in: function)
+    return swiftmutIsBuiltinIntegerBackedStructType(returnType, in: function)
   case "return_empty_string":
     return swiftmutIsStringType(returnType)
       && swiftmutEmptyStringFunction(named: swiftmutRuntimeHelperThunkName(

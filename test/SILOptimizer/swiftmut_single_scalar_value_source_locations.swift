@@ -43,6 +43,7 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 }
 
 // CHECK: "siteKind":"scalarValue"
+// CHECK-SAME: "valueNominalType":{"module":"Swift","name":"Int"}
 // CHECK-SAME: "sourceOriginal":"1","sourceMutated":"0"
 // CHECK-NOT: "sourceOriginal":"text.endIndex"
 

@@ -41,7 +41,7 @@ func swiftmutReturnMutations(
     return mutations
   }
 
-  if swiftmutIsIntegerStructType(returnType, in: returnInst.parentFunction),
+  if swiftmutIsBuiltinIntegerBackedStructType(returnType, in: returnInst.parentFunction),
      swiftmutIntegerStructLiteralValue(returnedValue) != 0,
      let rule = swiftmutFirstReturnRule(context: "integerToZero", config: config) {
     mutations.append(swiftmutReturnMutation(rule, silOriginal: returnType.description))
@@ -644,9 +644,8 @@ func swiftmutIsBoolType(_ type: Type, in function: Function) -> Bool {
   return fields[0].canonicalType.isBuiltinInteger(withFixedWidth: 1)
 }
 
-func swiftmutIsIntegerStructType(_ type: Type, in function: Function) -> Bool {
-  guard let nominal = type.nominal,
-        swiftmutIntegerTypeNames.contains(nominal.name.string),
+func swiftmutIsBuiltinIntegerBackedStructType(_ type: Type, in function: Function) -> Bool {
+  guard type.nominal != nil,
         let fields = type.getNominalFields(in: function),
         fields.count == 1 else {
     return false
@@ -654,10 +653,15 @@ func swiftmutIsIntegerStructType(_ type: Type, in function: Function) -> Bool {
   return fields[0].canonicalType.isBuiltinInteger
 }
 
-private let swiftmutIntegerTypeNames: Set<String> = [
-  "Int", "Int8", "Int16", "Int32", "Int64",
-  "UInt", "UInt8", "UInt16", "UInt32", "UInt64"
-]
+func swiftmutNominalTypeFact(_ type: Type) -> SwiftmutNominalTypeFact? {
+  guard let nominal = type.nominal else {
+    return nil
+  }
+  return SwiftmutNominalTypeFact(
+    module: nominal.parentModule.name.string,
+    name: nominal.name.string
+  )
+}
 
 func swiftmutIsStringType(_ type: Type) -> Bool {
   guard let nominal = type.nominal else {
@@ -686,7 +690,7 @@ func swiftmutRecordReturnType(
     stats.optionalTerminators += 1
     return
   }
-  if swiftmutIsIntegerStructType(type, in: function) {
+  if swiftmutIsBuiltinIntegerBackedStructType(type, in: function) {
     stats.integerTerminators += 1
     return
   }
@@ -719,7 +723,7 @@ func swiftmutRecordReturnSourceLocationMiss(
     stats.missingOptionalSourceLocations += 1
     return
   }
-  if swiftmutIsIntegerStructType(type, in: function) {
+  if swiftmutIsBuiltinIntegerBackedStructType(type, in: function) {
     stats.missingIntegerSourceLocations += 1
     return
   }

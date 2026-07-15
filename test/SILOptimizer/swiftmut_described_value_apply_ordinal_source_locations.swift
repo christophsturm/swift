@@ -41,4 +41,4 @@ public func swiftmutRepeatedDescribedValueApply(_ flag: Bool) -> Int {
   return swiftmutRepeatedNumber()
 }
 
-// CHECK: "line":39,"column":12},"siteKind":"valueApply","resultKind":"value","alternatives":[{{.*}}"sourceOriginal":"swiftmutRepeatedNumber()","sourceMutated":"0"{{.*}}"line":41,"column":10},"siteKind":"valueApply","resultKind":"value","alternatives":[{{.*}}"sourceOriginal":"swiftmutRepeatedNumber()","sourceMutated":"0"
+// CHECK: "line":39,"column":12},"siteKind":"valueApply","resultKind":"value","valueNominalType":{"module":"Swift","name":"Int"},{{.*}}"alternatives":[{{.*}}"sourceOriginal":"swiftmutRepeatedNumber()","sourceMutated":"0"{{.*}}"line":41,"column":10},"siteKind":"valueApply","resultKind":"value","valueNominalType":{"module":"Swift","name":"Int"},{{.*}}"alternatives":[{{.*}}"sourceOriginal":"swiftmutRepeatedNumber()","sourceMutated":"0"

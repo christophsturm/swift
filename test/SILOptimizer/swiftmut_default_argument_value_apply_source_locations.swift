@@ -42,5 +42,8 @@ public func swiftmutCallDefault() -> Int {
   swiftmutUseDefault()
 }
 
+// The optimized SIL has no separately visited default-argument thunk. Do not
+// misattribute the caller mutation to its nested declaration expression.
+// CHECK-NOT: "sourceOriginal":"swiftmutDefaultNumber()","sourceMutated":"0"
 // CHECK: "siteKind":"valueApply"
-// CHECK: "sourceOriginal":"swiftmutDefaultNumber()","sourceMutated":"0"
+// CHECK: "sourceOriginal":"swiftmutUseDefault()","sourceMutated":"0"

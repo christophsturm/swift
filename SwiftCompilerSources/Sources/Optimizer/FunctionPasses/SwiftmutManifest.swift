@@ -12,6 +12,38 @@ import Darwin
 import Glibc
 #endif
 
+/// Couples a live SIL injection target with a manifest fragment that was
+/// serialized while every discovered SIL reference was still valid.
+struct SwiftmutPreparedManifestSite<InjectionSite> {
+  let injectionSite: InjectionSite
+  let manifestFragment: String
+}
+
+func swiftmutPrepareManifestSites<InjectionSite>(
+  _ sites: [InjectionSite],
+  serialize: (InjectionSite) -> String
+) -> [SwiftmutPreparedManifestSite<InjectionSite>] {
+  sites.map {
+    SwiftmutPreparedManifestSite(
+      injectionSite: $0,
+      manifestFragment: serialize($0)
+    )
+  }
+}
+
+/// After injection, this function returns only the previously frozen fragment
+/// and never reads the potentially invalidated SIL target again.
+func swiftmutManifestFragmentIfInjected<InjectionSite>(
+  _ preparedSite: SwiftmutPreparedManifestSite<InjectionSite>,
+  inject: (InjectionSite) -> Bool
+) -> String? {
+  let manifestFragment = preparedSite.manifestFragment
+  guard inject(preparedSite.injectionSite) else {
+    return nil
+  }
+  return manifestFragment
+}
+
 func swiftmutWriteMetamutantFragment(
   _ siteJSON: [String],
   moduleName: String,

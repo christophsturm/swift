@@ -67,6 +67,7 @@ struct SwiftmutLogicalConnectorAlternative {
 struct SwiftmutLogicalConnectorDiscoveryStats {
   var diamondBranches = 0
   var ladderPairBranches = 0
+  var nonDominatingLadderPairBranches = 0
   var conditionOwnedBranches = 0
   var mutationAlternatives = 0
   var sourceLocationMisses = 0
@@ -81,7 +82,8 @@ func swiftmutDiscoverLogicalConnectorSites(
   in function: Function,
   moduleName: String,
   conditionOwnedBranches: [CondBranchInst],
-  config: SwiftmutConfig
+  config: SwiftmutConfig,
+  _ context: FunctionPassContext
 ) -> SwiftmutLogicalConnectorDiscoveryResult {
   var sites: [SwiftmutLogicalConnectorSite] = []
   var stats = SwiftmutLogicalConnectorDiscoveryStats()
@@ -201,6 +203,18 @@ func swiftmutDiscoverLogicalConnectorSites(
       continue
     }
     if let nextBranch = swiftmutNextLadderRung(after: branch) {
+      // The first rung's condition is reused to gate the second rung. It
+      // therefore must dominate that rung. Optimized comparisons can have a
+      // similar fast-path/slow-path CFG shape, but their fast-path condition
+      // does not dominate the shared slow-path branch. Treating that shape as
+      // a logical ladder would create an invalid cross-block SIL use.
+      guard branch.parentBlock.dominates(
+        nextBranch.parentBlock,
+        context.dominatorTree
+      ) else {
+        stats.nonDominatingLadderPairBranches += 1
+        continue
+      }
       stats.ladderPairBranches += 1
       // Ladder injection only wraps condition values, so it composes with
       // condition-site injection on the same branch; nothing is owned.

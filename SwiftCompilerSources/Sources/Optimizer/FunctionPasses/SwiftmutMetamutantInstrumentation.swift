@@ -28,7 +28,8 @@ func swiftmutInstrumentMetamutantSites(
     in: function,
     moduleName: moduleName,
     conditionOwnedBranches: conditionSites.map(\.branch),
-    config: config
+    config: config,
+    context
   )
   let logicalConnectorSites = logicalConnectorDiscovery.sites
   let arithmeticSites = swiftmutDiscoverArithmeticSites(
@@ -90,6 +91,7 @@ func swiftmutInstrumentMetamutantSites(
       ("logicalConnectorSites", "\(logicalConnectorSites.count)"),
       ("logicalConnectorDiamondBranches", "\(logicalConnectorDiscovery.stats.diamondBranches)"),
       ("logicalConnectorLadderPairBranches", "\(logicalConnectorDiscovery.stats.ladderPairBranches)"),
+      ("logicalConnectorNonDominatingLadderPairBranches", "\(logicalConnectorDiscovery.stats.nonDominatingLadderPairBranches)"),
       ("logicalConnectorConditionOwnedBranches", "\(logicalConnectorDiscovery.stats.conditionOwnedBranches)"),
       ("logicalConnectorSourceLocationMisses", "\(logicalConnectorDiscovery.stats.sourceLocationMisses)"),
       ("arithmeticSites", "\(arithmeticSites.count)"),

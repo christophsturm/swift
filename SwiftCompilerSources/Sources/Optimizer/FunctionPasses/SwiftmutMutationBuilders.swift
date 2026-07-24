@@ -679,21 +679,30 @@ func swiftmutEmptyCollectionFunction(
     ?? context.lookupFunction(name: "@\(helperName)") {
     return helper
   }
-  switch helperName {
+  let fallbackName: String
+  if helperName == "__swiftmut_empty_array" || helperName.hasSuffix("_empty_array") {
+    fallbackName = "__swiftmut_empty_array"
+  } else if helperName == "__swiftmut_empty_dictionary"
+      || helperName.hasSuffix("_empty_dictionary") {
+    fallbackName = "__swiftmut_empty_dictionary"
+  } else if helperName == "__swiftmut_empty_set" || helperName.hasSuffix("_empty_set") {
+    fallbackName = "__swiftmut_empty_set"
+  } else {
+    return nil
+  }
+  if let helper = context.lookupFunction(name: fallbackName)
+    ?? context.lookupFunction(name: "@\(fallbackName)") {
+    return helper
+  }
+  switch fallbackName {
   case "__swiftmut_empty_array":
-    return context.lookupFunction(name: "__swiftmut_empty_array")
-      ?? context.lookupFunction(name: "@__swiftmut_empty_array")
-      ?? context.loadFunction(name: "__swiftmut_empty_array", loadCalleesRecursively: false)
+    return context.loadFunction(name: "__swiftmut_empty_array", loadCalleesRecursively: false)
       ?? context.loadFunction(name: "@__swiftmut_empty_array", loadCalleesRecursively: false)
   case "__swiftmut_empty_dictionary":
-    return context.lookupFunction(name: "__swiftmut_empty_dictionary")
-      ?? context.lookupFunction(name: "@__swiftmut_empty_dictionary")
-      ?? context.loadFunction(name: "__swiftmut_empty_dictionary", loadCalleesRecursively: false)
+    return context.loadFunction(name: "__swiftmut_empty_dictionary", loadCalleesRecursively: false)
       ?? context.loadFunction(name: "@__swiftmut_empty_dictionary", loadCalleesRecursively: false)
   case "__swiftmut_empty_set":
-    return context.lookupFunction(name: "__swiftmut_empty_set")
-      ?? context.lookupFunction(name: "@__swiftmut_empty_set")
-      ?? context.loadFunction(name: "__swiftmut_empty_set", loadCalleesRecursively: false)
+    return context.loadFunction(name: "__swiftmut_empty_set", loadCalleesRecursively: false)
       ?? context.loadFunction(name: "@__swiftmut_empty_set", loadCalleesRecursively: false)
   default:
     return nil

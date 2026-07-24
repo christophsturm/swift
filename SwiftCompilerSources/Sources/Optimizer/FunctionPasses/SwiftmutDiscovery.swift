@@ -426,7 +426,7 @@ func swiftmutDiscoverReturnSites(
     stats.terminators += 1
     let returnType = returnInst.returnedValue.type
     swiftmutRecordReturnType(returnType, in: function, stats: &stats)
-    guard returnType.isTrivial(in: function) else {
+    guard swiftmutReturnValueCanBeReplaced(returnInst.returnedValue, in: function) else {
       continue
     }
 
@@ -517,6 +517,10 @@ func swiftmutDiscoverReturnSites(
   }
 
   return SwiftmutReturnDiscoveryResult(sites: sites, stats: stats)
+}
+
+func swiftmutReturnValueCanBeReplaced(_ value: Value, in function: Function) -> Bool {
+  value.type.isTrivial(in: function) || value.ownership == .owned
 }
 
 func swiftmutDiscoverReturnBranchSites(

@@ -136,7 +136,9 @@ func swiftmutInjectReturnSite(
 
   let returnType = site.returnInst.returnedValue.type
   let function = site.returnInst.parentFunction
-  guard site.alternatives.allSatisfy({
+  let originalValue = site.returnInst.returnedValue
+  guard swiftmutReturnValueCanBeReplaced(originalValue, in: function),
+        site.alternatives.allSatisfy({
     swiftmutCanMakeReturnAlternative(
       $0.mutation,
       returnType: returnType,
@@ -148,7 +150,6 @@ func swiftmutInjectReturnSite(
     return false
   }
 
-  let originalValue = site.returnInst.returnedValue
   let originalBlock = function.appendNewBlock(context)
   let alternativeBlocks = site.alternatives.map { _ in function.appendNewBlock(context) }
   let checkBlocks = site.alternatives.dropFirst().map { _ in function.appendNewBlock(context) }
@@ -185,6 +186,9 @@ func swiftmutInjectReturnSite(
       builder: builder
     ) else {
       return false
+    }
+    if !returnType.isTrivial(in: function) {
+      builder.createDestroyValue(operand: originalValue)
     }
     builder.createBranch(to: returnBlock, arguments: [replacement])
   }

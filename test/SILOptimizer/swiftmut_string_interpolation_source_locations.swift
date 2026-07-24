@@ -22,6 +22,8 @@
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutStringInterpolationSourceLocations -external-pass-pipeline-filename %t/pipeline.yaml %s -o /dev/null
 // RUN: %FileCheck %s --input-file %t/compiler-events.jsonl
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
+// RUN: %FileCheck %s --check-prefix=MANIFEST --input-file %t/all-fragments.json
 
 public func swiftmutInterpolatedDescription(_ value: Int) -> String {
   "value: \(value)"
@@ -43,7 +45,12 @@ public func __swiftmut_empty_string() -> String {
 // CHECK-SAME: "valueApplyValueInstructions":"4"
 // CHECK-SAME: "valueApplyMutationEligibleInstructions":"2"
 // CHECK-SAME: "valueApplySourceLocationMisses":"2"
-// CHECK-SAME: "returnSites":"0"
+// CHECK-SAME: "returnSites":"1"
 // CHECK-SAME: "returnTerminators":"1"
 // CHECK-SAME: "returnStringTerminators":"1"
-// CHECK-SAME: "returnMutationEligibleTerminators":"0"
+// CHECK-SAME: "returnMutationEligibleTerminators":"1"
+// CHECK-SAME: "returnSourceLocationMisses":"0"
+// MANIFEST: "sourceLocation":{"file":"swiftmut_string_interpolation_source_locations.swift","line":29,"column":3}
+// MANIFEST-SAME: "siteKind":"returnValue"
+// MANIFEST-SAME: "sourceOriginal":"\"value: \\(value)\""
+// MANIFEST-SAME: "sourceMutated":"\"\""

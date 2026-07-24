@@ -982,6 +982,33 @@ private func swiftmutValueFeedsConditionBranch(_ value: Value, depth: Int) -> Bo
   return false
 }
 
+func swiftmutCallDeletionBypassCleanupValues(_ apply: ApplyInst) -> [Value]? {
+  guard apply.callee.ownership != .owned else {
+    return nil
+  }
+  var cleanupValues: [Value] = []
+  for argument in apply.argumentOperands {
+    guard let convention = apply.convention(of: argument) else {
+      return nil
+    }
+    switch convention {
+    case .directGuaranteed, .directUnowned, .packGuaranteed:
+      continue
+    case .directOwned:
+      guard argument.value.ownership == .owned else {
+        return nil
+      }
+      cleanupValues.append(argument.value)
+    case .indirectInout, .indirectInoutAliasable, .packInout,
+         .indirectIn, .indirectInGuaranteed, .indirectInCXX,
+         .packOwned,
+         .indirectOut, .packOut:
+      return nil
+    }
+  }
+  return cleanupValues
+}
+
 func swiftmutValueApplyCanBypassOriginalApply(_ apply: ApplyInst) -> Bool {
   guard apply.callee.ownership != .owned else {
     return false
@@ -993,9 +1020,10 @@ func swiftmutValueApplyCanBypassOriginalApply(_ apply: ApplyInst) -> Bool {
     switch convention {
     case .directGuaranteed, .directUnowned, .packGuaranteed:
       continue
-    case .indirectInout, .indirectInoutAliasable, .packInout,
+    case .directOwned,
+         .indirectInout, .indirectInoutAliasable, .packInout,
          .indirectIn, .indirectInGuaranteed, .indirectInCXX,
-         .directOwned, .packOwned,
+         .packOwned,
          .indirectOut, .packOut:
       return false
     }

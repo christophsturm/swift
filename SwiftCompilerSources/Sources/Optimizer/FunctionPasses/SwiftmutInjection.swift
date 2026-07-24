@@ -738,7 +738,8 @@ func swiftmutInjectVoidCallSite(
   _ site: SwiftmutVoidCallSite,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard let visitFunction = swiftmutRuntimeVisitFunction(
+  guard let cleanupValues = swiftmutCallDeletionBypassCleanupValues(site.apply),
+        let visitFunction = swiftmutRuntimeVisitFunction(
           named: site.runtimeFunctionName,
           context,
           originalFunction: site.apply.parentFunction
@@ -781,6 +782,9 @@ func swiftmutInjectVoidCallSite(
 
   for (index, _) in site.alternatives.enumerated() {
     let builder = Builder(atEndOf: alternativeBlocks[index], location: site.apply.location, context)
+    for value in cleanupValues {
+      builder.createDestroyValue(operand: value)
+    }
     let skippedVoid = builder.createTuple(type: site.apply.type, elements: [])
     builder.createBranch(to: continuationBlock, arguments: [skippedVoid])
   }
@@ -924,7 +928,7 @@ private func swiftmutInjectStatementDeletionApplySite(
   guard !apply.type.isVoid,
         !apply.isCalleeNoReturn,
         apply.uses.isEmpty,
-        swiftmutValueApplyCanBypassOriginalApply(apply),
+        let cleanupValues = swiftmutCallDeletionBypassCleanupValues(apply),
         let visitFunction = swiftmutRuntimeVisitFunction(
           named: site.runtimeFunctionName,
           context,
@@ -962,8 +966,11 @@ private func swiftmutInjectStatementDeletionApplySite(
   }
 
   for (index, _) in site.alternatives.enumerated() {
-    Builder(atEndOf: alternativeBlocks[index], location: apply.location, context)
-      .createBranch(to: continuationBlock, arguments: [])
+    let builder = Builder(atEndOf: alternativeBlocks[index], location: apply.location, context)
+    for value in cleanupValues {
+      builder.createDestroyValue(operand: value)
+    }
+    builder.createBranch(to: continuationBlock, arguments: [])
   }
 
   let originalBuilder = Builder(atEndOf: originalBlock, location: apply.location, context)

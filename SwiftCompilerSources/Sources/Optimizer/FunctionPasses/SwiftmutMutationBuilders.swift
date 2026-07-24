@@ -100,7 +100,8 @@ func swiftmutVoidCallMutation(
   for apply: ApplyInst,
   config: SwiftmutConfig
 ) -> SwiftmutMutation? {
-  guard apply.type.isVoid else {
+  guard apply.type.isVoid,
+        swiftmutCallDeletionBypassCleanupValues(apply) != nil else {
     return nil
   }
   guard let rule = swiftmutFirstVoidCallRule(config: config) else {
@@ -115,6 +116,18 @@ func swiftmutVoidCallMutation(
     sourceMutated: rule.sourceMutated,
     silOriginal: apply.description,
     silMutated: rule.silMutated)
+}
+
+func swiftmutApplyIsSetter(_ apply: ApplyInst) -> Bool {
+  guard let function = apply.referencedFunction else {
+    return false
+  }
+  if function.accessorKindName == "set" {
+    return true
+  }
+  let name = function.name.string
+  return (function.isSpecialization || swiftmutIsGeneratedSpecializationFunctionName(name))
+    && name.contains("vsT")
 }
 
 func swiftmutFirstVoidCallRule(
@@ -555,7 +568,7 @@ func swiftmutStatementDeletionMutation(
   guard !apply.type.isVoid,
         !apply.isCalleeNoReturn,
         apply.uses.isEmpty,
-        swiftmutValueApplyCanBypassOriginalApply(apply),
+        swiftmutCallDeletionBypassCleanupValues(apply) != nil,
         let rule = swiftmutFirstStatementRule(context: "unusedCall", config: config) else {
     return nil
   }

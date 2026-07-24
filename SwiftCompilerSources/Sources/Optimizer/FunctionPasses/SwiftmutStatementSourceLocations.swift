@@ -166,6 +166,22 @@ func swiftmutStatementCallSourceLocation(
         fileNameAndPosition.column,
         mutation.sourceOriginal,
         mutation.sourceMutated)
+      if kind == .void,
+         let setterAssignment = swiftmutSetterAssignmentSourceLocation(
+           for: apply,
+           path: matchedPath,
+           line: fileNameAndPosition.line,
+           mutation: mutation,
+           config: config
+         ) {
+        return .found(
+          file: setterAssignment.file,
+          line: setterAssignment.line,
+          column: setterAssignment.column,
+          sourceOriginal: setterAssignment.sourceOriginal,
+          sourceMutated: setterAssignment.sourceMutated
+        )
+      }
       if swiftmutVoidCallSourceLooksLikeStatement(file: candidate.0, line: candidate.1, config: config) {
         return .found(
           file: candidate.0,
@@ -256,6 +272,42 @@ func swiftmutStatementCallSourceLocation(
     let fallbackPath = fallback.file.hasPrefix("/") || config.packageRoot.isEmpty
       ? fallback.file
       : config.packageRoot + "/" + fallback.file
+    if kind == .void,
+       let setterAssignment = swiftmutSetterAssignmentSourceLocation(
+         for: apply,
+         path: fallbackPath,
+         line: fallback.line,
+         mutation: mutation,
+         config: config
+       ) {
+      return .found(
+        file: setterAssignment.file,
+        line: setterAssignment.line,
+        column: setterAssignment.column,
+        sourceOriginal: setterAssignment.sourceOriginal,
+        sourceMutated: setterAssignment.sourceMutated
+      )
+    }
+    if kind == .void,
+       swiftmutApplyIsSetter(apply),
+       let functionSourceLocation,
+       functionSourceLocation.path == fallbackPath,
+       let scopedSetterAssignment = swiftmutFindScopedAssignmentValueSourceLocation(
+         path: functionSourceLocation.path,
+         functionLine: functionSourceLocation.line,
+         mutation: mutation,
+         config: config,
+         targetNames: swiftmutSourceExpressionIdentifiers(for: apply),
+         requiresDirectValueExpression: false
+       ) {
+      return .found(
+        file: scopedSetterAssignment.file,
+        line: scopedSetterAssignment.line,
+        column: scopedSetterAssignment.column,
+        sourceOriginal: scopedSetterAssignment.sourceOriginal,
+        sourceMutated: scopedSetterAssignment.sourceMutated
+      )
+    }
     if let functionSourceLocation,
        functionSourceLocation.path == fallbackPath,
        fallback.line > functionSourceLocation.line {
@@ -321,6 +373,34 @@ func swiftmutStatementCallSourceLocation(
   }
 
   return .missing
+}
+
+private func swiftmutSetterAssignmentSourceLocation(
+  for apply: ApplyInst,
+  path: String,
+  line: Int,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard swiftmutApplyIsSetter(apply),
+        line > 0,
+        let sourceLine = swiftmutAbsoluteSourceLine(path: path, line: line),
+        swiftmutSourceLineIsReassignment(sourceLine),
+        let expression = swiftmutAssignmentValueExpression(
+          sourceLine,
+          mutation: mutation,
+          targetNames: swiftmutSourceExpressionIdentifiers(for: apply),
+          requiresDirectValueExpression: false
+        ) else {
+    return nil
+  }
+  return (
+    swiftmutTrimPackageRoot(path, config: config),
+    line,
+    expression.column,
+    expression.sourceOriginal,
+    expression.sourceMutated
+  )
 }
 
 func swiftmutFindCalleeOrdinalStatementCallSourceLocation(

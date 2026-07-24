@@ -73,6 +73,12 @@ func swiftmutInstrumentMetamutantSites(
     config: config
   )
   let voidCallSites = voidCallDiscovery.sites
+  let statementDeletionDiscovery = swiftmutDiscoverStatementDeletionSites(
+    in: function,
+    moduleName: moduleName,
+    config: config
+  )
+  let statementDeletionSites = statementDeletionDiscovery.sites
   swiftmutLogEvent(
     "metamutantDiscovery",
     config: config,
@@ -117,6 +123,15 @@ func swiftmutInstrumentMetamutantSites(
       ("voidCallMutationEligibleApplyInstructions", "\(voidCallDiscovery.stats.mutationEligibleApplyInstructions)"),
       ("voidCallSourceLocationMisses", "\(voidCallDiscovery.stats.sourceLocationMisses)"),
       ("voidCallNonStatementSourceLocations", "\(voidCallDiscovery.stats.nonStatementSourceLocations)"),
+      ("statementDeletionSites", "\(statementDeletionSites.count)"),
+      ("statementDeletionStoreInstructions", "\(statementDeletionDiscovery.stats.storeInstructions)"),
+      ("statementDeletionAssignmentStoreInstructions", "\(statementDeletionDiscovery.stats.assignmentStoreInstructions)"),
+      ("statementDeletionMutationEligibleInstructions", "\(statementDeletionDiscovery.stats.mutationEligibleStoreInstructions)"),
+      ("statementDeletionApplyInstructions", "\(statementDeletionDiscovery.stats.applyInstructions)"),
+      ("statementDeletionUnusedResultApplyInstructions", "\(statementDeletionDiscovery.stats.unusedResultApplyInstructions)"),
+      ("statementDeletionMutationEligibleApplyInstructions", "\(statementDeletionDiscovery.stats.mutationEligibleApplyInstructions)"),
+      ("statementDeletionSourceLocationMisses", "\(statementDeletionDiscovery.stats.sourceLocationMisses)"),
+      ("statementDeletionNonStatementSourceLocations", "\(statementDeletionDiscovery.stats.nonStatementSourceLocations)"),
       ("returnSites", "\(returnSites.count)"),
       ("returnTerminators", "\(returnDiscovery.stats.terminators)"),
       ("returnBoolTerminators", "\(returnDiscovery.stats.boolTerminators)"),
@@ -149,7 +164,8 @@ func swiftmutInstrumentMetamutantSites(
         || !assignmentValueSites.isEmpty
         || !returnSites.isEmpty
         || !returnBranchSites.isEmpty
-        || !voidCallSites.isEmpty else {
+        || !voidCallSites.isEmpty
+        || !statementDeletionSites.isEmpty else {
     return false
   }
 
@@ -191,6 +207,10 @@ func swiftmutInstrumentMetamutantSites(
     voidCallSites,
     serialize: swiftmutVoidCallSiteJSON
   )
+  let preparedStatementDeletionSites = swiftmutPrepareManifestSites(
+    statementDeletionSites,
+    serialize: swiftmutStatementDeletionSiteJSON
+  )
   let runtimeVisitAvailable = swiftmutAnyRuntimeVisitFunctionAvailable(
     conditionSites: conditionSites,
     logicalConnectorSites: logicalConnectorSites,
@@ -201,6 +221,7 @@ func swiftmutInstrumentMetamutantSites(
     returnSites: returnSites,
     returnBranchSites: returnBranchSites,
     voidCallSites: voidCallSites,
+    statementDeletionSites: statementDeletionSites,
     originalFunction: function,
     context
   )
@@ -213,6 +234,7 @@ func swiftmutInstrumentMetamutantSites(
   let attemptedReturnSites = returnSites.count
   let attemptedReturnBranchSites = returnBranchSites.count
   let attemptedVoidCallSites = voidCallSites.count
+  let attemptedStatementDeletionSites = statementDeletionSites.count
 
   var changed = false
   var injectedSiteJSON: [String] = []
@@ -225,6 +247,7 @@ func swiftmutInstrumentMetamutantSites(
   var injectedReturnSites = 0
   var injectedReturnBranchSites = 0
   var injectedVoidCallSites = 0
+  var injectedStatementDeletionSites = 0
   for preparedSite in preparedArithmeticSites {
     if let manifestFragment = swiftmutManifestFragmentIfInjected(
       preparedSite,
@@ -315,6 +338,16 @@ func swiftmutInstrumentMetamutantSites(
       changed = true
     }
   }
+  for preparedSite in preparedStatementDeletionSites {
+    if let manifestFragment = swiftmutManifestFragmentIfInjected(
+      preparedSite,
+      inject: { swiftmutInjectStatementDeletionSite($0, context) }
+    ) {
+      injectedSiteJSON.append(manifestFragment)
+      injectedStatementDeletionSites += 1
+      changed = true
+    }
+  }
   swiftmutLogEvent(
     "metamutantInjection",
     config: config,
@@ -339,6 +372,8 @@ func swiftmutInstrumentMetamutantSites(
       ("injectedReturnBranchSites", "\(injectedReturnBranchSites)"),
       ("attemptedVoidCallSites", "\(attemptedVoidCallSites)"),
       ("injectedVoidCallSites", "\(injectedVoidCallSites)"),
+      ("attemptedStatementDeletionSites", "\(attemptedStatementDeletionSites)"),
+      ("injectedStatementDeletionSites", "\(injectedStatementDeletionSites)"),
       ("runtimeVisitAvailable", "\(runtimeVisitAvailable)")
     ])
   if !injectedSiteJSON.isEmpty {

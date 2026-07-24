@@ -906,7 +906,7 @@ func swiftmutSourceLineLooksLikeVoidCallStatement(_ line: String) -> Bool {
 
   let nonStatementPrefixes = [
     "let ", "var ", "return ", "if ", "if(", "guard ", "guard(",
-    "while ", "while(", "for ", "for(", "switch ", "catch ",
+    "while ", "while(", "for ", "for(", "switch ", "case ", "catch ",
     "public ", "private ", "internal ", "fileprivate ", "open ",
     "static ", "func ", "init(", "deinit", "@", "//", "/*", ".", "}", ")", "]"
   ]

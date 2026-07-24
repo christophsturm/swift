@@ -38,9 +38,10 @@ func swiftmutDiscoverVoidCallSites(
       }
       stats.mutationEligibleApplyInstructions += 1
       let location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)
-      switch swiftmutVoidCallSourceLocation(
+      switch swiftmutStatementCallSourceLocation(
         for: apply,
         mutation: mutation,
+        kind: .void,
         config: config
       ) {
       case .found(let file, let line, let column, let sourceOriginal, let sourceMutated):
@@ -93,6 +94,126 @@ func swiftmutDiscoverVoidCallSites(
   }
 
   return SwiftmutVoidCallDiscoveryResult(sites: sites, stats: stats)
+}
+
+func swiftmutDiscoverStatementDeletionSites(
+  in function: Function,
+  moduleName: String,
+  config: SwiftmutConfig
+) -> SwiftmutStatementDeletionDiscoveryResult {
+  var sites: [SwiftmutStatementDeletionSite] = []
+  var stats = SwiftmutStatementDeletionDiscoveryStats()
+  var localOrdinal = 1
+  let functionName = function.name.string
+
+  for block in function.blocks {
+    for instruction in block.instructions {
+      let mutation: SwiftmutMutation
+      let location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)
+      if let store = instruction as? StoreInst {
+        stats.storeInstructions += 1
+        guard swiftmutCanDeleteStatementAssignment(store) else {
+          continue
+        }
+        stats.assignmentStoreInstructions += 1
+        guard let storeMutation = swiftmutStatementDeletionMutation(for: store, config: config) else {
+          continue
+        }
+        mutation = storeMutation
+        stats.mutationEligibleStoreInstructions += 1
+        guard let storeLocation = swiftmutStatementDeletionSourceLocation(
+          for: store,
+          mutation: mutation,
+          config: config
+        ), swiftmutSourceOriginalIsComplete(storeLocation.sourceOriginal) else {
+          stats.sourceLocationMisses += 1
+          swiftmutLogStatementDeletionSourceLocationMiss(
+            store: store,
+            mutation: mutation,
+            moduleName: moduleName,
+            functionName: functionName,
+            config: config
+          )
+          continue
+        }
+        location = storeLocation
+      } else if let apply = instruction as? ApplyInst {
+        stats.applyInstructions += 1
+        guard !apply.type.isVoid,
+              apply.uses.isEmpty else {
+          continue
+        }
+        stats.unusedResultApplyInstructions += 1
+        guard let applyMutation = swiftmutStatementDeletionMutation(for: apply, config: config) else {
+          continue
+        }
+        mutation = applyMutation
+        stats.mutationEligibleApplyInstructions += 1
+        switch swiftmutStatementCallSourceLocation(
+          for: apply,
+          mutation: mutation,
+          kind: .unusedResult,
+          config: config
+        ) {
+        case .found(let file, let line, let column, let sourceOriginal, let sourceMutated):
+          location = (file, line, column, sourceOriginal, sourceMutated)
+        case .nonStatement:
+          stats.nonStatementSourceLocations += 1
+          swiftmutLogStatementDeletionNonStatementSource(
+            apply: apply,
+            moduleName: moduleName,
+            functionName: functionName,
+            config: config
+          )
+          continue
+        case .missing:
+          stats.sourceLocationMisses += 1
+          continue
+        }
+        guard swiftmutSourceOriginalIsComplete(location.sourceOriginal) else {
+          stats.sourceLocationMisses += 1
+          continue
+        }
+      } else {
+        continue
+      }
+
+      let displayMutation = mutation.withSource(
+        original: location.sourceOriginal,
+        mutated: location.sourceMutated
+      )
+      let siteID = swiftmutStableSiteID(
+        packageRoot: config.packageRoot,
+        module: moduleName,
+        file: location.file,
+        line: location.line,
+        column: location.column,
+        function: functionName,
+        siteKind: "statementDeletion",
+        localOrdinal: localOrdinal
+      )
+      sites.append(SwiftmutStatementDeletionSite(
+        siteID: siteID,
+        runtimeFunctionName: swiftmutRuntimeVisitThunkName(file: location.file, config: config),
+        module: moduleName,
+        function: functionName,
+        file: location.file,
+        line: location.line,
+        column: location.column,
+        instruction: instruction,
+        alternatives: [
+          SwiftmutStatementDeletionAlternative(
+            mutantID: "local-statement-deletion-\(localOrdinal)-1",
+            alternativeIndex: 1,
+            mutation: displayMutation
+          )
+        ]
+      ))
+      localOrdinal += 1
+    }
+  }
+
+  return SwiftmutStatementDeletionDiscoveryResult(sites: sites, stats: stats)
 }
 
 func swiftmutDiscoverConditionSites(
@@ -861,16 +982,16 @@ private func swiftmutValueFeedsConditionBranch(_ value: Value, depth: Int) -> Bo
   return false
 }
 
-private func swiftmutValueApplyCanBypassOriginalApply(_ apply: ApplyInst) -> Bool {
+func swiftmutValueApplyCanBypassOriginalApply(_ apply: ApplyInst) -> Bool {
+  guard apply.callee.ownership != .owned else {
+    return false
+  }
   for argument in apply.argumentOperands {
     guard let convention = apply.convention(of: argument) else {
       return false
     }
     switch convention {
     case .directGuaranteed, .directUnowned, .packGuaranteed:
-      guard argument.value.ownership != .owned else {
-        return false
-      }
       continue
     case .indirectInout, .indirectInoutAliasable, .packInout,
          .indirectIn, .indirectInGuaranteed, .indirectInCXX,

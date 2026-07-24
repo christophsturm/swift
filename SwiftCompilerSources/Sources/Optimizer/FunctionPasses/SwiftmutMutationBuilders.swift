@@ -128,6 +128,37 @@ func swiftmutFirstVoidCallRule(
   return nil
 }
 
+func swiftmutStatementDeletionMutation(
+  for store: StoreInst,
+  config: SwiftmutConfig
+) -> SwiftmutMutation? {
+  guard swiftmutCanDeleteStatementAssignment(store),
+        let rule = swiftmutFirstStatementRule(context: "assignment", config: config) else {
+    return nil
+  }
+
+  return SwiftmutMutation(
+    originalID: nil,
+    mutator: rule.mutator,
+    mutatedBuiltinName: rule.mutatedBuiltinName,
+    sourceOriginal: rule.sourceOriginal,
+    sourceMutated: rule.sourceMutated,
+    silOriginal: store.description,
+    silMutated: rule.silMutated)
+}
+
+func swiftmutFirstStatementRule(
+  context: String,
+  config: SwiftmutConfig
+) -> SwiftmutStatementMutationRule? {
+  for rule in config.statementMutationRules where rule.context == context {
+    if swiftmutMutatorIsEnabled(rule.mutator, config: config) {
+      return rule
+    }
+  }
+  return nil
+}
+
 func swiftmutMutations(
   for builtin: BuiltinInst,
   config: SwiftmutConfig
@@ -515,6 +546,28 @@ func swiftmutMakeEmptyString(
     SubstitutionMap(),
     arguments: []
   )
+}
+
+func swiftmutStatementDeletionMutation(
+  for apply: ApplyInst,
+  config: SwiftmutConfig
+) -> SwiftmutMutation? {
+  guard !apply.type.isVoid,
+        !apply.isCalleeNoReturn,
+        apply.uses.isEmpty,
+        swiftmutValueApplyCanBypassOriginalApply(apply),
+        let rule = swiftmutFirstStatementRule(context: "unusedCall", config: config) else {
+    return nil
+  }
+
+  return SwiftmutMutation(
+    originalID: nil,
+    mutator: rule.mutator,
+    mutatedBuiltinName: rule.mutatedBuiltinName,
+    sourceOriginal: rule.sourceOriginal,
+    sourceMutated: rule.sourceMutated,
+    silOriginal: apply.description,
+    silMutated: rule.silMutated)
 }
 
 func swiftmutEmptyStringFunction(

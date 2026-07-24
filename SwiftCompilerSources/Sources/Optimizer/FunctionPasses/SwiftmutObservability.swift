@@ -96,6 +96,58 @@ func swiftmutLogAssignmentValueSourceLocationMiss(
     ])
 }
 
+func swiftmutLogStatementDeletionSourceLocationMiss(
+  store: StoreInst,
+  mutation: SwiftmutMutation,
+  moduleName: String,
+  functionName: String,
+  config: SwiftmutConfig
+) {
+  swiftmutLogEvent(
+    "statementDeletionSourceLocationMiss",
+    config: config,
+    fields: [
+      ("mode", swiftmutModeName(config.mode)),
+      ("module", moduleName),
+      ("function", functionName),
+      ("functionLocation", store.parentFunction.location.description),
+      ("storeLocation", store.location.description),
+      ("sourceLocation", store.source.definingInstruction?.location.description ?? "<no defining instruction>"),
+      ("destinationNames", swiftmutAssignmentDestinationNames(for: store).joined(separator: ",")),
+      ("sourceNames", swiftmutAssignmentSourceNames(for: store).joined(separator: ",")),
+      ("sourceOwnership", "\(store.source.ownership)"),
+      ("mutator", mutation.mutator)
+    ])
+}
+
+func swiftmutLogStatementDeletionNonStatementSource(
+  apply: ApplyInst,
+  moduleName: String,
+  functionName: String,
+  config: SwiftmutConfig
+) {
+  let position = apply.location.fileNameAndPosition
+  let sourceLine: String
+  if let position,
+     let path = swiftmutIncludedSourcePath(position.path.string, config: config) {
+    sourceLine = swiftmutAbsoluteSourceLine(path: path, line: position.line) ?? ""
+  } else {
+    sourceLine = ""
+  }
+  swiftmutLogEvent(
+    "statementDeletionNonStatementSource",
+    config: config,
+    fields: [
+      ("mode", swiftmutModeName(config.mode)),
+      ("module", moduleName),
+      ("function", functionName),
+      ("functionLocation", apply.parentFunction.location.description),
+      ("applyLocation", apply.location.description),
+      ("sourceLine", sourceLine),
+      ("callee", apply.callee.description)
+    ])
+}
+
 func swiftmutLogValueApplySourceLocationMiss(
   apply: ApplyInst,
   mutation: SwiftmutMutation,

@@ -819,3 +819,185 @@ func swiftmutInjectVoidCallSite(
   site.apply.replace(with: selectedVoid, context)
   return true
 }
+
+func swiftmutInjectStatementDeletionSite(
+  _ site: SwiftmutStatementDeletionSite,
+  _ context: FunctionPassContext
+) -> Bool {
+  if let store = site.instruction as? StoreInst {
+    return swiftmutInjectStatementDeletionStoreSite(site, store: store, context)
+  }
+  if let apply = site.instruction as? ApplyInst {
+    return swiftmutInjectStatementDeletionApplySite(site, apply: apply, context)
+  }
+  return false
+}
+
+private func swiftmutInjectStatementDeletionStoreSite(
+  _ site: SwiftmutStatementDeletionSite,
+  store: StoreInst,
+  _ context: FunctionPassContext
+) -> Bool {
+  guard swiftmutCanDeleteStatementAssignment(store),
+        let visitFunction = swiftmutRuntimeVisitFunction(
+          named: site.runtimeFunctionName,
+          context,
+          originalFunction: store.parentFunction
+        ),
+        let siteID = swiftmutMakeRuntimeSiteID(
+          site.siteID,
+          visitFunction: visitFunction,
+          insertionPoint: store,
+          context
+        ) else {
+    return false
+  }
+
+  let function = store.parentFunction
+  let originalPredecessorBlock = store.parentBlock
+  let continuationBlock = context.splitBlock(before: store)
+  let originalBlock = function.appendNewBlock(context)
+  let alternativeBlocks = site.alternatives.map { _ in function.appendNewBlock(context) }
+  let checkBlocks = site.alternatives.dropFirst().map { _ in function.appendNewBlock(context) }
+
+  let dispatchBuilder = Builder(atEndOf: originalPredecessorBlock, location: store.location, context)
+  let visitRef = dispatchBuilder.createFunctionRef(visitFunction)
+  let choice = dispatchBuilder.createApply(
+    function: visitRef,
+    SubstitutionMap(),
+    arguments: [siteID]
+  )
+  guard let rawChoice = swiftmutRuntimeChoiceRawValue(
+    choice,
+    builder: dispatchBuilder,
+    function: function
+  ) else {
+    return false
+  }
+
+  for (index, _) in site.alternatives.enumerated() {
+    let builder = Builder(atEndOf: alternativeBlocks[index], location: store.location, context)
+    if store.source.ownership == .owned {
+      builder.createDestroyValue(operand: store.source)
+    }
+    builder.createBranch(to: continuationBlock, arguments: [])
+  }
+
+  let originalBuilder = Builder(atEndOf: originalBlock, location: store.location, context)
+  originalBuilder.createStore(
+    source: store.source,
+    destination: store.destination,
+    ownership: store.storeOwnership
+  )
+  originalBuilder.createBranch(to: continuationBlock, arguments: [])
+
+  for (index, alternative) in site.alternatives.enumerated() {
+    let builder = index == 0
+      ? dispatchBuilder
+      : Builder(atEndOf: checkBlocks[index - 1], location: store.location, context)
+    let nextBlock = index + 1 < site.alternatives.count
+      ? checkBlocks[index]
+      : originalBlock
+    let alternativeLiteral = builder.createIntegerLiteral(alternative.alternativeIndex, type: rawChoice.type)
+    let isSelected = builder.createBuiltinBinaryFunction(
+      name: "cmp_eq",
+      operandType: rawChoice.type,
+      resultType: context.getBuiltinIntegerType(bitWidth: 1),
+      arguments: [rawChoice, alternativeLiteral]
+    )
+    builder.createCondBranch(
+      condition: isSelected,
+      trueBlock: alternativeBlocks[index],
+      falseBlock: nextBlock
+    )
+  }
+
+  context.erase(instruction: store)
+  return true
+}
+
+private func swiftmutInjectStatementDeletionApplySite(
+  _ site: SwiftmutStatementDeletionSite,
+  apply: ApplyInst,
+  _ context: FunctionPassContext
+) -> Bool {
+  guard !apply.type.isVoid,
+        !apply.isCalleeNoReturn,
+        apply.uses.isEmpty,
+        swiftmutValueApplyCanBypassOriginalApply(apply),
+        let visitFunction = swiftmutRuntimeVisitFunction(
+          named: site.runtimeFunctionName,
+          context,
+          originalFunction: apply.parentFunction
+        ),
+        let siteID = swiftmutMakeRuntimeSiteID(
+          site.siteID,
+          visitFunction: visitFunction,
+          insertionPoint: apply,
+          context
+        ) else {
+    return false
+  }
+
+  let function = apply.parentFunction
+  let originalPredecessorBlock = apply.parentBlock
+  let continuationBlock = context.splitBlock(before: apply)
+  let originalBlock = function.appendNewBlock(context)
+  let alternativeBlocks = site.alternatives.map { _ in function.appendNewBlock(context) }
+  let checkBlocks = site.alternatives.dropFirst().map { _ in function.appendNewBlock(context) }
+
+  let dispatchBuilder = Builder(atEndOf: originalPredecessorBlock, location: apply.location, context)
+  let visitRef = dispatchBuilder.createFunctionRef(visitFunction)
+  let choice = dispatchBuilder.createApply(
+    function: visitRef,
+    SubstitutionMap(),
+    arguments: [siteID]
+  )
+  guard let rawChoice = swiftmutRuntimeChoiceRawValue(
+    choice,
+    builder: dispatchBuilder,
+    function: function
+  ) else {
+    return false
+  }
+
+  for (index, _) in site.alternatives.enumerated() {
+    Builder(atEndOf: alternativeBlocks[index], location: apply.location, context)
+      .createBranch(to: continuationBlock, arguments: [])
+  }
+
+  let originalBuilder = Builder(atEndOf: originalBlock, location: apply.location, context)
+  _ = originalBuilder.createApply(
+    function: apply.callee,
+    apply.substitutionMap,
+    arguments: Array(apply.arguments),
+    isNonThrowing: apply.isNonThrowing,
+    isNonAsync: apply.isNonAsync,
+    specializationInfo: apply.specializationInfo
+  )
+  originalBuilder.createBranch(to: continuationBlock, arguments: [])
+
+  for (index, alternative) in site.alternatives.enumerated() {
+    let builder = index == 0
+      ? dispatchBuilder
+      : Builder(atEndOf: checkBlocks[index - 1], location: apply.location, context)
+    let nextBlock = index + 1 < site.alternatives.count
+      ? checkBlocks[index]
+      : originalBlock
+    let alternativeLiteral = builder.createIntegerLiteral(alternative.alternativeIndex, type: rawChoice.type)
+    let isSelected = builder.createBuiltinBinaryFunction(
+      name: "cmp_eq",
+      operandType: rawChoice.type,
+      resultType: context.getBuiltinIntegerType(bitWidth: 1),
+      arguments: [rawChoice, alternativeLiteral]
+    )
+    builder.createCondBranch(
+      condition: isSelected,
+      trueBlock: alternativeBlocks[index],
+      falseBlock: nextBlock
+    )
+  }
+
+  context.erase(instruction: apply)
+  return true
+}

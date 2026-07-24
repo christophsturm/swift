@@ -231,6 +231,31 @@ private func swiftmutVoidCallAlternativeJSON(_ alternative: SwiftmutVoidCallAlte
     mutation: alternative.mutation)
 }
 
+func swiftmutStatementDeletionSiteJSON(_ site: SwiftmutStatementDeletionSite) -> String {
+  var fields: [String] = []
+  fields.append(#""siteID":\#(site.siteID)"#)
+  fields.append(#""module":"\#(swiftmutEscapeJSON(site.module))""#)
+  fields.append(#""function":"\#(swiftmutEscapeJSON(site.function))""#)
+  fields.append(
+    #""sourceLocation":{"file":"\#(swiftmutEscapeJSON(site.file))","line":\#(site.line),"column":\#(site.column)}"#
+  )
+  fields.append(#""siteKind":"statementDeletion""#)
+  fields.append(#""resultKind":"statement""#)
+  fields.append(
+    #""alternatives":[\#(site.alternatives.map(swiftmutStatementDeletionAlternativeJSON).joined(separator: ","))]"#
+  )
+  return "{\(fields.joined(separator: ","))}"
+}
+
+private func swiftmutStatementDeletionAlternativeJSON(
+  _ alternative: SwiftmutStatementDeletionAlternative
+) -> String {
+  swiftmutAlternativeJSON(
+    mutantID: alternative.mutantID,
+    alternativeIndex: alternative.alternativeIndex,
+    mutation: alternative.mutation)
+}
+
 private func swiftmutValueSiteJSON(
   siteID: UInt64,
   module: String,

@@ -553,15 +553,6 @@ func swiftmutScalarValueSourceLocation(
   if let fileNameAndPosition = value.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
-      if let assignment = swiftmutFindAssignmentValueSourceLocation(
-        path: matchedPath,
-        preferredLine: fileNameAndPosition.line,
-        mutation: mutation,
-        config: config,
-        requiresDirectValueExpression: true
-      ), let usable = usableScalarSourceLocation(assignment, path: matchedPath) {
-        return usable
-      }
       if let returned = swiftmutFindReturnedScalarValueSourceLocation(
         for: value,
         path: matchedPath,
@@ -610,15 +601,6 @@ func swiftmutScalarValueSourceLocation(
   }
 
   if let functionSourceLocation {
-    if let anchored = swiftmutFindAssignmentValueSourceLocation(
-      path: functionSourceLocation.path,
-      preferredLine: functionSourceLocation.line,
-      mutation: mutation,
-      config: config,
-      requiresDirectValueExpression: true
-    ), let usable = usableScalarSourceLocation(anchored, path: functionSourceLocation.path) {
-      return usable
-    }
     if let anchored = swiftmutFindReturnedScalarValueSourceLocation(
       for: value,
       path: functionSourceLocation.path,

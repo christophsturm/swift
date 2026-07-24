@@ -110,6 +110,12 @@ struct SwiftmutVoidCallAlternative {
   let mutation: SwiftmutMutation
 }
 
+struct SwiftmutStatementDeletionAlternative {
+  let mutantID: String
+  let alternativeIndex: UInt32
+  let mutation: SwiftmutMutation
+}
+
 struct SwiftmutReturnSite {
   let siteID: UInt64
   let runtimeFunctionName: String
@@ -302,8 +308,41 @@ struct SwiftmutVoidCallDiscoveryResult {
   let stats: SwiftmutVoidCallDiscoveryStats
 }
 
+struct SwiftmutStatementDeletionSite {
+  let siteID: UInt64
+  let runtimeFunctionName: String
+  let module: String
+  let function: String
+  let file: String
+  let line: Int
+  let column: Int
+  let instruction: Instruction
+  let alternatives: [SwiftmutStatementDeletionAlternative]
+}
+
+struct SwiftmutStatementDeletionDiscoveryStats {
+  var storeInstructions = 0
+  var assignmentStoreInstructions = 0
+  var mutationEligibleStoreInstructions = 0
+  var applyInstructions = 0
+  var unusedResultApplyInstructions = 0
+  var mutationEligibleApplyInstructions = 0
+  var sourceLocationMisses = 0
+  var nonStatementSourceLocations = 0
+}
+
+struct SwiftmutStatementDeletionDiscoveryResult {
+  let sites: [SwiftmutStatementDeletionSite]
+  let stats: SwiftmutStatementDeletionDiscoveryStats
+}
+
 enum SwiftmutVoidCallSourceLocationResult {
   case found(file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)
   case nonStatement
   case missing
+}
+
+enum SwiftmutStatementCallKind {
+  case void
+  case unusedResult
 }

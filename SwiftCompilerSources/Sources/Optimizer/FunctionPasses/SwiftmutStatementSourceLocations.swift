@@ -12,9 +12,145 @@
 import AST
 import SIL
 
-func swiftmutVoidCallSourceLocation(
+func swiftmutStatementDeletionSourceLocation(
+  for store: StoreInst,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  let targetNames = swiftmutAssignmentDestinationNames(for: store)
+
+  var candidates: [(path: String, line: Int)] = []
+  if let position = store.location.fileNameAndPosition {
+    candidates.append((position.path.string, position.line))
+  }
+  if let position = store.source.definingInstruction?.location.fileNameAndPosition {
+    candidates.append((position.path.string, position.line))
+  }
+
+  var seen = Set<String>()
+  for candidate in candidates {
+    guard candidate.line > 0,
+          let path = swiftmutIncludedSourcePath(candidate.path, config: config),
+          seen.insert("\(path):\(candidate.line)").inserted,
+          let sourceLine = swiftmutAbsoluteSourceLine(path: path, line: candidate.line),
+          swiftmutSourceLineIsReassignment(sourceLine) else {
+      continue
+    }
+    let namedExpression = targetNames.isEmpty
+      ? nil
+      : swiftmutAssignmentValueExpression(
+        sourceLine,
+        mutation: mutation,
+        targetNames: targetNames,
+        requiresDirectValueExpression: false
+      )
+    let locationIsUnique = swiftmutStatementDeletionStoreLocationIsUnique(
+      store,
+      path: path,
+      line: candidate.line,
+      config: config
+    )
+    let expression = namedExpression ?? (locationIsUnique
+      ? swiftmutAssignmentValueExpression(
+        sourceLine,
+        mutation: mutation,
+        requiresDirectValueExpression: false
+      )
+      : nil)
+    guard let expression else {
+      continue
+    }
+    return (
+      swiftmutTrimPackageRoot(path, config: config),
+      candidate.line,
+      expression.column,
+      expression.sourceOriginal,
+      mutation.sourceMutated)
+  }
+
+  if let functionLocation = swiftmutFunctionSourceLocation(
+    for: store.parentFunction,
+    config: config
+  ) {
+    if let described = swiftmutFindScopedDescribedAssignmentValueSourceLocation(
+      path: functionLocation.path,
+      functionLine: functionLocation.line,
+      locationDescription: store.location.description,
+      mutation: mutation,
+      config: config,
+      targetNames: targetNames
+    ), swiftmutStatementDeletionLocationIsReassignment(described, config: config) {
+      return described
+    }
+    if let scoped = swiftmutFindScopedAssignmentValueSourceLocation(
+      path: functionLocation.path,
+      functionLine: functionLocation.line,
+      mutation: mutation,
+      config: config,
+      targetNames: targetNames,
+      requiresDirectValueExpression: false
+    ), swiftmutStatementDeletionLocationIsReassignment(scoped, config: config) {
+      return scoped
+    }
+  }
+  return nil
+}
+
+private func swiftmutStatementDeletionLocationIsReassignment(
+  _ location: (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String),
+  config: SwiftmutConfig
+) -> Bool {
+  guard let sourceLine = swiftmutSourceLine(
+    file: location.file,
+    line: location.line,
+    config: config
+  ) else {
+    return false
+  }
+  return swiftmutSourceLineIsReassignment(sourceLine)
+}
+
+private func swiftmutStatementDeletionStoreLocationIsUnique(
+  _ store: StoreInst,
+  path: String,
+  line: Int,
+  config: SwiftmutConfig
+) -> Bool {
+  var matchingStores = 0
+  for block in store.parentFunction.blocks {
+    for instruction in block.instructions {
+      guard let candidate = instruction as? StoreInst,
+            swiftmutCanDeleteStatementAssignment(candidate),
+            let position = candidate.location.fileNameAndPosition,
+            position.line == line,
+            swiftmutIncludedSourcePath(position.path.string, config: config) == path else {
+        continue
+      }
+      matchingStores += 1
+      if matchingStores > 1 {
+        return false
+      }
+    }
+  }
+  return matchingStores == 1
+}
+
+private func swiftmutSourceLineIsReassignment(_ line: String) -> Bool {
+  let bytes = Array(line.utf8)
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  guard start < bytes.count,
+        !swiftmutASCIIHasPrefix(bytes, start: start, prefix: "//"),
+        !swiftmutASCIIHasExactPrefix(bytes, start: start, prefix: "let "),
+        !swiftmutASCIIHasExactPrefix(bytes, start: start, prefix: "var ") else {
+    return false
+  }
+  return true
+}
+
+func swiftmutStatementCallSourceLocation(
   for apply: ApplyInst,
   mutation: SwiftmutMutation,
+  kind: SwiftmutStatementCallKind,
   config: SwiftmutConfig
 ) -> SwiftmutVoidCallSourceLocationResult {
   let functionSourceLocation = swiftmutFunctionSourceLocation(
@@ -44,11 +180,12 @@ func swiftmutVoidCallSourceLocation(
          fileNameAndPosition.line > functionSourceLocation.line {
         return .nonStatement
       }
-      if let anchored = swiftmutFindCalleeOrdinalVoidCallSourceLocation(
+      if let anchored = swiftmutFindCalleeOrdinalStatementCallSourceLocation(
         for: apply,
         path: matchedPath,
         preferredLine: fileNameAndPosition.line,
         mutation: mutation,
+        kind: kind,
         config: config
       ) {
         return .found(
@@ -59,11 +196,15 @@ func swiftmutVoidCallSourceLocation(
           sourceMutated: anchored.sourceMutated
         )
       }
-      if swiftmutMutationEligibleVoidCallCount(in: apply.parentFunction, config: config) == 1,
+      if swiftmutMutationEligibleStatementCallCount(
+        in: apply.parentFunction,
+        kind: kind,
+        config: config
+      ) == 1,
          let functionSourceLocation,
          functionSourceLocation.path == matchedPath,
          fileNameAndPosition.line <= functionSourceLocation.line,
-         let anchored = swiftmutFindUniqueVoidCallSourceLocation(
+         let anchored = swiftmutFindUniqueStatementCallSourceLocation(
            path: matchedPath,
            preferredLine: fileNameAndPosition.line,
            mutation: mutation,
@@ -79,11 +220,12 @@ func swiftmutVoidCallSourceLocation(
       }
       if let functionSourceLocation,
          functionSourceLocation.path == matchedPath,
-         let anchored = swiftmutFindCalleeOrdinalVoidCallSourceLocation(
+         let anchored = swiftmutFindCalleeOrdinalStatementCallSourceLocation(
            for: apply,
            path: matchedPath,
            preferredLine: functionSourceLocation.line,
            mutation: mutation,
+           kind: kind,
            config: config
          ) {
         return .found(
@@ -119,11 +261,12 @@ func swiftmutVoidCallSourceLocation(
        fallback.line > functionSourceLocation.line {
       return .nonStatement
     }
-    if let anchored = swiftmutFindCalleeOrdinalVoidCallSourceLocation(
+    if let anchored = swiftmutFindCalleeOrdinalStatementCallSourceLocation(
       for: apply,
       path: fallbackPath,
       preferredLine: fallback.line,
       mutation: mutation,
+      kind: kind,
       config: config
     ) {
       return .found(
@@ -134,11 +277,15 @@ func swiftmutVoidCallSourceLocation(
         sourceMutated: anchored.sourceMutated
       )
     }
-    if swiftmutMutationEligibleVoidCallCount(in: apply.parentFunction, config: config) == 1,
+    if swiftmutMutationEligibleStatementCallCount(
+      in: apply.parentFunction,
+      kind: kind,
+      config: config
+    ) == 1,
        let functionSourceLocation,
        functionSourceLocation.path == fallbackPath,
        fallback.line <= functionSourceLocation.line,
-       let anchored = swiftmutFindUniqueVoidCallSourceLocation(
+       let anchored = swiftmutFindUniqueStatementCallSourceLocation(
          path: fallbackPath,
          preferredLine: fallback.line,
          mutation: mutation,
@@ -154,11 +301,12 @@ func swiftmutVoidCallSourceLocation(
     }
     if let functionSourceLocation,
        functionSourceLocation.path == fallbackPath,
-       let anchored = swiftmutFindCalleeOrdinalVoidCallSourceLocation(
+       let anchored = swiftmutFindCalleeOrdinalStatementCallSourceLocation(
          for: apply,
          path: fallbackPath,
          preferredLine: functionSourceLocation.line,
          mutation: mutation,
+         kind: kind,
          config: config
        ) {
       return .found(
@@ -175,21 +323,27 @@ func swiftmutVoidCallSourceLocation(
   return .missing
 }
 
-func swiftmutFindCalleeOrdinalVoidCallSourceLocation(
+func swiftmutFindCalleeOrdinalStatementCallSourceLocation(
   for apply: ApplyInst,
   path: String,
   preferredLine: Int,
   mutation: SwiftmutMutation,
+  kind: SwiftmutStatementCallKind,
   config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
   let identifiers = swiftmutSourceExpressionIdentifiers(for: apply)
   guard !identifiers.isEmpty,
-        let ordinal = swiftmutVoidCallOrdinalAndCount(for: apply, matchingAnyOf: identifiers, config: config),
+        let ordinal = swiftmutStatementCallOrdinalAndCount(
+          for: apply,
+          matchingAnyOf: identifiers,
+          kind: kind,
+          config: config
+        ),
         let text = swiftmutRead(path) else {
     return nil
   }
 
-  let candidates = swiftmutCalleeVoidCallSourceCandidates(
+  let candidates = swiftmutCalleeStatementCallSourceCandidates(
     in: text,
     path: path,
     preferredLine: preferredLine,
@@ -205,9 +359,10 @@ func swiftmutFindCalleeOrdinalVoidCallSourceLocation(
   return candidates[ordinal.ordinal - 1]
 }
 
-func swiftmutVoidCallOrdinalAndCount(
+func swiftmutStatementCallOrdinalAndCount(
   for apply: ApplyInst,
   matchingAnyOf identifiers: [String],
+  kind: SwiftmutStatementCallKind,
   config: SwiftmutConfig
 ) -> (ordinal: Int, count: Int)? {
   var ordinal = 0
@@ -215,8 +370,7 @@ func swiftmutVoidCallOrdinalAndCount(
   for block in apply.parentFunction.blocks {
     for instruction in block.instructions {
       guard let candidate = instruction as? ApplyInst,
-            candidate.type.isVoid,
-            swiftmutVoidCallMutation(for: candidate, config: config) != nil,
+            swiftmutStatementCallIsEligible(candidate, kind: kind, config: config),
             swiftmutSourceCalleeIdentifiers(for: candidate).contains(where: { identifiers.contains($0) }) else {
         continue
       }
@@ -232,13 +386,16 @@ func swiftmutVoidCallOrdinalAndCount(
   return (ordinal, count)
 }
 
-func swiftmutMutationEligibleVoidCallCount(in function: Function, config: SwiftmutConfig) -> Int {
+func swiftmutMutationEligibleStatementCallCount(
+  in function: Function,
+  kind: SwiftmutStatementCallKind,
+  config: SwiftmutConfig
+) -> Int {
   var count = 0
   for block in function.blocks {
     for instruction in block.instructions {
       guard let apply = instruction as? ApplyInst,
-            apply.type.isVoid,
-            swiftmutVoidCallMutation(for: apply, config: config) != nil else {
+            swiftmutStatementCallIsEligible(apply, kind: kind, config: config) else {
         continue
       }
       count += 1
@@ -247,7 +404,23 @@ func swiftmutMutationEligibleVoidCallCount(in function: Function, config: Swiftm
   return count
 }
 
-func swiftmutCalleeVoidCallSourceCandidates(
+private func swiftmutStatementCallIsEligible(
+  _ apply: ApplyInst,
+  kind: SwiftmutStatementCallKind,
+  config: SwiftmutConfig
+) -> Bool {
+  switch kind {
+  case .void:
+    return apply.type.isVoid
+      && swiftmutVoidCallMutation(for: apply, config: config) != nil
+  case .unusedResult:
+    return !apply.type.isVoid
+      && apply.uses.isEmpty
+      && swiftmutStatementDeletionMutation(for: apply, config: config) != nil
+  }
+}
+
+func swiftmutCalleeStatementCallSourceCandidates(
   in text: String,
   path: String,
   preferredLine: Int,
@@ -318,7 +491,7 @@ func swiftmutCalleeVoidCallSourceCandidates(
   return candidates
 }
 
-func swiftmutFindUniqueVoidCallSourceLocation(
+func swiftmutFindUniqueStatementCallSourceLocation(
   path: String,
   preferredLine: Int,
   mutation: SwiftmutMutation,

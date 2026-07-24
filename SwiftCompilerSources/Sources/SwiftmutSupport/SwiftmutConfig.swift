@@ -141,6 +141,27 @@ public struct SwiftmutVoidCallMutationRule {
   }
 }
 
+public struct SwiftmutStatementMutationRule {
+  public let context: String
+  public let mutator: String
+  public let mutatedBuiltinName: String
+  public let sourceOriginal: String
+  public let sourceMutated: String
+  public let silMutated: String
+
+  public init?(wireFormat: String) {
+    guard let fields = swiftmutPipeFields(wireFormat, count: 6) else {
+      return nil
+    }
+    context = fields[0]
+    mutator = fields[1]
+    mutatedBuiltinName = fields[2]
+    sourceOriginal = fields[3]
+    sourceMutated = fields[4]
+    silMutated = fields[5]
+  }
+}
+
 public struct SwiftmutSourceMutationDisplayRule {
   public let mutator: String
   public let builtinID: String
@@ -192,6 +213,7 @@ public struct SwiftmutConfig {
   public let contextualArithmeticMutationRules: [SwiftmutContextualArithmeticMutationRule]
   public let returnMutationRules: [SwiftmutReturnMutationRule]
   public let voidCallMutationRules: [SwiftmutVoidCallMutationRule]
+  public let statementMutationRules: [SwiftmutStatementMutationRule]
   public let sourceMutationDisplayRules: [SwiftmutSourceMutationDisplayRule]
 
   public init(
@@ -209,7 +231,8 @@ public struct SwiftmutConfig {
     contextualArithmeticMutationRules: [SwiftmutContextualArithmeticMutationRule],
     returnMutationRules: [SwiftmutReturnMutationRule],
     voidCallMutationRules: [SwiftmutVoidCallMutationRule],
-    sourceMutationDisplayRules: [SwiftmutSourceMutationDisplayRule]
+    sourceMutationDisplayRules: [SwiftmutSourceMutationDisplayRule],
+    statementMutationRules: [SwiftmutStatementMutationRule] = []
   ) {
     self.mode = mode
     self.activeMutantID = activeMutantID
@@ -226,6 +249,7 @@ public struct SwiftmutConfig {
     self.contextualArithmeticMutationRules = contextualArithmeticMutationRules
     self.returnMutationRules = returnMutationRules
     self.voidCallMutationRules = voidCallMutationRules
+    self.statementMutationRules = statementMutationRules
     self.sourceMutationDisplayRules = sourceMutationDisplayRules
   }
 
@@ -288,6 +312,9 @@ public struct SwiftmutConfig {
     let voidCallMutationRules = fields.stringArray("voidCallMutationRules").compactMap {
       SwiftmutVoidCallMutationRule(wireFormat: $0)
     }
+    let statementMutationRules = fields.stringArray("statementMutationRules").compactMap {
+      SwiftmutStatementMutationRule(wireFormat: $0)
+    }
     let sourceMutationDisplayRules = fields.stringArray("sourceMutationDisplayRules").compactMap {
       SwiftmutSourceMutationDisplayRule(wireFormat: $0)
     }
@@ -307,7 +334,8 @@ public struct SwiftmutConfig {
       contextualArithmeticMutationRules: contextualArithmeticMutationRules,
       returnMutationRules: returnMutationRules,
       voidCallMutationRules: voidCallMutationRules,
-      sourceMutationDisplayRules: sourceMutationDisplayRules)
+      sourceMutationDisplayRules: sourceMutationDisplayRules,
+      statementMutationRules: statementMutationRules)
   }
 
   public func mutatorIsEnabled(_ mutator: String) -> Bool {

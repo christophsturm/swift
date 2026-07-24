@@ -71,6 +71,7 @@ func swiftmutAnyRuntimeVisitFunctionAvailable(
   returnSites: [SwiftmutReturnSite],
   returnBranchSites: [SwiftmutReturnBranchSite],
   voidCallSites: [SwiftmutVoidCallSite],
+  statementDeletionSites: [SwiftmutStatementDeletionSite],
   originalFunction: Function,
   _ context: FunctionPassContext
 ) -> Bool {
@@ -139,6 +140,14 @@ func swiftmutAnyRuntimeVisitFunctionAvailable(
     return true
   }
   for site in voidCallSites
+    where swiftmutRuntimeVisitFunction(
+      named: site.runtimeFunctionName,
+      context,
+      originalFunction: originalFunction
+    ) != nil {
+    return true
+  }
+  for site in statementDeletionSites
     where swiftmutRuntimeVisitFunction(
       named: site.runtimeFunctionName,
       context,

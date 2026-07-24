@@ -237,6 +237,22 @@ func swiftmutCanDispatchAssignmentValue(_ store: StoreInst) -> Bool {
   store.source.type.isTrivial(in: store.parentFunction) || store.source.ownership == .owned
 }
 
+func swiftmutCanDeleteStatementAssignment(_ store: StoreInst) -> Bool {
+  let function = store.parentFunction
+  guard !function.isInitializer,
+        function.accessorKindName == nil else {
+    return false
+  }
+  switch store.storeOwnership {
+  case .assign:
+    return store.source.ownership == .owned
+  case .trivial:
+    return store.source.type.isTrivial(in: function)
+  case .unqualified, .initialize:
+    return false
+  }
+}
+
 func swiftmutAssignmentStoreIsEligible(_ store: StoreInst, config: SwiftmutConfig) -> Bool {
   guard !store.source.type.isAddress else {
     return false

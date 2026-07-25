@@ -54,9 +54,16 @@
 // EVENTS-SAME: "statementDeletionUnusedResultApplyInstructions":"1"
 // EVENTS-SAME: "statementDeletionMutationEligibleApplyInstructions":"1"
 // EVENTS-SAME: "statementDeletionNonStatementSourceLocations":"0"
+// EVENTS: "event":"metamutantDiscovery","module":"SwiftmutStatementDeletionUnusedResultRuntime","function":"{{.*}}swiftmutDiscard{{.*}}AcrossLines
+// EVENTS-SAME: "statementDeletionSites":"1"
+// EVENTS-SAME: "statementDeletionApplyInstructions":"1"
+// EVENTS-SAME: "statementDeletionUnusedResultApplyInstructions":"1"
+// EVENTS-SAME: "statementDeletionMutationEligibleApplyInstructions":"1"
+// EVENTS-SAME: "statementDeletionNonStatementSourceLocations":"0"
 // MANIFEST-NOT: "line":32
 // MANIFEST-DAG: "function":"{{.*}}swiftmutInvoke{{.*}}","sourceLocation":{{.*}}"siteKind":"statementDeletion","resultKind":"statement"
 // MANIFEST-DAG: "function":"{{.*}}swiftmutDiscard{{.*}}InCase{{.*}}","sourceLocation":{{.*}}main.swift","line":33,"column":13{{.*}},"siteKind":"statementDeletion","resultKind":"statement"
+// MANIFEST-DAG: "function":"{{.*}}swiftmutDiscard{{.*}}AcrossLines{{.*}}","sourceLocation":{{.*}}main.swift","line":49,"column":6{{.*}},"siteKind":"statementDeletion","resultKind":"statement"
 // MANIFEST: "mutator":"STATEMENT_DELETIONS"
 // MANIFEST-SAME: "sourceOriginal":"call"
 // MANIFEST-SAME: "sourceMutated":"removed call"
@@ -97,6 +104,21 @@ public func swiftmutDiscardResultInCase(_ payload: SwiftmutPayload) {
   case .number(let value):
     let _ = swiftmutRecordAndReturn(value)
   }
+}
+
+public struct SwiftmutReceiver {
+  public let value: Int
+
+  @inline(never)
+  public func result() -> Int {
+    value
+  }
+}
+
+@inline(never)
+public func swiftmutDiscardResultAcrossLines(_ receiver: SwiftmutReceiver) {
+  _ = receiver
+    .result()
 }
 
 @_silgen_name("__swiftmut_visit")

@@ -441,8 +441,13 @@ func swiftmutFindUniqueDescribedStatementCallSourceLocation(
   var currentLine = 1
   var lineStart = text.startIndex
   var index = text.startIndex
+  var continuesDiscardedCallStatement = false
 
-  func inspectLine(_ lineText: String, line: Int) {
+  func inspectLine(
+    _ lineText: String,
+    line: Int,
+    continuesDiscardedCallStatement: Bool
+  ) {
     guard matches.count < 2 else {
       return
     }
@@ -464,6 +469,12 @@ func swiftmutFindUniqueDescribedStatementCallSourceLocation(
             bytes: bytes,
             start: start,
             callStart: matchStart
+          )
+          || continuesDiscardedCallStatement
+            && swiftmutSourceLineLooksLikeDiscardedCallContinuation(
+              bytes: bytes,
+              start: start,
+              callStart: matchStart
           ) else {
         continue
       }
@@ -474,10 +485,20 @@ func swiftmutFindUniqueDescribedStatementCallSourceLocation(
 
   while index < text.endIndex {
     if text[index] == "\n" {
-      inspectLine(String(text[lineStart..<index]), line: currentLine)
+      let lineText = String(text[lineStart..<index])
+      inspectLine(
+        lineText,
+        line: currentLine,
+        continuesDiscardedCallStatement: continuesDiscardedCallStatement
+      )
       if matches.count >= 2 {
         break
       }
+      continuesDiscardedCallStatement =
+        swiftmutSourceLineContinuesDiscardedCallStatement(
+          lineText,
+          previousLineContinuedDiscard: continuesDiscardedCallStatement
+        )
       currentLine += 1
       lineStart = text.index(after: index)
     }
@@ -485,7 +506,11 @@ func swiftmutFindUniqueDescribedStatementCallSourceLocation(
   }
 
   if index == text.endIndex && matches.count < 2 {
-    inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
+    inspectLine(
+      String(text[lineStart..<text.endIndex]),
+      line: currentLine,
+      continuesDiscardedCallStatement: continuesDiscardedCallStatement
+    )
   }
 
   let selectedMatches: [(line: Int, column: Int)]
@@ -525,6 +550,35 @@ private func swiftmutSourceLineLooksLikeDiscardedCallStatement(
   return swiftmutASCIIHasExactPrefix(bytes, start: start, prefix: "_ = ")
     || swiftmutASCIIHasExactPrefix(bytes, start: start, prefix: "let _ = ")
     || swiftmutASCIIHasExactPrefix(bytes, start: start, prefix: "var _ = ")
+}
+
+private func swiftmutSourceLineLooksLikeDiscardedCallContinuation(
+  bytes: [UInt8],
+  start: Int,
+  callStart: Int
+) -> Bool {
+  guard start < callStart else {
+    return false
+  }
+  return bytes[start] == 46
+}
+
+private func swiftmutSourceLineContinuesDiscardedCallStatement(
+  _ line: String,
+  previousLineContinuedDiscard: Bool
+) -> Bool {
+  let bytes = Array(line.utf8)
+  let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+  let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+  guard start < end else {
+    return false
+  }
+  if swiftmutASCIIHasExactPrefix(bytes, start: start, prefix: "_ = ")
+    || swiftmutASCIIHasExactPrefix(bytes, start: start, prefix: "let _ = ")
+    || swiftmutASCIIHasExactPrefix(bytes, start: start, prefix: "var _ = ") {
+    return true
+  }
+  return previousLineContinuedDiscard && bytes[start] == 46
 }
 
 private func swiftmutSetterAssignmentSourceLocation(

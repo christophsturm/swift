@@ -843,6 +843,13 @@ func swiftmutDiscoverValueApplySites(
         continue
       }
       stats.valueApplyInstructions += 1
+      // Replacing an unused result is behaviorally meaningful only by
+      // bypassing the call, which is the same mutation owned by statement
+      // deletion. Keeping both sites would also make two injectors retain
+      // the same ApplyInst after the first injector replaces it.
+      guard !apply.uses.isEmpty else {
+        continue
+      }
       let preservesOriginalApply: Bool
       if swiftmutValueApplyCanBypassOriginalApply(apply) {
         preservesOriginalApply = false

@@ -48,19 +48,19 @@
 // EVENTS-SAME: "statementDeletionApplyInstructions":"1"
 // EVENTS-SAME: "statementDeletionUnusedResultApplyInstructions":"1"
 // EVENTS-SAME: "statementDeletionMutationEligibleApplyInstructions":"0"
-// EVENTS: "event":"metamutantDiscovery","module":"SwiftmutStatementDeletionUnusedResultRuntime","function":"{{.*}}swiftmutDoNotMapDiscardToCase
-// EVENTS-SAME: "statementDeletionSites":"0"
+// EVENTS: "event":"metamutantDiscovery","module":"SwiftmutStatementDeletionUnusedResultRuntime","function":"{{.*}}swiftmutDiscard{{.*}}InCase
+// EVENTS-SAME: "statementDeletionSites":"1"
 // EVENTS-SAME: "statementDeletionApplyInstructions":"1"
 // EVENTS-SAME: "statementDeletionUnusedResultApplyInstructions":"1"
 // EVENTS-SAME: "statementDeletionMutationEligibleApplyInstructions":"1"
-// EVENTS-SAME: "statementDeletionNonStatementSourceLocations":"1"
-// MANIFEST-NOT: "siteKind":"statementDeletion"
-// MANIFEST: "function":"{{.*}}swiftmutInvoke{{.*}}","sourceLocation":{{.*}}"siteKind":"statementDeletion"
-// MANIFEST-SAME: "resultKind":"statement"
-// MANIFEST-SAME: "mutator":"STATEMENT_DELETIONS"
+// EVENTS-SAME: "statementDeletionNonStatementSourceLocations":"0"
+// MANIFEST-NOT: "line":32
+// MANIFEST-DAG: "function":"{{.*}}swiftmutInvoke{{.*}}","sourceLocation":{{.*}}"siteKind":"statementDeletion","resultKind":"statement"
+// MANIFEST-DAG: "function":"{{.*}}swiftmutDiscard{{.*}}InCase{{.*}}","sourceLocation":{{.*}}main.swift","line":33,"column":13{{.*}},"siteKind":"statementDeletion","resultKind":"statement"
+// MANIFEST: "mutator":"STATEMENT_DELETIONS"
 // MANIFEST-SAME: "sourceOriginal":"call"
 // MANIFEST-SAME: "sourceMutated":"removed call"
-// MANIFEST-NOT: "siteKind":"statementDeletion"
+// MANIFEST-NOT: "line":32
 
 //--- main.swift
 public var swiftmutObserved = 0
@@ -92,7 +92,7 @@ public enum SwiftmutPayload {
 }
 
 @inline(never)
-public func swiftmutDoNotMapDiscardToCase(_ payload: SwiftmutPayload) {
+public func swiftmutDiscardResultInCase(_ payload: SwiftmutPayload) {
   switch payload {
   case .number(let value):
     let _ = swiftmutRecordAndReturn(value)

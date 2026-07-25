@@ -157,6 +157,34 @@ func swiftmutStatementCallSourceLocation(
     for: apply.parentFunction,
     config: config
   )
+  if kind == .unusedResult {
+    var describedPaths: [String] = []
+    if let functionSourceLocation {
+      describedPaths.append(functionSourceLocation.path)
+    }
+    for path in swiftmutSwiftSourcePaths(config: config)
+        where apply.parentFunction.location.description.contains(path)
+          && !describedPaths.contains(path) {
+      describedPaths.append(path)
+    }
+    for path in describedPaths {
+      if let described = swiftmutFindUniqueDescribedStatementCallSourceLocation(
+        path: path,
+        locationDescription: apply.location.description,
+        mutation: mutation,
+        function: apply.parentFunction,
+        config: config
+      ) {
+        return .found(
+          file: described.file,
+          line: described.line,
+          column: described.column,
+          sourceOriginal: described.sourceOriginal,
+          sourceMutated: described.sourceMutated
+        )
+      }
+    }
+  }
   if let fileNameAndPosition = apply.location.fileNameAndPosition {
     let path = fileNameAndPosition.path.string
     if let matchedPath = swiftmutIncludedSourcePath(path, config: config) {
@@ -272,6 +300,22 @@ func swiftmutStatementCallSourceLocation(
     let fallbackPath = fallback.file.hasPrefix("/") || config.packageRoot.isEmpty
       ? fallback.file
       : config.packageRoot + "/" + fallback.file
+    if kind == .unusedResult,
+       let described = swiftmutFindUniqueDescribedStatementCallSourceLocation(
+         path: fallbackPath,
+         locationDescription: apply.location.description,
+         mutation: mutation,
+         function: apply.parentFunction,
+         config: config
+       ) {
+      return .found(
+        file: described.file,
+        line: described.line,
+        column: described.column,
+        sourceOriginal: described.sourceOriginal,
+        sourceMutated: described.sourceMutated
+      )
+    }
     if kind == .void,
        let setterAssignment = swiftmutSetterAssignmentSourceLocation(
          for: apply,
@@ -373,6 +417,114 @@ func swiftmutStatementCallSourceLocation(
   }
 
   return .missing
+}
+
+func swiftmutFindUniqueDescribedStatementCallSourceLocation(
+  path: String,
+  locationDescription: String,
+  mutation: SwiftmutMutation,
+  function: Function,
+  config: SwiftmutConfig
+) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  guard let snippet = swiftmutQuotedSourceSnippetPrefix(locationDescription),
+        swiftmutDescribedValueSnippetLooksMappable(snippet),
+        let text = swiftmutRead(path) else {
+    return nil
+  }
+
+  let prefixes = swiftmutDescribedValueSnippetPrefixes(snippet)
+  guard !prefixes.isEmpty else {
+    return nil
+  }
+
+  var matches: [(line: Int, column: Int)] = []
+  var currentLine = 1
+  var lineStart = text.startIndex
+  var index = text.startIndex
+
+  func inspectLine(_ lineText: String, line: Int) {
+    guard matches.count < 2 else {
+      return
+    }
+    let bytes = Array(lineText.utf8)
+    let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
+    let end = swiftmutTrimTrailingHorizontalWhitespace(bytes, end: bytes.count)
+    guard start < end else {
+      return
+    }
+
+    for prefix in prefixes {
+      guard let matchStart = swiftmutASCIIIndex(
+        bytes,
+        start: start,
+        end: end,
+        pattern: prefix
+      ), swiftmutSourceLineLooksLikeVoidCallStatement(lineText)
+          || swiftmutSourceLineLooksLikeDiscardedCallStatement(
+            bytes: bytes,
+            start: start,
+            callStart: matchStart
+          ) else {
+        continue
+      }
+      matches.append((line, matchStart + 1))
+      return
+    }
+  }
+
+  while index < text.endIndex {
+    if text[index] == "\n" {
+      inspectLine(String(text[lineStart..<index]), line: currentLine)
+      if matches.count >= 2 {
+        break
+      }
+      currentLine += 1
+      lineStart = text.index(after: index)
+    }
+    index = text.index(after: index)
+  }
+
+  if index == text.endIndex && matches.count < 2 {
+    inspectLine(String(text[lineStart..<text.endIndex]), line: currentLine)
+  }
+
+  let selectedMatches: [(line: Int, column: Int)]
+  if matches.count > 1 {
+    selectedMatches = matches.filter {
+      swiftmutSourceLineBelongsToFunction(
+        $0.line,
+        path: path,
+        function: function,
+        config: config
+      )
+    }
+  } else {
+    selectedMatches = matches
+  }
+  guard selectedMatches.count == 1,
+        let match = selectedMatches.first else {
+    return nil
+  }
+  return (
+    swiftmutTrimPackageRoot(path, config: config),
+    match.line,
+    match.column,
+    mutation.sourceOriginal,
+    mutation.sourceMutated
+  )
+}
+
+private func swiftmutSourceLineLooksLikeDiscardedCallStatement(
+  bytes: [UInt8],
+  start: Int,
+  callStart: Int
+) -> Bool {
+  guard start < callStart else {
+    return false
+  }
+  return swiftmutASCIIHasExactPrefix(bytes, start: start, prefix: "_ = ")
+    || swiftmutASCIIHasExactPrefix(bytes, start: start, prefix: "let _ = ")
+    || swiftmutASCIIHasExactPrefix(bytes, start: start, prefix: "var _ = ")
 }
 
 private func swiftmutSetterAssignmentSourceLocation(

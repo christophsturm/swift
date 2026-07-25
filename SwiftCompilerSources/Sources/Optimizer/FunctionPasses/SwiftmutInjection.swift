@@ -247,7 +247,7 @@ func swiftmutInjectReturnBranchSite(
 
   let valueType = currentValue.type
   let function = site.branch.parentFunction
-  guard valueType.isTrivial(in: function),
+  guard swiftmutReturnValueCanBeReplaced(currentValue, in: function),
         site.alternatives.allSatisfy({
           swiftmutCanMakeReturnAlternative(
             $0.mutation,
@@ -291,6 +291,9 @@ func swiftmutInjectReturnBranchSite(
       builder: builder
     ) else {
       return false
+    }
+    if !valueType.isTrivial(in: function) {
+      builder.createDestroyValue(operand: currentValue)
     }
     builder.createBranch(to: targetBlock, arguments: [replacement])
   }
@@ -701,6 +704,9 @@ func swiftmutInjectAssignmentValueSite(
       builder: builder
     ) else {
       return false
+    }
+    if !valueType.isTrivial(in: function) {
+      builder.createDestroyValue(operand: site.store.source)
     }
     builder.createBranch(to: continuationBlock, arguments: [replacement])
   }

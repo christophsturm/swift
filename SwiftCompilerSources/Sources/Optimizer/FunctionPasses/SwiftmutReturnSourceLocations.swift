@@ -833,6 +833,14 @@ func swiftmutFindReturnBranchSourceLocation(
   mutation: SwiftmutMutation,
   config: SwiftmutConfig
 ) -> (file: String, line: Int, column: Int, sourceOriginal: String, sourceMutated: String)? {
+  if let exactValue = swiftmutFindUniqueExplicitReturnValueExpressionSourceLocation(
+    path: path,
+    preferredLine: preferredLine,
+    mutation: mutation,
+    config: config
+  ) {
+    return exactValue
+  }
   if let exact = swiftmutFindUniqueExplicitReturnSourceLocation(
     path: path,
     preferredLine: preferredLine,

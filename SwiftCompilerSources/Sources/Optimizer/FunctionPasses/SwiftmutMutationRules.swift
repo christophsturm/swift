@@ -185,7 +185,7 @@ func swiftmutReturnBranchMutations(
 ) -> [SwiftmutMutation] {
   guard swiftmutBranchFeedsReturnValue(branch),
         let value = branch.operands.first?.value,
-        value.type.isTrivial(in: branch.parentFunction) else {
+        swiftmutReturnValueCanBeReplaced(value, in: branch.parentFunction) else {
     return []
   }
   if let structInst = value.definingInstruction as? StructInst,
@@ -196,7 +196,9 @@ func swiftmutReturnBranchMutations(
     valueType: value.type,
     function: branch.parentFunction,
     config: config
-  )
+  ).filter { mutation in
+    swiftmutValueReplacementChangesConcreteValue(mutation, source: value)
+  }
 }
 
 func swiftmutAssignmentValueMutations(
@@ -211,11 +213,11 @@ func swiftmutAssignmentValueMutations(
     function: store.parentFunction,
     config: config
   ).filter { mutation in
-    swiftmutAssignmentMutationChangesConcreteValue(mutation, source: store.source)
+    swiftmutValueReplacementChangesConcreteValue(mutation, source: store.source)
   }
 }
 
-func swiftmutAssignmentMutationChangesConcreteValue(
+func swiftmutValueReplacementChangesConcreteValue(
   _ mutation: SwiftmutMutation,
   source: Value
 ) -> Bool {

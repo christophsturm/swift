@@ -489,6 +489,10 @@ func swiftmutDiscoverReturnSites(
     guard let location = sourceLocation, !alternatives.isEmpty else {
       continue
     }
+    guard !swiftmutReturnValueIsFedByBranches(returnInst)
+      || location.sourceOriginal != "return" else {
+      continue
+    }
 
     let siteID = swiftmutStableSiteID(
       packageRoot: config.packageRoot,
@@ -521,6 +525,20 @@ func swiftmutDiscoverReturnSites(
 
 func swiftmutReturnValueCanBeReplaced(_ value: Value, in function: Function) -> Bool {
   value.type.isTrivial(in: function) || value.ownership == .owned
+}
+
+func swiftmutReturnValueIsFedByBranches(_ returnInst: ReturnInst) -> Bool {
+  for block in returnInst.parentFunction.blocks {
+    guard let branch = block.terminator as? BranchInst else {
+      continue
+    }
+    if swiftmutBranchFeedsReturnValue(branch),
+       let targetReturn = branch.targetBlock.terminator as? ReturnInst,
+       targetReturn === returnInst {
+      return true
+    }
+  }
+  return false
 }
 
 func swiftmutDiscoverReturnBranchSites(

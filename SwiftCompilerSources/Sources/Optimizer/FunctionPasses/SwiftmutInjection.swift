@@ -935,8 +935,7 @@ private func swiftmutInjectStatementDeletionApplySite(
   apply: ApplyInst,
   _ context: FunctionPassContext
 ) -> Bool {
-  guard !apply.type.isVoid,
-        !apply.isCalleeNoReturn,
+  guard !apply.isCalleeNoReturn,
         apply.uses.isEmpty,
         let cleanupValues = swiftmutCallDeletionBypassCleanupValues(apply),
         let visitFunction = swiftmutRuntimeVisitFunction(

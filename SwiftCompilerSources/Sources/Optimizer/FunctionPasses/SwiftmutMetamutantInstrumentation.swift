@@ -128,6 +128,7 @@ func swiftmutInstrumentMetamutantSites(
       ("statementDeletionAssignmentStoreInstructions", "\(statementDeletionDiscovery.stats.assignmentStoreInstructions)"),
       ("statementDeletionMutationEligibleInstructions", "\(statementDeletionDiscovery.stats.mutationEligibleStoreInstructions)"),
       ("statementDeletionApplyInstructions", "\(statementDeletionDiscovery.stats.applyInstructions)"),
+      ("statementDeletionSetterApplyInstructions", "\(statementDeletionDiscovery.stats.setterApplyInstructions)"),
       ("statementDeletionUnusedResultApplyInstructions", "\(statementDeletionDiscovery.stats.unusedResultApplyInstructions)"),
       ("statementDeletionMutationEligibleApplyInstructions", "\(statementDeletionDiscovery.stats.mutationEligibleApplyInstructions)"),
       ("statementDeletionSourceLocationMisses", "\(statementDeletionDiscovery.stats.sourceLocationMisses)"),

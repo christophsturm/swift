@@ -32,6 +32,9 @@ func swiftmutDiscoverVoidCallSites(
         continue
       }
       stats.voidApplyInstructions += 1
+      guard !swiftmutApplyIsSetter(apply) else {
+        continue
+      }
       guard let mutation = swiftmutVoidCallMutation(for: apply, config: config),
             swiftmutMutatorIsEnabled(mutation.mutator, config: config) else {
         continue
@@ -139,11 +142,20 @@ func swiftmutDiscoverStatementDeletionSites(
         location = storeLocation
       } else if let apply = instruction as? ApplyInst {
         stats.applyInstructions += 1
-        guard !apply.type.isVoid,
-              apply.uses.isEmpty else {
-          continue
+        let callKind: SwiftmutStatementCallKind
+        if apply.type.isVoid {
+          guard swiftmutApplyIsSetter(apply) else {
+            continue
+          }
+          stats.setterApplyInstructions += 1
+          callKind = .setterAssignment
+        } else {
+          guard apply.uses.isEmpty else {
+            continue
+          }
+          stats.unusedResultApplyInstructions += 1
+          callKind = .unusedResult
         }
-        stats.unusedResultApplyInstructions += 1
         guard let applyMutation = swiftmutStatementDeletionMutation(for: apply, config: config) else {
           continue
         }
@@ -152,7 +164,7 @@ func swiftmutDiscoverStatementDeletionSites(
         switch swiftmutStatementCallSourceLocation(
           for: apply,
           mutation: mutation,
-          kind: .unusedResult,
+          kind: callKind,
           config: config
         ) {
         case .found(let file, let line, let column, let sourceOriginal, let sourceMutated):

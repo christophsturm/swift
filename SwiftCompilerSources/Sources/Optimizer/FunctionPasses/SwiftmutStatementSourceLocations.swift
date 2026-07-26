@@ -138,11 +138,18 @@ private func swiftmutStatementDeletionStoreLocationIsUnique(
 private func swiftmutSourceLineIsReassignment(_ line: String) -> Bool {
   let bytes = Array(line.utf8)
   let start = swiftmutSkipHorizontalWhitespace(bytes, from: 0)
-  guard start < bytes.count,
-        !swiftmutASCIIHasPrefix(bytes, start: start, prefix: "//"),
-        !swiftmutASCIIHasExactPrefix(bytes, start: start, prefix: "let "),
-        !swiftmutASCIIHasExactPrefix(bytes, start: start, prefix: "var ") else {
+  guard start < bytes.count else {
     return false
+  }
+  let declarationPrefixes = [
+    "//", "@", "let ", "var ", "public ", "private ", "fileprivate ",
+    "internal ", "package ", "open ", "static ", "class ", "final ",
+    "override ", "lazy ", "weak ", "unowned "
+  ]
+  for prefix in declarationPrefixes {
+    if swiftmutASCIIHasPrefix(bytes, start: start, prefix: prefix) {
+      return false
+    }
   }
   return true
 }
@@ -153,6 +160,13 @@ func swiftmutStatementCallSourceLocation(
   kind: SwiftmutStatementCallKind,
   config: SwiftmutConfig
 ) -> SwiftmutVoidCallSourceLocationResult {
+  if kind == .setterAssignment {
+    return swiftmutSetterStatementDeletionSourceLocation(
+      for: apply,
+      mutation: mutation,
+      config: config
+    )
+  }
   let functionSourceLocation = swiftmutFunctionSourceLocation(
     for: apply.parentFunction,
     config: config
@@ -194,22 +208,6 @@ func swiftmutStatementCallSourceLocation(
         fileNameAndPosition.column,
         mutation.sourceOriginal,
         mutation.sourceMutated)
-      if kind == .void,
-         let setterAssignment = swiftmutSetterAssignmentSourceLocation(
-           for: apply,
-           path: matchedPath,
-           line: fileNameAndPosition.line,
-           mutation: mutation,
-           config: config
-         ) {
-        return .found(
-          file: setterAssignment.file,
-          line: setterAssignment.line,
-          column: setterAssignment.column,
-          sourceOriginal: setterAssignment.sourceOriginal,
-          sourceMutated: setterAssignment.sourceMutated
-        )
-      }
       if swiftmutVoidCallSourceLooksLikeStatement(file: candidate.0, line: candidate.1, config: config) {
         return .found(
           file: candidate.0,
@@ -314,42 +312,6 @@ func swiftmutStatementCallSourceLocation(
         column: described.column,
         sourceOriginal: described.sourceOriginal,
         sourceMutated: described.sourceMutated
-      )
-    }
-    if kind == .void,
-       let setterAssignment = swiftmutSetterAssignmentSourceLocation(
-         for: apply,
-         path: fallbackPath,
-         line: fallback.line,
-         mutation: mutation,
-         config: config
-       ) {
-      return .found(
-        file: setterAssignment.file,
-        line: setterAssignment.line,
-        column: setterAssignment.column,
-        sourceOriginal: setterAssignment.sourceOriginal,
-        sourceMutated: setterAssignment.sourceMutated
-      )
-    }
-    if kind == .void,
-       swiftmutApplyIsSetter(apply),
-       let functionSourceLocation,
-       functionSourceLocation.path == fallbackPath,
-       let scopedSetterAssignment = swiftmutFindScopedAssignmentValueSourceLocation(
-         path: functionSourceLocation.path,
-         functionLine: functionSourceLocation.line,
-         mutation: mutation,
-         config: config,
-         targetNames: swiftmutSourceExpressionIdentifiers(for: apply),
-         requiresDirectValueExpression: false
-       ) {
-      return .found(
-        file: scopedSetterAssignment.file,
-        line: scopedSetterAssignment.line,
-        column: scopedSetterAssignment.column,
-        sourceOriginal: scopedSetterAssignment.sourceOriginal,
-        sourceMutated: scopedSetterAssignment.sourceMutated
       )
     }
     if let functionSourceLocation,
@@ -581,6 +543,78 @@ private func swiftmutSourceLineContinuesDiscardedCallStatement(
   return previousLineContinuedDiscard && bytes[start] == 46
 }
 
+private func swiftmutSetterStatementDeletionSourceLocation(
+  for apply: ApplyInst,
+  mutation: SwiftmutMutation,
+  config: SwiftmutConfig
+) -> SwiftmutVoidCallSourceLocationResult {
+  guard swiftmutApplyIsSetter(apply) else {
+    return .missing
+  }
+
+  var candidates: [(path: String, line: Int)] = []
+  if let position = apply.location.fileNameAndPosition,
+     let path = swiftmutIncludedSourcePath(position.path.string, config: config) {
+    candidates.append((path, position.line))
+  }
+  if let fallback = swiftmutInstructionSourceLocation(
+    for: apply,
+    mutation: mutation,
+    config: config
+  ) {
+    let fallbackPath = fallback.file.hasPrefix("/") || config.packageRoot.isEmpty
+      ? fallback.file
+      : config.packageRoot + "/" + fallback.file
+    if let path = swiftmutIncludedSourcePath(fallbackPath, config: config) {
+      candidates.append((path, fallback.line))
+    }
+  }
+
+  var seen = Set<String>()
+  for candidate in candidates {
+    guard seen.insert("\(candidate.path):\(candidate.line)").inserted else {
+      continue
+    }
+    if let assignment = swiftmutSetterAssignmentSourceLocation(
+      for: apply,
+      path: candidate.path,
+      line: candidate.line,
+      mutation: mutation,
+      config: config
+    ) {
+      return .found(
+        file: assignment.file,
+        line: assignment.line,
+        column: assignment.column,
+        sourceOriginal: assignment.sourceOriginal,
+        sourceMutated: assignment.sourceMutated
+      )
+    }
+  }
+
+  if let functionSourceLocation = swiftmutFunctionSourceLocation(
+    for: apply.parentFunction,
+    config: config
+  ), let scopedAssignment = swiftmutFindScopedAssignmentValueSourceLocation(
+    path: functionSourceLocation.path,
+    functionLine: functionSourceLocation.line,
+    mutation: mutation,
+    config: config,
+    targetNames: swiftmutSourceExpressionIdentifiers(for: apply),
+    requiresDirectValueExpression: false
+  ), swiftmutStatementDeletionLocationIsReassignment(scopedAssignment, config: config) {
+    return .found(
+      file: scopedAssignment.file,
+      line: scopedAssignment.line,
+      column: scopedAssignment.column,
+      sourceOriginal: scopedAssignment.sourceOriginal,
+      sourceMutated: scopedAssignment.sourceMutated
+    )
+  }
+
+  return candidates.isEmpty ? .missing : .nonStatement
+}
+
 private func swiftmutSetterAssignmentSourceLocation(
   for apply: ApplyInst,
   path: String,
@@ -699,6 +733,10 @@ private func swiftmutStatementCallIsEligible(
   case .void:
     return apply.type.isVoid
       && swiftmutVoidCallMutation(for: apply, config: config) != nil
+  case .setterAssignment:
+    return apply.type.isVoid
+      && swiftmutApplyIsSetter(apply)
+      && swiftmutStatementDeletionMutation(for: apply, config: config) != nil
   case .unusedResult:
     return !apply.type.isVoid
       && apply.uses.isEmpty

@@ -565,11 +565,22 @@ func swiftmutStatementDeletionMutation(
   for apply: ApplyInst,
   config: SwiftmutConfig
 ) -> SwiftmutMutation? {
-  guard !apply.type.isVoid,
-        !apply.isCalleeNoReturn,
-        apply.uses.isEmpty,
+  let context: String
+  if apply.type.isVoid {
+    guard swiftmutApplyIsSetter(apply) else {
+      return nil
+    }
+    context = "assignment"
+  } else {
+    guard apply.uses.isEmpty else {
+      return nil
+    }
+    context = "unusedCall"
+  }
+
+  guard !apply.isCalleeNoReturn,
         swiftmutCallDeletionBypassCleanupValues(apply) != nil,
-        let rule = swiftmutFirstStatementRule(context: "unusedCall", config: config) else {
+        let rule = swiftmutFirstStatementRule(context: context, config: config) else {
     return nil
   }
 

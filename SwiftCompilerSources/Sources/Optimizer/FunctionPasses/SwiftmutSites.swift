@@ -325,6 +325,7 @@ struct SwiftmutStatementDeletionDiscoveryStats {
   var assignmentStoreInstructions = 0
   var mutationEligibleStoreInstructions = 0
   var applyInstructions = 0
+  var setterApplyInstructions = 0
   var unusedResultApplyInstructions = 0
   var mutationEligibleApplyInstructions = 0
   var sourceLocationMisses = 0
@@ -344,5 +345,6 @@ enum SwiftmutVoidCallSourceLocationResult {
 
 enum SwiftmutStatementCallKind {
   case void
+  case setterAssignment
   case unusedResult
 }

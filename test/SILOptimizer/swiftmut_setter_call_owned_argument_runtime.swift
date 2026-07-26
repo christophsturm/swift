@@ -10,15 +10,16 @@
 // RUN:   '  "packageRoot": "%t",' \
 // RUN:   '  "excludePaths": [],' \
 // RUN:   '  "sourceFiles": ["%t/main.swift"],' \
-// RUN:   '  "enabledMutators": ["VOID_METHOD_CALLS"],' \
+// RUN:   '  "enabledMutators": ["STATEMENT_DELETIONS"],' \
 // RUN:   '  "conditionMutationRules": [],' \
 // RUN:   '  "arithmeticMutationRules": [],' \
 // RUN:   '  "contextualArithmeticMutationRules": [],' \
 // RUN:   '  "returnMutationRules": [],' \
-// RUN:   '  "voidCallMutationRules": [' \
-// RUN:   '    "VOID_METHOD_CALLS|remove_void_call|call|removed call|noop"' \
+// RUN:   '  "voidCallMutationRules": [],' \
+// RUN:   '  "statementMutationRules": [' \
+// RUN:   '    "assignment|STATEMENT_DELETIONS|remove_assignment|assignment|removed assignment|removed",' \
+// RUN:   '    "unusedCall|STATEMENT_DELETIONS|remove_unused_call|call|removed call|removed"' \
 // RUN:   '  ],' \
-// RUN:   '  "statementMutationRules": [],' \
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-build-swift -O %t/main.swift -module-name SwiftmutSetterCallOwnedArgumentRuntime -Xfrontend -external-pass-pipeline-filename -Xfrontend %t/pipeline.yaml -o %t/a.out
@@ -36,20 +37,22 @@
 // BASELINE: 2
 // BASELINE-NEXT: 1
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutSetterCallOwnedArgumentRuntime","function":"{{.*}}swiftmutInvoke
-// EVENTS-SAME: "voidCallSites":"1"
-// EVENTS-SAME: "voidCallVoidApplyInstructions":"1"
-// EVENTS-SAME: "voidCallMutationEligibleApplyInstructions":"1"
-// EVENTS-SAME: "voidCallSourceLocationMisses":"0"
-// EVENTS-SAME: "voidCallNonStatementSourceLocations":"0"
+// EVENTS-SAME: "voidCallSites":"0"
+// EVENTS-SAME: "statementDeletionSites":"1"
+// EVENTS-SAME: "statementDeletionApplyInstructions":"3"
+// EVENTS-SAME: "statementDeletionSetterApplyInstructions":"1"
+// EVENTS-SAME: "statementDeletionMutationEligibleApplyInstructions":"1"
+// EVENTS-SAME: "statementDeletionSourceLocationMisses":"0"
+// EVENTS-SAME: "statementDeletionNonStatementSourceLocations":"0"
 // EVENTS: "event":"metamutantInjection","module":"SwiftmutSetterCallOwnedArgumentRuntime","function":"{{.*}}swiftmutInvoke
-// EVENTS-SAME: "attemptedVoidCallSites":"1"
-// EVENTS-SAME: "injectedVoidCallSites":"1"
-// MANIFEST-NOT: "siteKind":"voidCall"
-// MANIFEST: "function":"{{.*}}swiftmutInvoke{{.*}}","sourceLocation":{{.*}}"siteKind":"voidCall"
-// MANIFEST-SAME: "mutator":"VOID_METHOD_CALLS"
+// EVENTS-SAME: "attemptedStatementDeletionSites":"1"
+// EVENTS-SAME: "injectedStatementDeletionSites":"1"
+// MANIFEST-NOT: "siteKind":"statementDeletion"
+// MANIFEST: "function":"{{.*}}swiftmutInvoke{{.*}}","sourceLocation":{{.*}}"siteKind":"statementDeletion"
+// MANIFEST-SAME: "mutator":"STATEMENT_DELETIONS"
 // MANIFEST-SAME: "sourceOriginal":"SwiftmutToken(value: 2)"
-// MANIFEST-SAME: "sourceMutated":"removed call"
-// MANIFEST-NOT: "siteKind":"voidCall"
+// MANIFEST-SAME: "sourceMutated":"removed assignment"
+// MANIFEST-NOT: "siteKind":"statementDeletion"
 
 //--- main.swift
 public var swiftmutObserved = 0
@@ -78,6 +81,23 @@ public final class SwiftmutSink {
       swiftmutObserved = newValue.value
     }
   }
+}
+
+@propertyWrapper
+public struct SwiftmutPublished<Value> {
+  public var wrappedValue: Value
+
+  public init(wrappedValue: Value) {
+    self.wrappedValue = wrappedValue
+  }
+}
+
+public protocol SwiftmutModeSink {
+  var mode: Int { get set }
+}
+
+public final class SwiftmutWrappedSink: SwiftmutModeSink {
+  @SwiftmutPublished public var mode: Int = 1
 }
 
 @inline(never)

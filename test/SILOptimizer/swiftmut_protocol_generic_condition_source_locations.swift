@@ -1,6 +1,6 @@
 // RUN: rm -rf %t
 // RUN: mkdir -p %t
-// RUN: printf '%%s\n' '---' "name: ''" 'passes: [ "\"swiftmut\"" ]' > %t/pipeline.yaml
+// swiftmut runs in the native Diagnostic pipeline.
 // RUN: printf '%b\n' \
 // RUN:   '{' \
 // RUN:   '  "mode": "metamutant",' \
@@ -22,7 +22,7 @@
 // RUN:   '    "NEGATE_CONDITIONALS|ICMP_EQ|==|!=|"' \
 // RUN:   '  ]' \
 // RUN:   '}' > %t/config.json
-// RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -wmo -cross-module-optimization -module-name SwiftmutProtocolGenericConditionSourceLocations -external-pass-pipeline-filename %t/pipeline.yaml %s -o /dev/null
+// RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -wmo -cross-module-optimization -module-name SwiftmutProtocolGenericConditionSourceLocations %s -o /dev/null
 // RUN: %FileCheck %s --input-file %t/compiler-events.jsonl
 // RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=MANIFEST --input-file %t/all-fragments.json

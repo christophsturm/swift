@@ -333,6 +333,13 @@ SILPassPipelinePlan::getDiagnosticPassPipeline(const SILOptions &Options) {
   // Otherwise run the rest of diagnostics.
   addMandatoryDiagnosticOptPipeline(P);
 
+  // Swiftmut observes and instruments the canonical mandatory-pass output,
+  // before the frontend selects either the Onone or performance pipeline.
+  // Source-semantic identity is defined independently of this unavoidable
+  // scheduling coordinate. The pass returns immediately without a valid
+  // SWIFTMUT_CONFIG session.
+  P.addSwiftmut();
+
   if (SILViewCanonicalCFG) {
     addCFGPrinterPipeline(P, "SIL View Canonical CFG");
   }
@@ -834,15 +841,6 @@ static void addLowLevelPassPipeline(SILPassPipelinePlan &P) {
 static void addLateLoopOptPassPipeline(SILPassPipelinePlan &P) {
   P.startPipeline("LateLoopOpt");
 
-  // Swiftmut owns its implementation outside the compiler checkout. Keep this
-  // unavoidable Swift-version-specific integration after the performance
-  // pipeline's low-level SSA optimization, before late dead function
-  // elimination and code sinking can destroy mutation-relevant SIL shapes.
-  //
-  // The pass is intentionally part of every performance pipeline. It returns
-  // immediately unless SWIFTMUT_CONFIG selects a mutation session.
-  P.addSwiftmut();
-
   // Delete dead code and drop the bodies of shared functions.
   // Also, remove externally available witness tables. They are not needed
   // anymore after the last devirtualizer run.
@@ -1127,11 +1125,6 @@ SILPassPipelinePlan::getOnonePassPipeline(const SILOptions &Options) {
   // This is mainly there to optimize `Builtin.isConcrete`, which must not be
   // constant folded before any generic specialization.
   P.addLateOnoneSimplification();
-
-  // Run the same Swiftmut pass used by the performance pipeline after Onone
-  // ownership lowering and simplification. This keeps mutation semantics in
-  // the external Swift implementation rather than duplicating them here.
-  P.addSwiftmut();
 
   if (Options.EmbeddedSwift) {
     // For embedded Swift: Remove all unspecialized functions. This is important

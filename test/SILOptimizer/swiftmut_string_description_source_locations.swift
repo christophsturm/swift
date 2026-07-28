@@ -1,6 +1,6 @@
 // RUN: rm -rf %t
 // RUN: mkdir -p %t
-// RUN: printf '%%s\n' '---' "name: ''" 'passes: [ "\"swiftmut\"" ]' > %t/pipeline.yaml
+// swiftmut runs in the native Diagnostic pipeline.
 // RUN: printf '%b\n' \
 // RUN:   '{' \
 // RUN:   '  "mode": "discover",' \
@@ -20,7 +20,7 @@
 // RUN:   '  "voidCallMutationRules": [],' \
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
-// RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutStringDescriptionSourceLocations -external-pass-pipeline-filename %t/pipeline.yaml %s -o /dev/null
+// RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutStringDescriptionSourceLocations %s -o /dev/null
 // RUN: %FileCheck %s --input-file %t/mutants.jsonl
 
 public func swiftmutStringDescription(_ value: Int) -> String {

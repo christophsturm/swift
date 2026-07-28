@@ -1,6 +1,6 @@
 // RUN: rm -rf %t
 // RUN: split-file %s %t
-// RUN: printf '%%s\n' '---' "name: ''" 'passes: [ "\"swiftmut\"" ]' > %t/pipeline.yaml
+// swiftmut runs in the native Diagnostic pipeline.
 // RUN: printf '%b\n' \
 // RUN:   '{' \
 // RUN:   '  "mode": "metamutant",' \
@@ -21,7 +21,7 @@
 // RUN:   '  "voidCallMutationRules": [],' \
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
-// RUN: env SWIFTMUT_CONFIG=%t/config.json %target-build-swift -O %t/Value.swift %t/main.swift -module-name SwiftmutValueApplyFalseRuntime -Xfrontend -external-pass-pipeline-filename -Xfrontend %t/pipeline.yaml -o %t/a.out
+// RUN: env SWIFTMUT_CONFIG=%t/config.json %target-build-swift -O %t/Value.swift %t/main.swift -module-name SwiftmutValueApplyFalseRuntime -o %t/a.out
 // RUN: %target-codesign %t/a.out
 // RUN: %target-run %t/a.out | %FileCheck %s
 // RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl

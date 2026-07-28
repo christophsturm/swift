@@ -834,9 +834,9 @@ static void addLowLevelPassPipeline(SILPassPipelinePlan &P) {
 static void addLateLoopOptPassPipeline(SILPassPipelinePlan &P) {
   P.startPipeline("LateLoopOpt");
 
-  // Swiftmut owns its implementation outside the compiler checkout. Keep the
-  // unavoidable Swift-version-specific integration at this single semantic
-  // coordinate: after low-level SSA optimization, before late dead function
+  // Swiftmut owns its implementation outside the compiler checkout. Keep this
+  // unavoidable Swift-version-specific integration after the performance
+  // pipeline's low-level SSA optimization, before late dead function
   // elimination and code sinking can destroy mutation-relevant SIL shapes.
   //
   // The pass is intentionally part of every performance pipeline. It returns
@@ -1127,6 +1127,11 @@ SILPassPipelinePlan::getOnonePassPipeline(const SILOptions &Options) {
   // This is mainly there to optimize `Builtin.isConcrete`, which must not be
   // constant folded before any generic specialization.
   P.addLateOnoneSimplification();
+
+  // Run the same Swiftmut pass used by the performance pipeline after Onone
+  // ownership lowering and simplification. This keeps mutation semantics in
+  // the external Swift implementation rather than duplicating them here.
+  P.addSwiftmut();
 
   if (Options.EmbeddedSwift) {
     // For embedded Swift: Remove all unspecialized functions. This is important

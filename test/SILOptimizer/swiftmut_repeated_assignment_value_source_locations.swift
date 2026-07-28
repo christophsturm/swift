@@ -1,6 +1,6 @@
 // RUN: rm -rf %t
 // RUN: mkdir -p %t
-// RUN: printf '%b\n' '---' "name: ''" 'passes: [ "\"swiftmut\"" ]' > %t/pipeline.yaml
+// RUN: printf '%%s\n' '---' "name: ''" 'passes: [ "\"swiftmut\"" ]' > %t/pipeline.yaml
 // RUN: printf '%b\n' \
 // RUN:   '{' \
 // RUN:   '  "mode": "metamutant",' \
@@ -35,4 +35,4 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
-// CHECK: "line":28,"column":15},"siteKind":"assignmentValue","resultKind":"value","alternatives":[{{.*}}"sourceOriginal":"input","sourceMutated":"0"{{.*}}"line":29,"column":16},"siteKind":"assignmentValue","resultKind":"value","alternatives":[{{.*}}"sourceOriginal":"input","sourceMutated":"0"
+// CHECK: "line":28,"column":15},"siteKind":"assignmentValue","resultKind":"value","valueNominalType":{"module":"Swift","name":"Int"},"alternatives":[{{.*}}"sourceOriginal":"input","sourceMutated":"0"{{.*}}"line":29,"column":16},"siteKind":"assignmentValue","resultKind":"value","valueNominalType":{"module":"Swift","name":"Int"},"alternatives":[{{.*}}"sourceOriginal":"input","sourceMutated":"0"

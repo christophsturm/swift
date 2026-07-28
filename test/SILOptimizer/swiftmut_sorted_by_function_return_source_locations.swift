@@ -1,6 +1,6 @@
 // RUN: rm -rf %t
 // RUN: mkdir -p %t
-// RUN: printf '%b\n' '---' "name: ''" 'passes: [ "\"swiftmut\"" ]' > %t/pipeline.yaml
+// RUN: printf '%%s\n' '---' "name: ''" 'passes: [ "\"swiftmut\"" ]' > %t/pipeline.yaml
 // RUN: printf '%b\n' \
 // RUN:   '{' \
 // RUN:   '  "mode": "metamutant",' \
@@ -48,6 +48,7 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 // CHECK: "sourceOriginal":"lhs.weight < rhs.weight","sourceMutated":"false"
 // CHECK: "sourceOriginal":"lhs.weight < rhs.weight","sourceMutated":"true"
 // CHECK: "siteKind":"returnValue"
+// CHECK-SAME: "valueNominalType":{"module":"Swift","name":"Bool"}
 // CHECK: "sourceOriginal":"lhs.weight < rhs.weight","sourceMutated":"false"
 // CHECK: "sourceOriginal":"lhs.weight < rhs.weight","sourceMutated":"true"
 // EVENTS: "event":"functionVisit"

@@ -11,5 +11,9 @@
 add_subdirectory(Basic)
 add_subdirectory(AST)
 add_subdirectory(SIL)
-add_subdirectory(SwiftmutSupport)
+if(NOT DEFINED SWIFTMUT_SOURCE_ROOT OR SWIFTMUT_SOURCE_ROOT STREQUAL "")
+  message(FATAL_ERROR
+    "SWIFTMUT_SOURCE_ROOT must point to the swiftmut repository")
+endif()
+include("${SWIFTMUT_SOURCE_ROOT}/Compiler/Swift64CompilerEngine.cmake")
 add_subdirectory(Optimizer)

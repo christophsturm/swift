@@ -1,6 +1,6 @@
 // RUN: rm -rf %t
 // RUN: mkdir -p %t
-// RUN: printf '%b\n' '---' "name: ''" 'passes: [ "\"swiftmut\"" ]' > %t/pipeline.yaml
+// RUN: printf '%%s\n' '---' "name: ''" 'passes: [ "\"swiftmut\"" ]' > %t/pipeline.yaml
 // RUN: printf '%b\n' \
 // RUN:   '{' \
 // RUN:   '  "mode": "metamutant",' \
@@ -33,13 +33,19 @@ public func swiftmutSingleScalarValue(_ workers: Int) {
   swiftmutSinkScalarValue(normalized)
 }
 
+public func swiftmutStringIndexIsNotAnInteger(_ text: String) -> String.Index {
+  text.endIndex
+}
+
 @_silgen_name("__swiftmut_visit")
 public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
 // CHECK: "siteKind":"scalarValue"
+// CHECK-SAME: "valueNominalType":{"module":"Swift","name":"Int"}
 // CHECK-SAME: "sourceOriginal":"1","sourceMutated":"0"
+// CHECK-NOT: "sourceOriginal":"text.endIndex"
 
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutSingleScalarValueSourceLocations","function":"$s40SwiftmutSingleScalarValueSourceLocations08swiftmutbcD0
 // EVENTS-SAME: "scalarValueSites":"1"

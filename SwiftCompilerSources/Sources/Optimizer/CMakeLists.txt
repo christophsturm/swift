@@ -7,7 +7,7 @@
 # See http://swift.org/CONTRIBUTORS.txt for Swift project authors
 
 set(dependencies)
-list(APPEND dependencies Basic AST SIL SwiftmutSupport)
+list(APPEND dependencies Basic AST SIL SwiftmutCompilerEngine)
 
 add_swift_compiler_module(Optimizer DEPENDS ${dependencies})
 

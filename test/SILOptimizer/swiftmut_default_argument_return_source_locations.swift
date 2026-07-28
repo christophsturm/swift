@@ -1,6 +1,6 @@
 // RUN: rm -rf %t
 // RUN: mkdir -p %t
-// RUN: printf '%b\n' '---' "name: ''" 'passes: [ "\"swiftmut\"" ]' > %t/pipeline.yaml
+// RUN: printf '%%s\n' '---' "name: ''" 'passes: [ "\"swiftmut\"" ]' > %t/pipeline.yaml
 // RUN: printf '%b\n' \
 // RUN:   '{' \
 // RUN:   '  "mode": "discover",' \
@@ -31,4 +31,8 @@ public func swiftmutCallDefaultReturn() -> Int {
   swiftmutUseDefaultReturn()
 }
 
-// CHECK: "sourceOriginal":"7","sourceMutated":"0"
+// The optimized SIL inlines the default argument into the caller. Keep the
+// mutation anchored to the outer call rather than claiming the declaration's
+// default expression as a separately instrumented site.
+// CHECK-NOT: "sourceOriginal":"7","sourceMutated":"0"
+// CHECK: "sourceOriginal":"swiftmutUseDefaultReturn()","sourceMutated":"0"

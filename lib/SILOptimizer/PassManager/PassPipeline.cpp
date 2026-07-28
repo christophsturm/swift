@@ -834,6 +834,15 @@ static void addLowLevelPassPipeline(SILPassPipelinePlan &P) {
 static void addLateLoopOptPassPipeline(SILPassPipelinePlan &P) {
   P.startPipeline("LateLoopOpt");
 
+  // Swiftmut owns its implementation outside the compiler checkout. Keep the
+  // unavoidable Swift-version-specific integration at this single semantic
+  // coordinate: after low-level SSA optimization, before late dead function
+  // elimination and code sinking can destroy mutation-relevant SIL shapes.
+  //
+  // The pass is intentionally part of every performance pipeline. It returns
+  // immediately unless SWIFTMUT_CONFIG selects a mutation session.
+  P.addSwiftmut();
+
   // Delete dead code and drop the bodies of shared functions.
   // Also, remove externally available witness tables. They are not needed
   // anymore after the last devirtualizer run.

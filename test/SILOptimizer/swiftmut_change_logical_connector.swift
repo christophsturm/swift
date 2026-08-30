@@ -32,9 +32,9 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 }
 
 // The MutationResultClassifier shape: a multiline disjunction whose chain
-// branches carry no per-clause source location. The first clause's branch
-// is owned by the condition mutator; each later connector becomes a
-// CHANGE_LOGICAL_CONNECTOR site.
+// branches carry no ordinary file position. A branch may also be a condition
+// site, but every operator-prefixed source description must still become its
+// own CHANGE_LOGICAL_CONNECTOR site.
 public func swiftmutClassifierShape(_ stdout: String, _ stderr: String) -> Int {
   let combinedOutput = stdout + "\n" + stderr
   if combinedOutput.contains("compilation failed")
@@ -88,14 +88,18 @@ public func swiftmutOptionalConnectorIdentity(
   quote == nil && parenDepth == 0 && bracketDepth == 0 && braceDepth == 0
 }
 
-// CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":42,{{.*}}"siteKind":"logicalConnector"{{.*}}"sourceOriginal":"||","sourceMutated":"&&"
-// CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":51,{{.*}}"siteKind":"logicalConnector"{{.*}}"sourceOriginal":"&&","sourceMutated":"||"
-// CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":62,"column":31},"siteKind":"logicalConnector"{{.*}}"sourceOriginal":"&&","sourceMutated":"||"
+// CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":41,"column":7},"siteKind":"logicalConnector"{{.*}}"sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":42,"column":7},"siteKind":"logicalConnector"
+// CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":50,"column":7},"siteKind":"logicalConnector"{{.*}}"sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":51,"column":7},"siteKind":"logicalConnector"
+// CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":62,"column":17},"siteKind":"logicalConnector"{{.*}}"sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":62,"column":31},"siteKind":"logicalConnector"
 // CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":76,"column":9},"siteKind":"logicalConnector"{{.*}}"sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":76,"column":19},"siteKind":"logicalConnector"{{.*}}"sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":76,"column":28},"siteKind":"logicalConnector"
 // CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":88,"column":16},"siteKind":"logicalConnector"{{.*}}"sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":88,"column":35},"siteKind":"logicalConnector"{{.*}}"sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":88,"column":56},"siteKind":"logicalConnector"
 
-// EVENTS-DAG: "function":"{{.*}}swiftmutClassifierShape{{.*}}"logicalConnectorSites":"1"
-// EVENTS-DAG: "function":"{{.*}}swiftmutConjunctionChain{{.*}}"logicalConnectorSites":"1"
-// EVENTS-DAG: "function":"{{.*}}swiftmutInline{{.*}}"logicalConnectorSites":"1"
+// EVENTS-DAG: "function":"{{.*}}swiftmutClassifierShape{{.*}}"logicalConnectorSites":"2"
+// EVENTS-DAG: "function":"{{.*}}swiftmutConjunctionChain{{.*}}"logicalConnectorSites":"2"
+// EVENTS-DAG: "function":"{{.*}}swiftmutInline{{.*}}"logicalConnectorSites":"2"
 // EVENTS-DAG: "function":"{{.*}}swiftmutD13IdentityChain{{.*}}"logicalConnectorSites":"3"
 // EVENTS-DAG: "function":"{{.*}}swiftmutOptionalD8Identity{{.*}}"logicalConnectorSites":"3"{{.*}}"logicalConnectorDiamondBranches":"3"
+// Optimized short-circuit expressions retain transparent autoclosure bodies
+// after their uses have been inlined. An unreferenced retained copy is not an
+// executable source site.
+// EVENTS-DAG: "event":"functionSkip","reason":"generatedUnreferencedClosure","module":"SwiftmutChangeLogicalConnector","function":"{{.*}}KXEfu{{.*}}"

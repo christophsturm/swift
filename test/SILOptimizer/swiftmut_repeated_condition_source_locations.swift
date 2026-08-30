@@ -41,6 +41,16 @@ public func swiftmutRepeatedCondition(_ count: Int) {
   if swiftmutConditionValue(count) == 1 {
     swiftmutConditionSink(2)
   }
+  if swiftmutOtherCondition(
+    count
+  ) {
+    swiftmutConditionSink(3)
+  }
+}
+
+@inline(never)
+public func swiftmutOtherCondition(_ value: Int) -> Bool {
+  value > 0
 }
 
 @_silgen_name("__swiftmut_visit")

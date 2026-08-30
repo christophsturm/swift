@@ -32,6 +32,7 @@
 // RUN: %target-codesign %t/baseline.out
 // RUN: %target-run %t/baseline.out | %FileCheck %s --check-prefix=BASELINE
 // RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | sort -u > %t/all-fragments.json
+// RUN: %{python} -c 'import json, sys; sites = [site for line in open(sys.argv[1]) if line.strip() for site in json.loads(line)["sites"]]; compound = [site for site in sites if site["siteKind"] == "condition"]; assert not compound, compound' %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=MANIFEST --input-file %t/all-fragments.json
 
 // CHECK: true
@@ -39,7 +40,6 @@
 // MANIFEST: "siteKind":"logicalConnector"
 // MANIFEST-SAME: "sourceOriginal":"&&"
 // MANIFEST-SAME: "sourceMutated":"||"
-// MANIFEST: "siteKind":"condition"
 
 //--- main.swift
 @inline(never)

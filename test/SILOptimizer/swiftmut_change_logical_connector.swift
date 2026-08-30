@@ -54,8 +54,48 @@ public func swiftmutConjunctionChain(_ text: String) -> Int {
   return 0
 }
 
+// Compiler descriptions for an inline connector begin at the operator, not
+// at the beginning of the physical source line. An identical string literal
+// must not consume the source occurrence.
+public func swiftmutInlineConnector(_ byte: UInt8, _ next: UInt8) -> Bool {
+  _ = "&& next != 0 {"
+  if byte == 35 && next == 42 && next != 0 {
+    return true
+  }
+  return false
+}
+
+// Each branch in a longer conjunction must retain the identity of the
+// connector it actually changes, even when the whole expression is inline.
+public func swiftmutConnectorIdentityChain(
+  _ first: Bool,
+  _ second: Bool,
+  _ third: Bool,
+  _ fourth: Bool
+) -> Bool {
+  first && second && third && fourth
+}
+
+// An optional comparison reaches the first connector through a multi-block
+// equality implementation. All three connectors must still retain their own
+// source identities.
+public func swiftmutOptionalConnectorIdentity(
+  _ quote: UInt8?,
+  _ parenDepth: Int,
+  _ bracketDepth: Int,
+  _ braceDepth: Int
+) -> Bool {
+  quote == nil && parenDepth == 0 && bracketDepth == 0 && braceDepth == 0
+}
+
 // CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":42,{{.*}}"siteKind":"logicalConnector"{{.*}}"sourceOriginal":"||","sourceMutated":"&&"
 // CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":51,{{.*}}"siteKind":"logicalConnector"{{.*}}"sourceOriginal":"&&","sourceMutated":"||"
+// CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":62,"column":31},"siteKind":"logicalConnector"{{.*}}"sourceOriginal":"&&","sourceMutated":"||"
+// CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":76,"column":9},"siteKind":"logicalConnector"{{.*}}"sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":76,"column":19},"siteKind":"logicalConnector"{{.*}}"sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":76,"column":28},"siteKind":"logicalConnector"
+// CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":88,"column":16},"siteKind":"logicalConnector"{{.*}}"sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":88,"column":35},"siteKind":"logicalConnector"{{.*}}"sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":88,"column":56},"siteKind":"logicalConnector"
 
 // EVENTS-DAG: "function":"{{.*}}swiftmutClassifierShape{{.*}}"logicalConnectorSites":"1"
 // EVENTS-DAG: "function":"{{.*}}swiftmutConjunctionChain{{.*}}"logicalConnectorSites":"1"
+// EVENTS-DAG: "function":"{{.*}}swiftmutInline{{.*}}"logicalConnectorSites":"1"
+// EVENTS-DAG: "function":"{{.*}}swiftmutD13IdentityChain{{.*}}"logicalConnectorSites":"3"
+// EVENTS-DAG: "function":"{{.*}}swiftmutOptionalD8Identity{{.*}}"logicalConnectorSites":"3"{{.*}}"logicalConnectorDiamondBranches":"3"

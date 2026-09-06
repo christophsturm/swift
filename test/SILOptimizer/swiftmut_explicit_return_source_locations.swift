@@ -3,7 +3,7 @@
 // swiftmut runs in the native Diagnostic pipeline.
 // RUN: printf '%b\n' \
 // RUN:   '{' \
-// RUN:   '  "mode": "discover",' \
+// RUN:   '  "mode": "metamutant",' \
 // RUN:   '  "manifestPath": "%t/mutants.jsonl",' \
 // RUN:   '  "manifestFragmentsDirectory": "%t/fragments",' \
 // RUN:   '  "compilerEventsPath": "%t/compiler-events.jsonl",' \
@@ -21,7 +21,7 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutExplicitReturnSourceLocations %s -o /dev/null
-// RUN: %FileCheck %s --input-file %t/mutants.jsonl
+// RUN: cat %t/fragments/*.json | %FileCheck %s
 
 public func swiftmutExplicitReturn(_ enabled: Bool) -> Bool {
   return enabled

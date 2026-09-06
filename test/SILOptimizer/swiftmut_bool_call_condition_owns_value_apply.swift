@@ -102,5 +102,5 @@ public func swiftmutPrefixClassifierShape(_ text: String) -> Int {
 // EVENTS-SAME: "conditionSites":"1"
 // EVENTS-SAME: "valueApplySites":"0"
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutBoolCallConditionOwnsValueApply","function":"{{.*}}swiftmutPrefixClassifierShapeySiSSF"
-// EVENTS-SAME: "conditionSites":"3"
+// EVENTS-SAME: "conditionSites":"1"{{.*}}"conditionCompoundSourceConstantAlternatives":"10"
 // EVENTS-SAME: "valueApplySites":"0"

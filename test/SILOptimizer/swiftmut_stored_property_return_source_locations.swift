@@ -3,7 +3,7 @@
 // swiftmut runs in the native Diagnostic pipeline.
 // RUN: printf '%b\n' \
 // RUN:   '{' \
-// RUN:   '  "mode": "discover",' \
+// RUN:   '  "mode": "metamutant",' \
 // RUN:   '  "manifestPath": "%t/mutants.jsonl",' \
 // RUN:   '  "manifestFragmentsDirectory": "%t/fragments",' \
 // RUN:   '  "compilerEventsPath": "%t/compiler-events.jsonl",' \

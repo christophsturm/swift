@@ -59,4 +59,4 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 // CHECK-DAG: "siteKind":"valueApply"{{.*}}"sourceOriginal":"swiftmutContribution(second)","sourceMutated":"0"
 // CHECK-DAG: "siteKind":"valueApply"{{.*}}"sourceOriginal":"left.count","sourceMutated":"0"
 // CHECK-DAG: "siteKind":"valueApply"{{.*}}"sourceOriginal":"right.count","sourceMutated":"0"
-// CHECK-DAG: "function":"{{.*}}swiftmutComparePrefixes{{.*}}SbyKXEfu_"{{.*}}"siteKind":"valueApply"{{.*}}"sourceOriginal":"value.hasPrefix(\"@$s\")","sourceMutated":"false"{{.*}}"sourceOriginal":"value.hasPrefix(\"@$s\")","sourceMutated":"true"
+// CHECK-DAG: "function":"{{.*}}swiftmutComparePrefixesySbSSF"{{.*}}"siteKind":"valueApply"{{.*}}"sourceOriginal":"value.hasPrefix(\"@$s\")","sourceMutated":"false"{{.*}}"sourceOriginal":"value.hasPrefix(\"@$s\")","sourceMutated":"true"

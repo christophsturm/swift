@@ -3,7 +3,7 @@
 // swiftmut runs in the native Diagnostic pipeline.
 // RUN: printf '%b\n' \
 // RUN:   '{' \
-// RUN:   '  "mode": "discover",' \
+// RUN:   '  "mode": "metamutant",' \
 // RUN:   '  "manifestPath": "%t/mutants.jsonl",' \
 // RUN:   '  "manifestFragmentsDirectory": "%t/fragments",' \
 // RUN:   '  "compilerEventsPath": "%t/compiler-events.jsonl",' \
@@ -23,7 +23,7 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutComputedPropertyReturnSourceLocations %s -o /dev/null
-// RUN: %FileCheck %s --input-file %t/mutants.jsonl
+// RUN: cat %t/fragments/*.json | %FileCheck %s
 
 public struct SwiftmutRepeatedComputedReturnSummary {
   public let totalMutants: Int
@@ -65,12 +65,10 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 
 // CHECK-NOT: RepeatedbD7SummaryV04keptE5LinesSivg{{.*}}"line":35
 // CHECK-NOT: RepeatedbD7SummaryV05totalE5LinesSivg{{.*}}"line":39
-// CHECK: RepeatedbD7SummaryV15rejectedMutantsSivg
-// CHECK-SAME: "line":35
-// CHECK-SAME: "sourceOriginal":"totalMutants - keptMutants","sourceMutated":"0"
-// CHECK: RepeatedbD7SummaryV08rejectedE5LinesSivg
-// CHECK-SAME: "line":39
-// CHECK-SAME: "sourceOriginal":"totalSourceLines - keptSourceLines","sourceMutated":"0"
-// CHECK: RunHistoryEntryV06isFull{{.*}}SelectionSbvg
-// CHECK-SAME: "line":57
-// CHECK-SAME: "sourceOriginal":"return","sourceMutated":"return false"
+// CHECK-DAG: RepeatedbD7SummaryV15rejectedMutantsSivg{{.*}}"line":35{{.*}}"sourceOriginal":"totalMutants - keptMutants","sourceMutated":"0"
+// Metamutant fragments are independently emitted and have no global ordering.
+// Both computed properties must retain their own source identity.
+// CHECK-DAG: RepeatedbD7SummaryV08rejectedE5LinesSivg{{.*}}"line":39{{.*}}"sourceOriginal":"totalSourceLines - keptSourceLines","sourceMutated":"0"
+// Stored-property getters must not borrow either computed expression.
+// The trailing guard return remains independently represented.
+// CHECK-DAG: RunHistoryEntryV06isFull{{.*}}SelectionSbvg{{.*}}"line":57{{.*}}"sourceOriginal":"return","sourceMutated":"return false"

@@ -59,7 +59,9 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 
 // CHECK-DAG: "line":48,"column":8
 // CHECK-DAG: "sourceOriginal":"evidence.functions.count != 1 || evidence.siteIDs.count != 1","sourceMutated":"evidence.functions.count == 1 || evidence.siteIDs.count != 1"
-// CHECK-DAG: "sourceOriginal":"evidence.functions.count != 1 || evidence.siteIDs.count != 1","sourceMutated":"false"
-// CHECK-DAG: "sourceOriginal":"evidence.functions.count != 1 || evidence.siteIDs.count != 1","sourceMutated":"true"
+// NO-COMPOUND-NOT: "sourceOriginal":"evidence.functions.count != 1 || evidence.siteIDs.count != 1","sourceMutated":"false"
+// NO-COMPOUND-NOT: "sourceOriginal":"evidence.functions.count != 1 || evidence.siteIDs.count != 1","sourceMutated":"true"
 
 // EVENTS: "event":"metamutantDiscovery"{{.*}}"conditionSourceLocationMisses":"0"
+// A single short-circuit branch cannot replace the whole compound condition.
+// RUN: %FileCheck %s --check-prefix=NO-COMPOUND --input-file %t/all-fragments.json

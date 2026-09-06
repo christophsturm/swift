@@ -50,4 +50,4 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 }
 
 // CHECK-NOT: environment{{.*}}"sourceOriginal":"site == 1"
-// CHECK: "sourceOriginal":"site == 1","sourceMutated":"!site == 1"
+// CHECK: "sourceOriginal":"site == 1","sourceMutated":"site != 1"

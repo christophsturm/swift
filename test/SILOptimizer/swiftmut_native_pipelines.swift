@@ -34,8 +34,8 @@
 // RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/onone-fragments.json
 // RUN: %FileCheck %s --check-prefix=ONONE-MANIFEST --input-file %t/onone-fragments.json
 // RUN: diff -u %t/performance-fragments.json %t/onone-fragments.json
-// RUN: env SWIFTMUT_CONFIG=%t/missing-config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutNativePerformancePipelineNoSession %s -o /dev/null
-// RUN: env SWIFTMUT_CONFIG=%t/missing-config.json %target-swift-frontend -emit-sil -Onone -module-name SwiftmutNativeOnonePipelineNoSession %s -o /dev/null
+// RUN: env SWIFTMUT_CONFIG= %target-swift-frontend -emit-sil -O -module-name SwiftmutNativePerformancePipelineNoSession %s -o /dev/null
+// RUN: env SWIFTMUT_CONFIG= %target-swift-frontend -emit-sil -Onone -module-name SwiftmutNativeOnonePipelineNoSession %s -o /dev/null
 
 // PIPELINE: "inline-always-inlining",
 // PIPELINE-NEXT: "swiftmut" ]

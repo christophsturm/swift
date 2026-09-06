@@ -67,4 +67,4 @@ public func swiftmutPreparationLabel(_ status: String, isReady: Bool) -> String?
 // CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector_ladder.swift","line":37,"column":7},"siteKind":"logicalConnector","resultKind":"condition","alternatives":[{"mutantID":"{{[^"]*}}","alternativeIndex":1,"mutator":"CHANGE_LOGICAL_CONNECTOR","sourceOriginal":"||","sourceMutated":"&&"
 
 // EVENTS-DAG: "function":"{{.*}}swiftmutChainShape{{.*}}"logicalConnectorSites":"2"
-// EVENTS-DAG: "function":"{{.*}}swiftmutMixed{{.*}}Shape{{.*}}"{{.*}}"logicalConnectorSites":"0"{{.*}}"logicalConnectorSourceLocationMisses":"1"
+// EVENTS-DAG: "function":"{{.*}}swiftmutMixed{{.*}}Shape{{.*}}"{{.*}}"logicalConnectorSites":"0"{{.*}}"logicalConnectorNonSourceBranches":"1"{{.*}}"logicalConnectorSourceLocationMisses":"0"

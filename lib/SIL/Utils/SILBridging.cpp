@@ -18,7 +18,11 @@
 #endif
 
 #include "swift/AST/Attr.h"
+#include "swift/AST/ParseRequests.h"
 #include "swift/AST/SemanticAttrs.h"
+#include "swift/AST/SourceFile.h"
+#include "swift/Bridging/ASTGen.h"
+#include "llvm/Support/JSON.h"
 #include "swift/Basic/Assertions.h"
 #include "swift/SIL/SILContext.h"
 #include "swift/SIL/SILCloner.h"
@@ -35,6 +39,60 @@
 #include <stdio.h>
 
 using namespace swift;
+
+BridgedOwnedString BridgedContext::getStatementInventoryJSON() const {
+  llvm::json::Array files;
+  llvm::json::Array statements;
+#if SWIFT_BUILD_SWIFT_SYNTAX
+  struct Collector {
+    StringRef file;
+    llvm::json::Array &statements;
+  };
+  auto *module = context->getModule()->getSwiftModule();
+  bool hasPrimaryFiles = !module->getPrimarySourceFiles().empty();
+  for (auto *file : module->getFiles()) {
+    auto *sourceFile = dyn_cast<SourceFile>(file);
+    if (!sourceFile || (sourceFile->Kind != SourceFileKind::Library &&
+                        sourceFile->Kind != SourceFileKind::Main))
+      continue;
+    // Other files in an incremental compile are inputs for name lookup.
+    // Their own compile will provide their complete statement inventory.
+    if (hasPrimaryFiles && !sourceFile->isPrimary())
+      continue;
+    // The accessor may parse on a cache miss. Inventory must only observe
+    // syntax retained by ordinary compilation, never request another parse.
+    if (!sourceFile->getASTContext().evaluator.hasCachedResult(
+            ExportedSourceFileRequest{sourceFile}))
+      return BridgedOwnedString("null");
+    auto *syntax = sourceFile->getExportedSourceFile();
+    if (!syntax)
+      return BridgedOwnedString("null");
+    auto filename = sourceFile->getFilename();
+    files.push_back(filename);
+    Collector collector{filename, statements};
+    swift_ASTGen_visitStatementRanges(
+        syntax, &collector,
+        [](void *context, intptr_t kind, intptr_t startLine,
+           intptr_t startColumn, intptr_t startOffset, intptr_t endLine,
+           intptr_t endColumn, intptr_t endOffset) {
+          auto &collector = *static_cast<Collector *>(context);
+          collector.statements.push_back(llvm::json::Object{
+              {"file", collector.file},
+              {"kind", kind == 0 ? "declaration" : kind == 1 ? "expression" : "statement"},
+              {"span", llvm::json::Object{
+                  {"start", llvm::json::Object{{"line", startLine}, {"column", startColumn}, {"utf8Offset", startOffset}}},
+                  {"end", llvm::json::Object{{"line", endLine}, {"column", endColumn}, {"utf8Offset", endOffset}}}}}});
+        });
+  }
+#else
+  return BridgedOwnedString("null");
+#endif
+  std::string result;
+  llvm::raw_string_ostream stream(result);
+  stream << llvm::json::Value(llvm::json::Object{
+      {"files", std::move(files)}, {"statements", std::move(statements)}});
+  return BridgedOwnedString(result);
+}
 
 namespace {
 

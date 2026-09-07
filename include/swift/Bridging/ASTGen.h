@@ -62,6 +62,14 @@ void *_Nullable swift_ASTGen_parseSourceFile(BridgedStringRef buffer,
                                              BridgedGeneratedSourceFileKind);
 void swift_ASTGen_destroySourceFile(void *_Nonnull sourceFile);
 
+/// Visit statement ranges in the compiler's existing complete syntax tree.
+/// No source text is returned and no second parse is performed. Kind values
+/// are 0 (variable declaration), 1 (expression), and 2 (statement).
+void swift_ASTGen_visitStatementRanges(
+    void *_Nonnull sourceFile, void *_Nonnull context,
+    void (*_Nonnull visit)(void *_Nonnull, intptr_t, intptr_t, intptr_t,
+                          intptr_t, intptr_t, intptr_t, intptr_t));
+
 /// Check whether the given source file round-trips correctly. Returns 0 if
 /// round-trip succeeded, non-zero otherwise.
 int swift_ASTGen_roundTripCheck(void *_Nonnull sourceFile);

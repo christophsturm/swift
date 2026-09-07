@@ -1538,6 +1538,7 @@ struct BridgedContext {
   // Module
 
   BridgedOwnedString getModuleDescription() const;
+  BridgedOwnedString getStatementInventoryJSON() const;
   BRIDGED_INLINE SILStage getSILStage() const;
   BRIDGED_INLINE bool moduleIsSerialized() const;
   BRIDGED_INLINE bool moduleHasLoweredAddresses() const;

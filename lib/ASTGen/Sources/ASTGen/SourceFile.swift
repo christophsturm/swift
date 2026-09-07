@@ -190,6 +190,65 @@ public func parseSourceFile(
   return UnsafeRawPointer(exportedPtr)
 }
 
+/// Export structural ranges from the tree retained by ordinary compilation.
+@_cdecl("swift_ASTGen_visitStatementRanges")
+public func visitStatementRanges(
+  sourceFilePtr: UnsafeRawPointer,
+  context: UnsafeMutableRawPointer,
+  visit: @convention(c) (UnsafeMutableRawPointer, Int, Int, Int, Int, Int, Int, Int) -> Void
+) {
+  let sourceFile = sourceFilePtr.assumingMemoryBound(to: ExportedSourceFile.self).pointee
+  let collector = StatementRangeVisitor(
+    converter: sourceFile.sourceLocationConverter, context: context, visit: visit)
+  collector.walk(sourceFile.syntax)
+}
+
+private final class StatementRangeVisitor: SyntaxVisitor {
+  let converter: SourceLocationConverter
+  let context: UnsafeMutableRawPointer
+  let emit: @convention(c) (UnsafeMutableRawPointer, Int, Int, Int, Int, Int, Int, Int) -> Void
+
+  init(
+    converter: SourceLocationConverter,
+    context: UnsafeMutableRawPointer,
+    visit: @escaping @convention(c) (UnsafeMutableRawPointer, Int, Int, Int, Int, Int, Int, Int) -> Void
+  ) {
+    self.converter = converter
+    self.context = context
+    self.emit = visit
+    super.init(viewMode: .sourceAccurate)
+  }
+
+  override func visit(_ node: CodeBlockItemSyntax) -> SyntaxVisitorContinueKind {
+    switch node.item {
+    case .decl(let declaration):
+      if declaration.is(VariableDeclSyntax.self) { append(Syntax(declaration), kind: 0) }
+    case .expr(let expression): append(Syntax(expression), kind: 1)
+    case .stmt(let statement): append(Syntax(statement), kind: 2)
+    }
+    return .visitChildren
+  }
+
+  override func visit(_ node: MemberBlockItemSyntax) -> SyntaxVisitorContinueKind {
+    if let declaration = node.decl.as(VariableDeclSyntax.self) {
+      for binding in declaration.bindings {
+        if let initializer = binding.initializer { append(Syntax(initializer.value), kind: 1) }
+      }
+    }
+    return .visitChildren
+  }
+
+  private func append(_ node: Syntax, kind: Int) {
+    let start = node.positionAfterSkippingLeadingTrivia
+    let end = node.endPositionBeforeTrailingTrivia
+    guard start < end else { return }
+    let startLocation = converter.location(for: start)
+    let endLocation = converter.location(for: end)
+    emit(context, kind, startLocation.line, startLocation.column, start.utf8Offset,
+         endLocation.line, endLocation.column, end.utf8Offset)
+  }
+}
+
 /// Deallocate a parsed source file.
 @_cdecl("swift_ASTGen_destroySourceFile")
 public func destroySourceFile(

@@ -132,7 +132,7 @@ PASS(StripObjectHeaders, "strip-object-headers",
     "Sets the bare flag on objects which don't need their headers")
 PASS(StackPromotion, "stack-promotion",
      "Stack Promotion of Class Objects")
-PASS(Swiftmut, "swiftmut",
+MODULE_PASS(Swiftmut, "swiftmut",
      "Discover and apply swiftmut SIL mutations")
 PASS(MandatoryTempRValueElimination, "mandatory-temp-rvalue-elimination",
      "Mandatory remove short-lived immutable temporary copies")

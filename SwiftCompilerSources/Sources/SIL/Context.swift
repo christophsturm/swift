@@ -38,6 +38,12 @@ extension Context {
     _bridged.getCurrentModuleContext().getAs(ModuleDecl.self)
   }
 
+  /// Complete statement ranges from syntax trees already parsed by the
+  /// compiler, including files without mutation sites and inactive regions.
+  public var statementInventoryJSON: String {
+    String(taking: _bridged.getStatementInventoryJSON())
+  }
+
   public var moduleIsSerialized: Bool { _bridged.moduleIsSerialized() }
 
   public var moduleHasLoweredAddresses: Bool { _bridged.moduleHasLoweredAddresses() }

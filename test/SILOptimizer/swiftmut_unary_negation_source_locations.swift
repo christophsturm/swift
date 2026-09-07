@@ -36,8 +36,9 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 
 // CHECK: "sourceLocation":{"file":"swiftmut_unary_negation_source_locations.swift","line":29,"column":10}
 // CHECK-SAME: "siteKind":"arithmetic"
+// CHECK-SAME: "sourceSpan":{"start":{"line":29,"column":10,{{[^}]*}}},"end":{"line":29,"column":16,
 // CHECK-SAME: "mutator":"INVERT_NEGS"
-// CHECK-SAME: "sourceOriginal":"-value","sourceMutated":"value"
+// CHECK-SAME: "operation":"removeNegation","sourceEdit":{"span":{"start":{"line":29,"column":10,{{[^}]*}}},"end":{"line":29,"column":11,{{[^}]*}}}},"replacement":""}
 
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutUnaryNegationSourceLocations","function":"$s36SwiftmutUnaryNegationSourceLocations08swiftmutbC0yS2iF"
 // EVENTS-SAME: "arithmeticSites":"1"

@@ -47,6 +47,6 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 }
 
 // CHECK: "event":"metamutantDiscovery","module":"SwiftmutNestedArithmeticArgumentSourceLocations","function":"{{[^"]*}}Arguments{{[^"]*}}"
-// CHECK-SAME: "arithmeticSites":"2"
-// MANIFEST-DAG: "siteKind":"arithmetic"{{.*}}"sourceOriginal":"x + y","sourceMutated":"x - y"
-// MANIFEST-DAG: "siteKind":"arithmetic"{{.*}}"sourceOriginal":"y + z","sourceMutated":"y - z"
+// CHECK-SAME: "arithmeticSites":"6"
+// MANIFEST-DAG: "sourceSpan":{"start":{"line":34,"column":39,{{[^}]*}}},"end":{"line":34,"column":44,{{[^}]*}}}{{[^]]*}}"operation":"subtract","sourceEdit":{"span":{"start":{"line":34,"column":41,{{[^}]*}}},"end":{"line":34,"column":42,{{[^}]*}}}},"replacement":"-"}
+// MANIFEST-DAG: "sourceSpan":{"start":{"line":35,"column":39,{{[^}]*}}},"end":{"line":35,"column":44,{{[^}]*}}}{{[^]]*}}"operation":"subtract","sourceEdit":{"span":{"start":{"line":35,"column":41,{{[^}]*}}},"end":{"line":35,"column":42,{{[^}]*}}}},"replacement":"-"}

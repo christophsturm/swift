@@ -23,7 +23,7 @@
 // RUN:   '  ]' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-build-swift -Onone -D SWIFTMUT_DISCOVERY %t/main.swift -module-name SwiftmutNestedArithmeticPositionRuntime -emit-sil -o /dev/null
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} -c 'import json, sys; sites = (site for line in sys.stdin if line.strip() for site in json.loads(line)["sites"]); site = next(site for site in sites if any(alternative["sourceOriginal"] == "b + c" for alternative in site["alternatives"])); print("public let swiftmutTargetSiteID: UInt64 = {}".format(site["siteID"]))' > %t/target.swift
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} -c 'import json, sys; sites = (site for line in sys.stdin if line.strip() for site in json.loads(line)["sites"]); site = next(site for site in sites if site["siteKind"] == "arithmetic" and site["sourceSpan"]["start"]["line"] == 3 and site["sourceSpan"]["start"]["column"] == 8 and site["sourceSpan"]["end"]["column"] == 13); print("public let swiftmutTargetSiteID: UInt64 = {}".format(site["siteID"]))' > %t/target.swift
 // RUN: test -s %t/target.swift
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-build-swift -Onone %t/main.swift %t/target.swift -module-name SwiftmutNestedArithmeticPositionRuntime -o %t/a.out
 // RUN: %target-codesign %t/a.out

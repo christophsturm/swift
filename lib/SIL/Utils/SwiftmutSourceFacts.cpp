@@ -193,6 +193,8 @@ public:
     }
     if (auto *assignment = dyn_cast<AssignExpr>(expression))
       result.value = identity(ASTNode{assignment->getSrc()});
+    if (auto *conversion = dyn_cast<ImplicitConversionExpr>(expression))
+      result.value = identity(ASTNode{conversion->getSubExpr()});
     visit(outputContext, result);
     return Action::Continue(expression);
   }

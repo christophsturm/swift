@@ -42,6 +42,6 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 
 // CHECK: "event":"metamutantDiscovery","module":"SwiftmutRepeatedArithmeticSourceLocations"
 // CHECK-SAME: "arithmeticSites":"3"
-// MANIFEST-DAG: "siteKind":"arithmetic"{{.*}}"sourceOriginal":"result + y","sourceMutated":"result - y"
-// MANIFEST-DAG: "siteKind":"arithmetic"{{.*}}"sourceOriginal":"result + z","sourceMutated":"result - z"
-// MANIFEST-DAG: "siteKind":"arithmetic"{{.*}}"sourceOriginal":"result - 1","sourceMutated":"result + 1"
+// MANIFEST-DAG: "sourceSpan":{"start":{"line":34,"column":23,{{[^}]*}}},"end":{"line":34,"column":33,{{[^}]*}}}{{[^]]*}}"operation":"subtract","sourceEdit":{"span":{"start":{"line":34,"column":30,{{[^}]*}}},"end":{"line":34,"column":31,{{[^}]*}}}},"replacement":"-"}
+// MANIFEST-DAG: "sourceSpan":{"start":{"line":34,"column":57,{{[^}]*}}},"end":{"line":34,"column":67,{{[^}]*}}}{{[^]]*}}"operation":"subtract","sourceEdit":{"span":{"start":{"line":34,"column":64,{{[^}]*}}},"end":{"line":34,"column":65,{{[^}]*}}}},"replacement":"-"}
+// MANIFEST-DAG: "sourceSpan":{"start":{"line":35,"column":10,{{[^}]*}}},"end":{"line":35,"column":20,{{[^}]*}}}{{[^]]*}}"operation":"add","sourceEdit":{"span":{"start":{"line":35,"column":17,{{[^}]*}}},"end":{"line":35,"column":18,{{[^}]*}}}},"replacement":"+"}

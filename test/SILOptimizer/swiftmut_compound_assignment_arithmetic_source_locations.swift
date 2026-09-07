@@ -41,4 +41,5 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 // CHECK: "event":"metamutantDiscovery","module":"SwiftmutCompoundAssignmentArithmeticSourceLocations"
 // CHECK-SAME: "arithmeticSites":"1"
 // MANIFEST: "siteKind":"arithmetic"
-// MANIFEST-SAME: "sourceOriginal":"total += input","sourceMutated":"total -= input"
+// MANIFEST-SAME: "sourceSpan":{"start":{"line":32,"column":3,{{[^}]*}}},"end":{"line":32,"column":17,
+// MANIFEST-SAME: "operation":"subtract","sourceEdit":{"span":{"start":{"line":32,"column":9,{{[^}]*}}},"end":{"line":32,"column":11,{{[^}]*}}}},"replacement":"-="}

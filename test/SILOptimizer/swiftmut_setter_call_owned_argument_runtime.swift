@@ -22,10 +22,10 @@
 // RUN:   '  ],' \
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
-// RUN: env SWIFTMUT_CONFIG=%t/config.json %target-build-swift -O %t/main.swift -module-name SwiftmutSetterCallOwnedArgumentRuntime -o %t/a.out
+// RUN: env SWIFTMUT_CONFIG=%t/config.json %target-build-swift -O %t/main.swift %t/Support.swift -module-name SwiftmutSetterCallOwnedArgumentRuntime -o %t/a.out
 // RUN: %target-codesign %t/a.out
 // RUN: %target-run %t/a.out | %FileCheck %s
-// RUN: env SWIFTMUT_CONFIG=%t/config.json %target-build-swift -O -D SWIFTMUT_BASELINE %t/main.swift -module-name SwiftmutSetterCallOwnedArgumentRuntime -o %t/baseline.out
+// RUN: env SWIFTMUT_CONFIG=%t/config.json %target-build-swift -O -D SWIFTMUT_BASELINE %t/main.swift %t/Support.swift -module-name SwiftmutSetterCallOwnedArgumentRuntime -o %t/baseline.out
 // RUN: %target-codesign %t/baseline.out
 // RUN: %target-run %t/baseline.out | %FileCheck %s --check-prefix=BASELINE
 // RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
@@ -50,8 +50,10 @@
 // MANIFEST-NOT: "siteKind":"statementDeletion"
 // MANIFEST: "function":"{{.*}}swiftmutInvoke{{.*}}","sourceLocation":{{.*}}"siteKind":"statementDeletion"
 // MANIFEST-SAME: "mutator":"STATEMENT_DELETIONS"
-// MANIFEST-SAME: "sourceOriginal":"SwiftmutToken(value: 2)"
+// MANIFEST-SAME: "sourceOriginal":"assignment"
 // MANIFEST-SAME: "sourceMutated":"removed assignment"
+// MANIFEST-SAME: "operation":"removeAssignment"
+// MANIFEST-SAME: "sourceSpan":
 // MANIFEST-NOT: "siteKind":"statementDeletion"
 
 //--- main.swift
@@ -66,7 +68,7 @@ public final class SwiftmutToken {
   }
 
   deinit {
-    swiftmutDeinitCount += 1
+    swiftmutRecordDeinit()
   }
 }
 
@@ -118,3 +120,10 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 swiftmutInvoke()
 print(swiftmutObserved)
 print(swiftmutDeinitCount)
+
+//--- Support.swift
+// Keep test accounting outside the configured mutation sources.
+@inline(never)
+public func swiftmutRecordDeinit() {
+  swiftmutDeinitCount += 1
+}

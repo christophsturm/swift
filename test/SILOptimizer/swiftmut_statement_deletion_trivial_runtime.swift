@@ -45,8 +45,10 @@
 // MANIFEST: "function":"{{.*}}swiftmutUpdateCount{{.*}}","sourceLocation":{{.*}}"siteKind":"statementDeletion"
 // MANIFEST-SAME: "resultKind":"statement"
 // MANIFEST-SAME: "mutator":"STATEMENT_DELETIONS"
-// MANIFEST-SAME: "sourceOriginal":"replacement"
+// MANIFEST-SAME: "sourceOriginal":"assignment"
 // MANIFEST-SAME: "sourceMutated":"removed assignment"
+// MANIFEST-SAME: "operation":"removeAssignment"
+// MANIFEST-SAME: "sourceSpan":
 // MANIFEST-NOT: "siteKind":"statementDeletion"
 
 //--- main.swift

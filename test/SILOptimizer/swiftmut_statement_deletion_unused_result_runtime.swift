@@ -60,14 +60,14 @@
 // EVENTS-SAME: "statementDeletionUnusedResultApplyInstructions":"1"
 // EVENTS-SAME: "statementDeletionMutationEligibleApplyInstructions":"1"
 // EVENTS-SAME: "statementDeletionNonStatementSourceLocations":"0"
-// MANIFEST-NOT: "line":32
+// MANIFEST-NOT: "sourceLocation":{"file":"main.swift","line":32,
 // MANIFEST-DAG: "function":"{{.*}}swiftmutInvoke{{.*}}","sourceLocation":{{.*}}"siteKind":"statementDeletion","resultKind":"statement"
 // MANIFEST-DAG: "function":"{{.*}}swiftmutDiscard{{.*}}InCase{{.*}}","sourceLocation":{{.*}}main.swift","line":33,"column":13{{.*}},"siteKind":"statementDeletion","resultKind":"statement"
 // MANIFEST-DAG: "function":"{{.*}}swiftmutDiscard{{.*}}AcrossLines{{.*}}","sourceLocation":{{.*}}main.swift","line":49,"column":6{{.*}},"siteKind":"statementDeletion","resultKind":"statement"
 // MANIFEST: "mutator":"STATEMENT_DELETIONS"
 // MANIFEST-SAME: "sourceOriginal":"call"
 // MANIFEST-SAME: "sourceMutated":"removed call"
-// MANIFEST-NOT: "line":32
+// MANIFEST-NOT: "sourceLocation":{"file":"main.swift","line":32,
 
 //--- main.swift
 public var swiftmutObserved = 0

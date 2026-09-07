@@ -94,9 +94,9 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 // CHECK-SAME: "siteKind":"condition"
 // CHECK-SAME: "sourceOriginal":"combinedOutput.contains(\"compilation failed\")","sourceMutated":"false"
 // CHECK-SAME: "sourceOriginal":"combinedOutput.contains(\"compilation failed\")","sourceMutated":"true"
-// CHECK-NOT: "line":68
-// CHECK-NOT: "line":69
-// CHECK-NOT: "line":70
+// CHECK-NOT: "sourceLocation":{"file":"swiftmut_non_explicit_condition_classification.swift","line":68,
+// CHECK-NOT: "sourceLocation":{"file":"swiftmut_non_explicit_condition_classification.swift","line":69,
+// CHECK-NOT: "sourceLocation":{"file":"swiftmut_non_explicit_condition_classification.swift","line":70,
 
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutNonExplicitConditionClassification","function":"$s42SwiftmutNonExplicitConditionClassification16swiftmutClassify
 // EVENTS-SAME: "conditionBranches":"7"

@@ -30,6 +30,7 @@ add_swift_compiler_module(SIL
     Operand.swift
     Registration.swift
     SILStage.swift
+    SourceNode.swift
     Type.swift
     Value.swift
     VTable.swift
@@ -37,4 +38,3 @@ add_swift_compiler_module(SIL
 
 add_subdirectory(DataStructures)
 add_subdirectory(Utilities)
-

@@ -471,6 +471,9 @@ struct BridgedLocation {
   BRIDGED_INLINE bool isFilenameAndLocation() const;
   SWIFT_IMPORT_UNSAFE BRIDGED_INLINE FilenameAndLocation getFilenameAndLocation() const;
   SWIFT_IMPORT_UNSAFE FilenameAndLocation getSourcePosition(BridgedFunction function) const;
+  void visitASTProvenance(
+      void *_Nonnull context,
+      void (*_Nonnull visit)(void *_Nonnull, SwiftInt)) const;
   BRIDGED_INLINE bool hasSameSourceLocation(BridgedLocation rhs) const;
   SWIFT_IMPORT_UNSAFE BRIDGED_INLINE OptionalBridgedDeclObj getDecl() const;
   static BRIDGED_INLINE BridgedLocation fromNominalTypeDecl(BridgedDeclObj decl);
@@ -1515,6 +1518,36 @@ struct BridgedOperandSet {
   SWIFT_IMPORT_UNSAFE BRIDGED_INLINE BridgedFunction getFunction() const;
 };
 
+/// A transient AST observation. Handles identify compiler-owned nodes only
+/// while the current module pass runs; they are not persistent mutation IDs.
+struct BridgedSourceNode {
+  SwiftInt identity;
+  SwiftInt parent;
+  SwiftInt semanticExpression;
+  SwiftInt referencedDeclaration;
+  SwiftInt value;
+  SwiftInt callee;
+  BridgedStringRef category;
+  BridgedStringRef kind;
+  BridgedStringRef role;
+  BridgedStringRef file;
+  BridgedStringRef declarationName;
+  BridgedStringRef declarationModule;
+  BridgedStringRef typeName;
+  BridgedStringRef typeModule;
+  SwiftInt startLine;
+  SwiftInt startColumn;
+  SwiftInt startOffset;
+  SwiftInt endLine;
+  SwiftInt endColumn;
+  SwiftInt endOffset;
+  bool implicit;
+  bool localDeclaration;
+  bool constantDeclaration;
+  bool optionalType;
+  bool voidType;
+};
+
 struct BridgedContext {
   swift::SILContext * _Nonnull context;
 
@@ -1539,6 +1572,9 @@ struct BridgedContext {
 
   BridgedOwnedString getModuleDescription() const;
   BridgedOwnedString getStatementInventoryJSON() const;
+  bool visitSourceNodes(
+      void *_Nonnull context,
+      void (*_Nonnull visit)(void *_Nonnull, BridgedSourceNode)) const;
   BRIDGED_INLINE SILStage getSILStage() const;
   BRIDGED_INLINE bool moduleIsSerialized() const;
   BRIDGED_INLINE bool moduleHasLoweredAddresses() const;

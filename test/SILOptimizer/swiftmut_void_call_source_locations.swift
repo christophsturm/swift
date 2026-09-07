@@ -50,9 +50,9 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 // CHECK-SAME: "siteKind":"voidCall"
 // CHECK-SAME: "resultKind":"statement"
 // CHECK-SAME: "sourceOriginal":"call","sourceMutated":"/* removed */"
-// CHECK-NOT: "line":36
-// CHECK-NOT: "line":40
-// CHECK-NOT: "line":41
+// CHECK-NOT: "sourceLocation":{"file":"swiftmut_void_call_source_locations.swift","line":36,
+// CHECK-NOT: "sourceLocation":{"file":"swiftmut_void_call_source_locations.swift","line":40,
+// CHECK-NOT: "sourceLocation":{"file":"swiftmut_void_call_source_locations.swift","line":41,
 
 // EVENTS: "event":"metamutantDiscovery"
 // EVENTS-SAME: "function":"$s31SwiftmutVoidCallSourceLocations08swiftmutbC9StatementyySiF"

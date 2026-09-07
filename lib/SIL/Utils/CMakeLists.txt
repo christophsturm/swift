@@ -23,6 +23,7 @@ target_sources(swiftSIL PRIVATE
   SILBridging.cpp
   SILInstructionWorklist.cpp
   SILRemarkStreamer.cpp
+  SwiftmutSourceFacts.cpp
   Test.cpp
   ValueUtils.cpp
 )

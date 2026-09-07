@@ -190,6 +190,23 @@ public func parseSourceFile(
   return UnsafeRawPointer(exportedPtr)
 }
 
+/// Export retained token boundaries without extracting token text.
+@_cdecl("swift_ASTGen_visitTokenRanges")
+public func visitTokenRanges(
+  sourceFilePtr: UnsafeRawPointer,
+  context: UnsafeMutableRawPointer,
+  visit: @convention(c) (UnsafeMutableRawPointer, Int, Int, Int, Int) -> Void
+) {
+  let sourceFile = sourceFilePtr.assumingMemoryBound(to: ExportedSourceFile.self).pointee
+  for token in sourceFile.syntax.tokens(viewMode: .sourceAccurate) {
+    let start = token.positionAfterSkippingLeadingTrivia
+    let end = token.endPositionBeforeTrailingTrivia
+    guard start < end else { continue }
+    let endLocation = sourceFile.sourceLocationConverter.location(for: end)
+    visit(context, start.utf8Offset, end.utf8Offset, endLocation.line, endLocation.column)
+  }
+}
+
 /// Export structural ranges from the tree retained by ordinary compilation.
 @_cdecl("swift_ASTGen_visitStatementRanges")
 public func visitStatementRanges(

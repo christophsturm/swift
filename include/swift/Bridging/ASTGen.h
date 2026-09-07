@@ -70,6 +70,13 @@ void swift_ASTGen_visitStatementRanges(
     void (*_Nonnull visit)(void *_Nonnull, intptr_t, intptr_t, intptr_t,
                           intptr_t, intptr_t, intptr_t, intptr_t));
 
+/// Visit retained token positions, without returning token text. Arguments
+/// are start offset, end offset, end line, and end column.
+void swift_ASTGen_visitTokenRanges(
+    void *_Nonnull sourceFile, void *_Nonnull context,
+    void (*_Nonnull visit)(void *_Nonnull, intptr_t, intptr_t, intptr_t,
+                          intptr_t));
+
 /// Check whether the given source file round-trips correctly. Returns 0 if
 /// round-trip succeeded, non-zero otherwise.
 int swift_ASTGen_roundTripCheck(void *_Nonnull sourceFile);

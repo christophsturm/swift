@@ -47,6 +47,16 @@ public struct Location: ProvidingSourceLocation, Equatable, CustomStringConverti
     return nil
   }
 
+  /// Decodes existing compiler location facts without loading an external
+  /// source file or formatting and reparsing a diagnostic description.
+  public func sourcePosition(in function: Function) -> (path: StringRef, line: Int, column: Int)? {
+    let position = bridged.getSourcePosition(function.bridged)
+    guard position.line > 0, position.column > 0 else {
+      return nil
+    }
+    return (StringRef(bridged: position.path), position.line, position.column)
+  }
+
   public func getSourceLocation(diagnosticEngine: DiagnosticEngine) -> SourceLoc? {
     if let sourceLoc = sourceLoc {
       return sourceLoc

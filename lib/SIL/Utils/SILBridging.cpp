@@ -551,6 +551,23 @@ BridgedOwnedString BridgedDefaultWitnessTable::getDebugDescription() const {
 static_assert(sizeof(BridgedLocation) >= sizeof(swift::SILDebugLocation),
               "BridgedLocation has wrong size");
 
+BridgedLocation::FilenameAndLocation
+BridgedLocation::getSourcePosition(BridgedFunction function) const {
+  SILLocation location = getLoc().getLocation();
+  if (location.isFilenameAndLocation()) {
+    const auto *position = location.getFilenameAndLocation();
+    return {BridgedStringRef(position->filename), SwiftInt(position->line),
+            SwiftInt(position->column)};
+  }
+  SourceLoc sourceLoc = location.getSourceLoc();
+  if (sourceLoc.isInvalid())
+    return {BridgedStringRef(llvm::StringRef()), 0, 0};
+  const SourceManager &sourceManager = function.getFunction()->getASTContext().SourceMgr;
+  auto position = SILLocation::decode(sourceLoc, sourceManager);
+  return {BridgedStringRef(position.filename), SwiftInt(position.line),
+          SwiftInt(position.column)};
+}
+
 BridgedOwnedString BridgedLocation::getDebugDescription() const {
   std::string str;
   llvm::raw_string_ostream os(str);

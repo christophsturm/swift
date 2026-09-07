@@ -80,8 +80,12 @@ class SourceNodeWalker final : public ASTWalker {
       if (auto *binding = dyn_cast<PatternBindingDecl>(declaration)) {
         for (unsigned i = 0; i < binding->getNumPatternEntries(); ++i) {
           if (binding->getInit(i) == expression ||
-              binding->getOriginalInit(i) == expression)
-            return "initializer";
+              binding->getOriginalInit(i) == expression) {
+            bool bindsVariable = false;
+            binding->getPattern(i)->forEachVariable(
+                [&](VarDecl *) { bindsVariable = true; });
+            return bindsVariable ? "initializer" : "discardedInitializer";
+          }
         }
       }
     }
@@ -184,7 +188,8 @@ public:
     addDeclaration(result, expression->getReferencedDecl().getDecl());
     if (auto *apply = dyn_cast<ApplyExpr>(expression)) {
       result.callee = identity(ASTNode{apply->getFn()});
-      addDeclaration(result, apply->getCalledValue());
+      addDeclaration(result,
+                     apply->getCalledValue(/*skipFunctionConversions=*/true));
     }
     if (auto *assignment = dyn_cast<AssignExpr>(expression))
       result.value = identity(ASTNode{assignment->getSrc()});

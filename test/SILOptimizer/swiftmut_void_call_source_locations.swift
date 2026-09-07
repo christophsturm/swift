@@ -46,13 +46,12 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
-// CHECK: "sourceLocation":{"file":"swiftmut_void_call_source_locations.swift","line":32,"column":3}
-// CHECK-SAME: "siteKind":"voidCall"
-// CHECK-SAME: "resultKind":"statement"
-// CHECK-SAME: "sourceOriginal":"call","sourceMutated":"/* removed */"
 // CHECK-NOT: "sourceLocation":{"file":"swiftmut_void_call_source_locations.swift","line":36,
 // CHECK-NOT: "sourceLocation":{"file":"swiftmut_void_call_source_locations.swift","line":40,
-// CHECK-NOT: "sourceLocation":{"file":"swiftmut_void_call_source_locations.swift","line":41,
+// CHECK-DAG: "sourceLocation":{"file":"swiftmut_void_call_source_locations.swift","line":32,"column":3},"siteKind":"voidCall","resultKind":"statement"{{.*}}"sourceOriginal":"call","sourceMutated":"/* removed */"
+// CHECK-DAG: "sourceLocation":{"file":"swiftmut_void_call_source_locations.swift","line":41,"column":3}
+// CHECK-NOT: "sourceLocation":{"file":"swiftmut_void_call_source_locations.swift","line":36,
+// CHECK-NOT: "sourceLocation":{"file":"swiftmut_void_call_source_locations.swift","line":40,
 
 // EVENTS: "event":"metamutantDiscovery"
 // EVENTS-SAME: "function":"$s31SwiftmutVoidCallSourceLocations08swiftmutbC9StatementyySiF"
@@ -66,6 +65,6 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 // EVENTS-SAME: "voidCallNonStatementSourceLocations":"1"
 // EVENTS: "event":"metamutantDiscovery"
 // EVENTS-SAME: "function":"$s31SwiftmutVoidCallSourceLocations08swiftmutbC25ExpressionBeforeStatementyySiF"
-// EVENTS-SAME: "voidCallSites":"0"
+// EVENTS-SAME: "voidCallSites":"1"
 // EVENTS-SAME: "voidCallMutationEligibleApplyInstructions":"2"
-// EVENTS-SAME: "voidCallNonStatementSourceLocations":"2"
+// EVENTS-SAME: "voidCallNonStatementSourceLocations":"1"

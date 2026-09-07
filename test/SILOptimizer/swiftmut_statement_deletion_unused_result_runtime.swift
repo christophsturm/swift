@@ -63,7 +63,7 @@
 // MANIFEST-NOT: "sourceLocation":{"file":"main.swift","line":32,
 // MANIFEST-DAG: "function":"{{.*}}swiftmutInvoke{{.*}}","sourceLocation":{{.*}}"siteKind":"statementDeletion","resultKind":"statement"
 // MANIFEST-DAG: "function":"{{.*}}swiftmutDiscard{{.*}}InCase{{.*}}","sourceLocation":{{.*}}main.swift","line":33,"column":13{{.*}},"siteKind":"statementDeletion","resultKind":"statement"
-// MANIFEST-DAG: "function":"{{.*}}swiftmutDiscard{{.*}}AcrossLines{{.*}}","sourceLocation":{{.*}}main.swift","line":49,"column":6{{.*}},"siteKind":"statementDeletion","resultKind":"statement"
+// MANIFEST-DAG: "function":"{{.*}}swiftmutDiscard{{.*}}AcrossLines{{.*}}","sourceLocation":{{.*}}main.swift","line":48,"column":7{{.*}},"siteKind":"statementDeletion","resultKind":"statement"{{.*}}"sourceSpan":{"start":{"line":48,"column":7,"utf8Offset":872},"end":{"line":49,"column":14,"utf8Offset":894}}
 // MANIFEST: "mutator":"STATEMENT_DELETIONS"
 // MANIFEST-SAME: "sourceOriginal":"call"
 // MANIFEST-SAME: "sourceMutated":"removed call"

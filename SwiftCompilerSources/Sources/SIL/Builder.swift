@@ -587,6 +587,12 @@ public struct Builder {
     return notifyNew(uteda.getAs(InitEnumDataAddrInst.self))
   }
 
+  @discardableResult
+  public func createInjectEnumAddr(enumAddress: Value, caseIndex: Int) -> InjectEnumAddrInst {
+    let ieai = bridged.createInjectEnumAddr(enumAddress.bridged, caseIndex)
+    return notifyNew(ieai.getAs(InjectEnumAddrInst.self))
+  }
+
   public func createEnum(caseIndex: Int, payload: Value?, enumType: Type) -> EnumInst {
     let enumInst = bridged.createEnum(caseIndex, payload.bridged, enumType.bridged)
     return notifyNew(enumInst.getAs(EnumInst.self))

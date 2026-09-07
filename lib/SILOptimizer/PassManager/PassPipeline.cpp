@@ -211,6 +211,13 @@ static void addMandatoryDiagnosticOptPipeline(SILPassPipelinePlan &P) {
   P.addMandatoryInlining();
   P.addMandatorySILLinker();
 
+  // Swiftmut must observe and instrument local bindings before mandatory load
+  // promotion merges distinct source variables into one SSA producer. This is
+  // the single native Swiftmut hook and is shared by Onone and performance
+  // builds. The pass returns immediately without a valid SWIFTMUT_CONFIG
+  // session.
+  P.addSwiftmut();
+
   // Promote loads as necessary to ensure we have enough SSA formation to emit
   // SSA based diagnostics.
   P.addMandatoryRedundantLoadElimination();
@@ -332,13 +339,6 @@ SILPassPipelinePlan::getDiagnosticPassPipeline(const SILOptions &Options) {
 
   // Otherwise run the rest of diagnostics.
   addMandatoryDiagnosticOptPipeline(P);
-
-  // Swiftmut observes and instruments the canonical mandatory-pass output,
-  // before the frontend selects either the Onone or performance pipeline.
-  // Source-semantic identity is defined independently of this unavoidable
-  // scheduling coordinate. The pass returns immediately without a valid
-  // SWIFTMUT_CONFIG session.
-  P.addSwiftmut();
 
   if (SILViewCanonicalCFG) {
     addCFGPrinterPipeline(P, "SIL View Canonical CFG");

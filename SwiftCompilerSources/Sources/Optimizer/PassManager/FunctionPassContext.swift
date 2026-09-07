@@ -69,6 +69,12 @@ struct FunctionPassContext : MutatingContext {
     }
   }
 
+  func loadFunction(name: String, loadCalleesRecursively: Bool) -> Function? {
+    name._withBridgedStringRef {
+      _bridged.loadFunction($0, loadCalleesRecursively).function
+    }
+  }
+
   func eliminateDeadAllocations(in function: Function) -> Bool {
     if bridgedPassContext.eliminateDeadAllocations(function.bridged) {
       notifyInstructionsChanged()

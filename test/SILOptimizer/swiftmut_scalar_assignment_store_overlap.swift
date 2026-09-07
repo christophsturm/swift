@@ -35,7 +35,7 @@
 // EVENTS-SAME: "scalarValueDirectStoreUses":"2"
 // EVENTS-SAME: "assignmentValueSites":"3"
 // EVENTS: "event":"metamutantInjection","module":"SwiftmutScalarAssignmentStoreOverlap","function":"{{.*}}swiftmutByteOffset
-// EVENTS-SAME: "injectedScalarValueSites":"3"
+// EVENTS-SAME: "injectedScalarValueSites":"4"
 // EVENTS-SAME: "injectedAssignmentValueSites":"3"
 // MANIFEST-DAG: "siteKind":"scalarValue"
 // MANIFEST-DAG: "siteKind":"assignmentValue"

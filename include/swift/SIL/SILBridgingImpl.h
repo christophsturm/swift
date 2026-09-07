@@ -2814,6 +2814,13 @@ BridgedInstruction BridgedBuilder::createInitEnumDataAddr(BridgedValue enumAddr,
                                              type.unbridged())};
 }
 
+BridgedInstruction BridgedBuilder::createInjectEnumAddr(BridgedValue enumAddr,
+                                                        SwiftInt caseIdx) const {
+  swift::SILValue en = enumAddr.getSILValue();
+  return {unbridged().createInjectEnumAddr(regularLoc(), en,
+                                           en->getType().getEnumElement(caseIdx))};
+}
+
 BridgedInstruction BridgedBuilder::createEnum(SwiftInt caseIdx, OptionalBridgedValue payload,
                               BridgedType resultType) const {
   swift::EnumElementDecl *caseDecl =

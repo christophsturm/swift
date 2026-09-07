@@ -37,8 +37,8 @@
 // RUN: env SWIFTMUT_CONFIG= %target-swift-frontend -emit-sil -O -module-name SwiftmutNativePerformancePipelineNoSession %s -o /dev/null
 // RUN: env SWIFTMUT_CONFIG= %target-swift-frontend -emit-sil -Onone -module-name SwiftmutNativeOnonePipelineNoSession %s -o /dev/null
 
-// PIPELINE: "inline-always-inlining",
-// PIPELINE-NEXT: "swiftmut" ]
+// PIPELINE: "mandatory-linker", "swiftmut",
+// PIPELINE-NEXT: "mandatory-redundant-load-elimination",
 
 // NO-PIPELINE-NOT: "swiftmut"
 

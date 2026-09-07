@@ -1389,6 +1389,8 @@ struct BridgedBuilder{
   SWIFT_IMPORT_UNSAFE BRIDGED_INLINE BridgedInstruction createInitEnumDataAddr(BridgedValue enumAddr,
                                                                                SwiftInt caseIdx,
                                                                                BridgedType type) const;
+  SWIFT_IMPORT_UNSAFE BRIDGED_INLINE BridgedInstruction createInjectEnumAddr(BridgedValue enumAddr,
+                                                                              SwiftInt caseIdx) const;
   SWIFT_IMPORT_UNSAFE BRIDGED_INLINE BridgedInstruction createEnum(SwiftInt caseIdx, OptionalBridgedValue payload,
                                           BridgedType resultType) const;
   SWIFT_IMPORT_UNSAFE BRIDGED_INLINE BridgedInstruction createThinToThickFunction(BridgedValue fn,

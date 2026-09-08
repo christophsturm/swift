@@ -24,7 +24,7 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutComputedPropertyConditionSourceLocations %s -o /dev/null
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %S > %t/all-fragments.json
 // RUN: %FileCheck %s --input-file %t/all-fragments.json
 
 public struct SwiftmutSelection {
@@ -55,4 +55,4 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
-// CHECK: "file":"swiftmut_computed_property_condition_source_locations.swift","line":46,"column":8},"siteKind":"condition","resultKind":"condition","alternatives":[{{.*}}"sourceOriginal":"Set(selections.map(\\.siteID)).count >= 2","sourceMutated":"Set(selections.map(\\.siteID)).count > 2"{{.*}}"sourceOriginal":"Set(selections.map(\\.siteID)).count >= 2","sourceMutated":"Set(selections.map(\\.siteID)).count < 2"{{.*}}"sourceOriginal":"Set(selections.map(\\.siteID)).count >= 2","sourceMutated":"false"{{.*}}"sourceOriginal":"Set(selections.map(\\.siteID)).count >= 2","sourceMutated":"true"
+// CHECK: "file":"swiftmut_computed_property_condition_source_locations.swift","line":46,"column":8},"siteKind":"condition",{{.*}}"resultKind":"condition","alternatives":[{{.*}}"sourceOriginal":"Set(selections.map(\\.siteID)).count >= 2","sourceMutated":"Set(selections.map(\\.siteID)).count > 2"{{.*}}"sourceOriginal":"Set(selections.map(\\.siteID)).count >= 2","sourceMutated":"Set(selections.map(\\.siteID)).count < 2"{{.*}}"sourceOriginal":"Set(selections.map(\\.siteID)).count >= 2","sourceMutated":"false"{{.*}}"sourceOriginal":"Set(selections.map(\\.siteID)).count >= 2","sourceMutated":"true"

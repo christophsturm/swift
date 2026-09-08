@@ -23,7 +23,7 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutGuardConditionSourceLocations %s -o /dev/null
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %S > %t/all-fragments.json
 // RUN: %FileCheck %s --input-file %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=OPTIONAL --input-file %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
@@ -68,7 +68,8 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 // CHECK-DAG: "siteKind":"condition"{{.*}}"sourceOriginal":"!subject.functionName.contains(\"cfu_\")","sourceMutated":"false"{{.*}}"sourceOriginal":"!subject.functionName.contains(\"cfu_\")","sourceMutated":"true"
 // CHECK-DAG: "siteKind":"condition"{{.*}}"sourceOriginal":"subject.sourceName.hasSuffix(\"Scope\")","sourceMutated":"false"{{.*}}"sourceOriginal":"subject.sourceName.hasSuffix(\"Scope\")","sourceMutated":"true"
 // CHECK-DAG: "sourceLocation":{"file":"swiftmut_guard_condition_source_locations.swift","line":35,"column":9}
-// CHECK-DAG: "sourceOriginal":"includeDetails, !trimmed.isEmpty","sourceMutated":"false"{{.*}}"sourceOriginal":"includeDetails, !trimmed.isEmpty","sourceMutated":"true"
+// CHECK-DAG: "sourceOriginal":"includeDetails","sourceMutated":"false"{{.*}}"sourceOriginal":"includeDetails","sourceMutated":"true"
+// CHECK-DAG: "sourceOriginal":"!trimmed.isEmpty","sourceMutated":"false"{{.*}}"sourceOriginal":"!trimmed.isEmpty","sourceMutated":"true"
 // OPTIONAL: "sourceLocation":{"file":"swiftmut_guard_condition_source_locations.swift","line":42,"column":27}
 // OPTIONAL-SAME: "siteKind":"condition"
 // OPTIONAL-SAME: "sourceOriginal":"!text.isEmpty","sourceMutated":"false"

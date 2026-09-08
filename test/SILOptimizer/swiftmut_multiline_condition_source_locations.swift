@@ -22,7 +22,7 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutMultilineConditionSourceLocations %s -o /dev/null
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %S > %t/all-fragments.json
 // RUN: %FileCheck %s --input-file %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
 
@@ -48,8 +48,8 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 
 // CHECK: "sourceLocation":{"file":"swiftmut_multiline_condition_source_locations.swift","line":35,"column":6}
 // CHECK-SAME: "siteKind":"condition"
-// CHECK-SAME: "sourceOriginal":"swiftmutAccepts( value, flag: flag )","sourceMutated":"false"
-// CHECK-SAME: "sourceOriginal":"swiftmutAccepts( value, flag: flag )","sourceMutated":"true"
+// CHECK-SAME: "sourceOriginal":"swiftmutAccepts(\n    value,\n    flag: flag\n  )","sourceMutated":"false"
+// CHECK-SAME: "sourceOriginal":"swiftmutAccepts(\n    value,\n    flag: flag\n  )","sourceMutated":"true"
 
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutMultilineConditionSourceLocations","function":"$s41SwiftmutMultilineConditionSourceLocations08swiftmutbC0
 // EVENTS-SAME: "conditionSites":"1"

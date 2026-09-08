@@ -23,7 +23,7 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutRepeatedConditionSourceLocations %s -o /dev/null
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %S > %t/all-fragments.json
 // RUN: %FileCheck %s --input-file %t/all-fragments.json
 
 @inline(never)
@@ -58,4 +58,4 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
-// CHECK: "line":38,"column":6},"siteKind":"condition","resultKind":"condition","alternatives":[{{.*}}"sourceOriginal":"swiftmutConditionValue(count) == 1","sourceMutated":"swiftmutConditionValue(count) != 1"{{.*}}"sourceOriginal":"swiftmutConditionValue(count) == 1","sourceMutated":"false"{{.*}}"sourceOriginal":"swiftmutConditionValue(count) == 1","sourceMutated":"true"{{.*}}"line":41,"column":6},"siteKind":"condition","resultKind":"condition","alternatives":[{{.*}}"sourceOriginal":"swiftmutConditionValue(count) == 1","sourceMutated":"swiftmutConditionValue(count) != 1"{{.*}}"sourceOriginal":"swiftmutConditionValue(count) == 1","sourceMutated":"false"{{.*}}"sourceOriginal":"swiftmutConditionValue(count) == 1","sourceMutated":"true"
+// CHECK: "line":38,"column":6},"siteKind":"condition",{{.*}}"resultKind":"condition","alternatives":[{{.*}}"sourceOriginal":"swiftmutConditionValue(count) == 1","sourceMutated":"swiftmutConditionValue(count) != 1"{{.*}}"sourceOriginal":"swiftmutConditionValue(count) == 1","sourceMutated":"false"{{.*}}"sourceOriginal":"swiftmutConditionValue(count) == 1","sourceMutated":"true"{{.*}}"line":41,"column":6},"siteKind":"condition",{{.*}}"resultKind":"condition","alternatives":[{{.*}}"sourceOriginal":"swiftmutConditionValue(count) == 1","sourceMutated":"swiftmutConditionValue(count) != 1"{{.*}}"sourceOriginal":"swiftmutConditionValue(count) == 1","sourceMutated":"false"{{.*}}"sourceOriginal":"swiftmutConditionValue(count) == 1","sourceMutated":"true"

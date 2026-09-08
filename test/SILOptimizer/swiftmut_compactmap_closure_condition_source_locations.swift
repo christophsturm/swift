@@ -29,7 +29,7 @@
 // RUN:   '  ]' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutCompactMapClosureConditionSourceLocations %s -o /dev/null
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %S > %t/all-fragments.json
 // RUN: %FileCheck %s --input-file %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
 
@@ -81,4 +81,8 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 // CHECK-DAG: "sourceOriginal":"index < mutation.reportedSelections.count","sourceMutated":"false"
 // CHECK-DAG: "sourceOriginal":"index < mutation.reportedSelections.count","sourceMutated":"true"
 
-// EVENTS: "event":"metamutantDiscovery"{{.*}}"conditionBranches":"3"{{.*}}"conditionSites":"2"{{.*}}"conditionSourceLocationMisses":"0"
+// CHECK-DAG: "line":60,"column":13
+// CHECK-DAG: "sourceOriginal":"!selectedIDs.isEmpty","sourceMutated":"false"
+// CHECK-DAG: "sourceOriginal":"!selectedIDs.isEmpty","sourceMutated":"true"
+
+// EVENTS: "event":"metamutantDiscovery"{{.*}}"conditionBranches":"3"{{.*}}"conditionSites":"3"{{.*}}"conditionSourceLocationMisses":"0"

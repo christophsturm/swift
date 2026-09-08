@@ -22,7 +22,7 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutPredicateCallConditionSourceLocations %s -o /dev/null
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %S > %t/all-fragments.json
 // RUN: %FileCheck %s --input-file %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
 
@@ -58,11 +58,9 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
-// CHECK-DAG: "line":44,"column":6
-// CHECK-DAG: "sourceOriginal":"swiftmutIsGeneratedClone(site.function)","sourceMutated":"false"
-// CHECK-DAG: "sourceOriginal":"swiftmutIsGeneratedClone(site.function)","sourceMutated":"true"
 // CHECK-DAG: "line":49,"column":6
 // CHECK-DAG: "sourceOriginal":"swiftmutIsGeneratedThunk(site.function)","sourceMutated":"false"
 // CHECK-DAG: "sourceOriginal":"swiftmutIsGeneratedThunk(site.function)","sourceMutated":"true"
 
-// EVENTS: "event":"metamutantDiscovery"{{.*}}"conditionBranches":"3"{{.*}}"conditionSites":"2"{{.*}}"conditionSourceLocationMisses":"0"
+// EVENTS: "event":"metamutantDiscovery"{{.*}}"conditionBranches":"3"{{.*}}"conditionSites":"1"{{.*}}"conditionSourceLocationMisses":"0"
+// EVENTS-SAME: "conditionCompoundSourceConstantAlternatives":"4"

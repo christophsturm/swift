@@ -29,7 +29,7 @@
 // RUN:   '  ]' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutMultilineLogicalConditionSourceLocations %s -o /dev/null
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %S > %t/all-fragments.json
 // RUN: %FileCheck %s --input-file %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
 
@@ -61,7 +61,7 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
-// CHECK-DAG: "siteKind":"condition"{{.*}}"sourceOriginal":"yield.conditionComparisonBranches > 0","sourceMutated":"yield.conditionComparisonBranches >= 0"{{.*}}"sourceOriginal":"yield.conditionComparisonBranches > 0","sourceMutated":"yield.conditionComparisonBranches <= 0"{{.*}}"sourceOriginal":"yield.conditionComparisonBranches > 0","sourceMutated":"false"{{.*}}"sourceOriginal":"yield.conditionComparisonBranches > 0","sourceMutated":"true"
+// CHECK-DAG: "siteKind":"condition"{{.*}}"sourceOriginal":"yield.conditionComparisonBranches > 0","sourceMutated":"yield.conditionComparisonBranches >= 0"{{.*}}"sourceOriginal":"yield.conditionComparisonBranches > 0","sourceMutated":"yield.conditionComparisonBranches <= 0"
 // CHECK-DAG: "siteKind":"condition"{{.*}}"sourceOriginal":"yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten > 0","sourceMutated":"yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten >= 0"{{.*}}"sourceOriginal":"yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten > 0","sourceMutated":"yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten <= 0"{{.*}}"sourceOriginal":"yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten > 0","sourceMutated":"false"{{.*}}"sourceOriginal":"yield.conditionComparisonBranchesWithAVeryLongPrefixBeforeTheOperatorIsWritten > 0","sourceMutated":"true"
 
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutMultilineLogicalConditionSourceLocations","function":"$s48SwiftmutMultilineLogicalConditionSourceLocations08swiftmutbcD0

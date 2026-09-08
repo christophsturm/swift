@@ -27,7 +27,7 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -Onone -module-name SwiftmutSourceComparisonConditionOwnsValueApply %s -o /dev/null
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %S > %t/all-fragments.json
 // RUN: %FileCheck %s --input-file %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
 
@@ -87,8 +87,9 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
-// CHECK: "siteKind":"valueApply"{{.*}}"sourceOriginal":"lastFunctionRange.path == path"
+// CHECK-DAG: "siteKind":"condition"{{[^]]*}}"sourceOriginal":"lastFunctionRange.path == path","sourceMutated":"lastFunctionRange.path != path"
+// CHECK-DAG: "siteKind":"condition"{{[^]]*}}"sourceOriginal":"functionLocation.path == path","sourceMutated":"functionLocation.path != path"
 
-// EVENTS: "event":"metamutantDiscovery","module":"SwiftmutSourceComparisonConditionOwnsValueApply"{{.*}}"conditionBranches":"5","conditionSites":"1"
-// EVENTS-SAME: "valueApplySites":"1"
-// EVENTS: "event":"metamutantInjection","module":"SwiftmutSourceComparisonConditionOwnsValueApply"{{.*}}"attemptedConditionSites":"1"
+// EVENTS: "event":"metamutantDiscovery","module":"SwiftmutSourceComparisonConditionOwnsValueApply"{{.*}}"conditionBranches":"5","conditionSites":"4"
+// EVENTS-SAME: "valueApplySites":"0"
+// EVENTS: "event":"metamutantInjection","module":"SwiftmutSourceComparisonConditionOwnsValueApply"{{.*}}"attemptedConditionSites":"4","injectedConditionSites":"4"

@@ -25,7 +25,7 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-build-swift -O %t/Classifier.swift %t/main.swift -module-name SwiftmutSameTypeInlinedPredicateSourceLocations -o %t/a.out
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %t > %t/all-fragments.json
 // RUN: %FileCheck %s --input-file %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=NO-WRONG-RETURN --input-file %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=CLONES --input-file %t/all-fragments.json

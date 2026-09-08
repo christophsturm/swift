@@ -75,6 +75,16 @@ class SourceNodeWalker final : public ASTWalker {
         if (loop->getCond() == expression)
           return "condition";
       }
+      if (auto *loop = dyn_cast<ForEachStmt>(statement)) {
+        if (loop->getWhere() == expression)
+          return "condition";
+      }
+      if (auto *caseStmt = dyn_cast<CaseStmt>(statement)) {
+        for (const auto &item : caseStmt->getCaseLabelItems()) {
+          if (item.getGuardExpr() == expression)
+            return "condition";
+        }
+      }
     }
     if (auto *declaration = Parent.getAsDecl()) {
       if (auto *binding = dyn_cast<PatternBindingDecl>(declaration)) {
@@ -90,6 +100,10 @@ class SourceNodeWalker final : public ASTWalker {
       }
     }
     if (auto *parent = Parent.getAsExpr()) {
+      if (auto *ternary = dyn_cast<TernaryExpr>(parent)) {
+        if (ternary->getCondExpr() == expression)
+          return "condition";
+      }
       if (auto *assignment = dyn_cast<AssignExpr>(parent)) {
         if (assignment->getSrc() == expression)
           return "assignmentValue";
@@ -211,6 +225,10 @@ public:
   PreWalkAction walkToDeclPre(Decl *declaration) override {
     auto result = makeNode(declaration, "declaration",
                            Decl::getKindName(declaration->getKind()));
+    if (auto *accessor = dyn_cast<AccessorDecl>(declaration)) {
+      if (accessor->isGetter() && accessor->getStorage()->hasStorage())
+        result.role = StringRef("storedPropertyGetter");
+    }
     if (auto *value = dyn_cast<ValueDecl>(declaration)) {
       addDeclaration(result, value);
       addType(result, value->getInterfaceType());

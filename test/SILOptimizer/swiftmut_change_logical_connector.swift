@@ -23,7 +23,7 @@
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutChangeLogicalConnector %s -o /dev/null
 // RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
-// RUN: %FileCheck %s --input-file %t/all-fragments.json
+// RUN: %{python} %S/Inputs/swiftmut-check-logical-ranges.py %t/all-fragments.json '[[41,7],[42,7],[50,7],[51,7],[62,17],[62,31],[76,9],[76,19],[76,28],[88,16],[88,35],[88,56]]'
 // RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
 
 @_silgen_name("__swiftmut_visit")
@@ -87,12 +87,6 @@ public func swiftmutOptionalConnectorIdentity(
 ) -> Bool {
   quote == nil && parenDepth == 0 && bracketDepth == 0 && braceDepth == 0
 }
-
-// CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":41,"column":7},"siteKind":"logicalConnector"{{.*}}"sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":42,"column":7},"siteKind":"logicalConnector"
-// CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":50,"column":7},"siteKind":"logicalConnector"{{.*}}"sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":51,"column":7},"siteKind":"logicalConnector"
-// CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":62,"column":17},"siteKind":"logicalConnector"{{.*}}"sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":62,"column":31},"siteKind":"logicalConnector"
-// CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":76,"column":9},"siteKind":"logicalConnector"{{.*}}"sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":76,"column":19},"siteKind":"logicalConnector"{{.*}}"sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":76,"column":28},"siteKind":"logicalConnector"
-// CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":88,"column":16},"siteKind":"logicalConnector"{{.*}}"sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":88,"column":35},"siteKind":"logicalConnector"{{.*}}"sourceLocation":{"file":"swiftmut_change_logical_connector.swift","line":88,"column":56},"siteKind":"logicalConnector"
 
 // EVENTS-DAG: "function":"{{.*}}swiftmutClassifierShape{{.*}}"logicalConnectorSites":"2"
 // EVENTS-DAG: "function":"{{.*}}swiftmutConjunctionChain{{.*}}"logicalConnectorSites":"2"

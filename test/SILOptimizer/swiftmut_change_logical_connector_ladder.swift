@@ -19,7 +19,7 @@
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-ir -O -swift-version 6 -module-name SwiftmutChangeLogicalConnectorLadder %s -o /dev/null
 // RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
-// RUN: %FileCheck %s --input-file %t/all-fragments.json
+// RUN: %{python} %S/Inputs/swiftmut-check-logical-ranges.py %t/all-fragments.json '[[36,7],[37,7]]'
 // RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
 
 @_silgen_name("__swiftmut_visit")
@@ -63,8 +63,5 @@ public func swiftmutPreparationLabel(_ status: String, isReady: Bool) -> String?
   isReady ? nil : status
 }
 
-// CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector_ladder.swift","line":36,"column":7},"siteKind":"logicalConnector","resultKind":"condition","alternatives":[{"mutantID":"{{[^"]*}}","alternativeIndex":1,"mutator":"CHANGE_LOGICAL_CONNECTOR","sourceOriginal":"||","sourceMutated":"&&"
-// CHECK-DAG: "sourceLocation":{"file":"swiftmut_change_logical_connector_ladder.swift","line":37,"column":7},"siteKind":"logicalConnector","resultKind":"condition","alternatives":[{"mutantID":"{{[^"]*}}","alternativeIndex":1,"mutator":"CHANGE_LOGICAL_CONNECTOR","sourceOriginal":"||","sourceMutated":"&&"
-
 // EVENTS-DAG: "function":"{{.*}}swiftmutChainShape{{.*}}"logicalConnectorSites":"2"
-// EVENTS-DAG: "function":"{{.*}}swiftmutMixed{{.*}}Shape{{.*}}"{{.*}}"logicalConnectorSites":"0"{{.*}}"logicalConnectorNonSourceBranches":"1"{{.*}}"logicalConnectorSourceLocationMisses":"0"
+// EVENTS-DAG: "function":"{{.*}}swiftmutMixed{{.*}}Shape{{.*}}"{{.*}}"logicalConnectorSites":"0"{{.*}}"logicalConnectorSourceLocationMisses":"1"

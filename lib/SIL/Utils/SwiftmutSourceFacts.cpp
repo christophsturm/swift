@@ -251,6 +251,8 @@ public:
       addDeclaration(result, value);
       addType(result, value->getInterfaceType());
     }
+    if (auto *variable = dyn_cast<VarDecl>(declaration))
+      result.value = identity(ASTNode{variable->getParentInitializer()});
     visit(outputContext, result);
     return Action::Continue();
   }

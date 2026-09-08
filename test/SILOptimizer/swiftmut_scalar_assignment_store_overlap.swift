@@ -33,10 +33,10 @@
 // the frontend with an invalid bridged value reference.
 // EVENTS: "event":"metamutantDiscovery","module":"SwiftmutScalarAssignmentStoreOverlap","function":"{{.*}}swiftmutByteOffset
 // EVENTS-SAME: "scalarValueDirectStoreUses":"2"
-// EVENTS-SAME: "assignmentValueSites":"3"
+// EVENTS-SAME: "assignmentValueSites":"4"
 // EVENTS: "event":"metamutantInjection","module":"SwiftmutScalarAssignmentStoreOverlap","function":"{{.*}}swiftmutByteOffset
-// EVENTS-SAME: "injectedScalarValueSites":"4"
-// EVENTS-SAME: "injectedAssignmentValueSites":"3"
+// EVENTS-SAME: "injectedScalarValueSites":"9"
+// EVENTS-SAME: "injectedAssignmentValueSites":"4"
 // MANIFEST-DAG: "siteKind":"scalarValue"
 // MANIFEST-DAG: "siteKind":"assignmentValue"
 

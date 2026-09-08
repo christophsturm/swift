@@ -23,7 +23,7 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-build-swift -Onone -D SWIFTMUT_DISCOVERY %t/main.swift -module-name SwiftmutZeroIntegerBindingRuntime -emit-sil -o /dev/null
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} -c 'import json, sys; sites = (site for line in sys.stdin if line.strip() for site in json.loads(line)["sites"]); site = next(site for site in sites if site["siteKind"] == "scalarValue" and any(alternative["sourceOriginal"] == "0" and alternative["sourceMutated"] == "1" for alternative in site["alternatives"])); print("public let swiftmutTargetSiteID: UInt64 = {}".format(site["siteID"]))' > %t/target.swift
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} -c 'import json, sys; sites = (site for line in sys.stdin if line.strip() for site in json.loads(line)["sites"]); site = next(site for site in sites if site["siteKind"] == "scalarValue" and site["sourceLocation"]["line"] == 3 and any(alternative["operation"] == "replaceWithOne" for alternative in site["alternatives"])); print("public let swiftmutTargetSiteID: UInt64 = {}".format(site["siteID"]))' > %t/target.swift
 // RUN: test -s %t/target.swift
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-build-swift -Onone %t/main.swift %t/target.swift -module-name SwiftmutZeroIntegerBindingRuntime -o %t/a.out
 // RUN: %target-codesign %t/a.out
@@ -31,7 +31,7 @@
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-build-swift -Onone -D SWIFTMUT_BASELINE %t/main.swift -module-name SwiftmutZeroIntegerBindingRuntime -o %t/baseline.out
 // RUN: %target-codesign %t/baseline.out
 // RUN: %target-run %t/baseline.out | %FileCheck %s --check-prefix=BASELINE
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | sort -u > %t/all-fragments.json
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %t | sort -u > %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=MANIFEST --input-file %t/all-fragments.json
 
 // CHECK: 8

@@ -22,7 +22,7 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutSwitchScalarValueSourceLocations %s -o /dev/null
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %S > %t/all-fragments.json
 // RUN: %FileCheck %s --input-file %t/all-fragments.json
 
 public enum SwiftmutMode {
@@ -47,10 +47,10 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
-// CHECK: "sourceLocation":{"file":"swiftmut_switch_scalar_value_source_locations.swift","line":36,"column":5}
+// CHECK: "sourceLocation":{"file":"swiftmut_switch_scalar_value_source_locations.swift","line":36,"column":12}
 // CHECK: "siteKind":"scalarValue"
-// CHECK: "sourceOriginal":"return","sourceMutated":"return false"
-// CHECK: "sourceLocation":{"file":"swiftmut_switch_scalar_value_source_locations.swift","line":39,"column":7}
-// CHECK: "sourceOriginal":"return","sourceMutated":"return false"
-// CHECK: "sourceLocation":{"file":"swiftmut_switch_scalar_value_source_locations.swift","line":41,"column":5}
-// CHECK: "sourceOriginal":"return","sourceMutated":"return true"
+// CHECK: "sourceOriginal":"exitCode == 0","sourceMutated":"false"
+// CHECK: "sourceLocation":{"file":"swiftmut_switch_scalar_value_source_locations.swift","line":39,"column":14}
+// CHECK: "sourceOriginal":"true","sourceMutated":"false"
+// CHECK: "sourceLocation":{"file":"swiftmut_switch_scalar_value_source_locations.swift","line":41,"column":12}
+// CHECK: "sourceOriginal":"false","sourceMutated":"true"

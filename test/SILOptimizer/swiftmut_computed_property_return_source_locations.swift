@@ -71,4 +71,4 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
 // CHECK-DAG: RepeatedbD7SummaryV08rejectedE5LinesSivg{{.*}}"line":39{{.*}}"sourceOriginal":"totalSourceLines - keptSourceLines","sourceMutated":"0"
 // Stored-property getters must not borrow either computed expression.
 // The trailing guard return remains independently represented.
-// CHECK-DAG: RunHistoryEntryV06isFull{{.*}}SelectionSbvg{{.*}}"line":57{{.*}}"sourceOriginal":"return","sourceMutated":"return false"
+// CHECK-DAG: RunHistoryEntryV06isFull{{.*}}SelectionSbvg{{.*}}"line":57{{.*}}"sourceOriginal":"selectedMutants == rawMutants","sourceMutated":"false"

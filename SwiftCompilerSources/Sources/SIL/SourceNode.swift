@@ -101,3 +101,24 @@ extension Location {
     return identities
   }
 }
+
+extension Instruction {
+  /// Original AST provenance retained through inlining, followed by the
+  /// instruction's diagnostic location and current inlined call sites.
+  public var astProvenance: [Int] {
+    var identities: [Int] = []
+    withUnsafeMutablePointer(to: &identities) { pointer in
+      bridged.visitASTProvenance(pointer) { context, identity in
+        context.assumingMemoryBound(to: [Int].self).pointee.append(identity)
+      }
+    }
+    return identities
+  }
+}
+
+extension DeclRef {
+  public var sourceDeclarationIdentity: Int? {
+    let identity = bridged.getSourceDeclarationIdentity()
+    return identity == 0 ? nil : identity
+  }
+}

@@ -717,6 +717,9 @@ struct BridgedSILDebugVariable {
 };
 
 struct BridgedInstruction {
+  void visitASTProvenance(
+      void *_Nonnull context,
+      void (*_Nonnull visit)(void *_Nonnull, SwiftInt)) const;
   SwiftObject obj;
 
 #ifdef NOT_COMPILED_WITH_SWIFT_PURE_BRIDGING_MODE
@@ -1090,6 +1093,7 @@ struct BridgedSuccessorArray {
 };
 
 struct BridgedDeclRef {
+  SwiftInt getSourceDeclarationIdentity() const;
   uint64_t storage[3];
 
   BRIDGED_INLINE BridgedDeclRef(swift::SILDeclRef declRef);

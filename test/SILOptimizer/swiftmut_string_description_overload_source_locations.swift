@@ -21,9 +21,9 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutStringDescriptionOverloadSourceLocations %s -o /dev/null
-// RUN: cat %t/fragments/*.json | %FileCheck %s
-// RUN: cat %t/fragments/*.json | not %FileCheck %s --check-prefix=NO-REPEATING
-// RUN: cat %t/fragments/*.json | not %FileCheck %s --check-prefix=NO-DECODING
+// RUN: cat %t/fragments/*.json | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %S | %FileCheck %s
+// RUN: cat %t/fragments/*.json | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %S | %FileCheck %s --check-prefix=OVERLOADS
+// Compiler callee identities also distinguish the previously unmapped overloads.
 
 @inline(never)
 public func swiftmutConsumeString(_ value: String) {
@@ -37,5 +37,5 @@ public func swiftmutStringDescriptionOverloads(_ value: Int, _ bytes: [UInt8]) -
 }
 
 // CHECK: "sourceOriginal":"String(value)","sourceMutated":"\"\""
-// NO-REPEATING: "sourceOriginal":"String(repeating:
-// NO-DECODING: "sourceOriginal":"String(decoding:
+// OVERLOADS-DAG: "sourceOriginal":"String(repeating: \"x\", count: value)","sourceMutated":"\"\""
+// OVERLOADS-DAG: "sourceOriginal":"String(decoding: bytes, as: UTF8.self)","sourceMutated":"\"\""

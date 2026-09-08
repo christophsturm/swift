@@ -15,6 +15,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "swift/SIL/SILInstruction.h"
+#include "swift/SIL/SwiftmutSourceFacts.h"
 #include "swift/Basic/AssertImplements.h"
 #include "swift/Basic/Assertions.h"
 #include "swift/Basic/Unicode.h"
@@ -321,6 +322,7 @@ public:
 } // end anonymous namespace
 
 void SILInstruction::destroy(SILInstruction *I) {
+  forgetSwiftmutInstructionSource(I);
   InstructionDestroyer().visit(I);
 }
 

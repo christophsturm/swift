@@ -110,8 +110,8 @@ print(swiftmutPrefixClassifierShape("/*"), swiftmutPrefixClassifierShape("*"),
 //--- check.py
 import json, os, pathlib, subprocess, sys
 root = pathlib.Path(sys.argv[1])
-sites = [site for path in (root / "fragments").glob("*.json")
-         for site in json.loads(path.read_text()).get("sites", [])
+sites = [site for line in (root / "all-fragments.json").read_text().splitlines()
+         for site in json.loads(line).get("sites", [])
          if "swiftmutPrefixClassifierShape" in site["function"] and site["siteKind"] == "valueApply"]
 assert len(sites) == 3, sites
 assert subprocess.check_output([str(root / "a.out")], text=True).strip() == "1 1 2 3"

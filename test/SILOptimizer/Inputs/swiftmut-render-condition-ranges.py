@@ -26,7 +26,7 @@ for record in sys.stdin:
         continue
     fragment = json.loads(record)
     for site in fragment.get("sites", []):
-        if site["siteKind"] not in ("condition", "returnValue", "returnBranchValue", "scalarValue", "assignmentValue"):
+        if site["siteKind"] not in ("condition", "returnValue", "returnBranchValue", "scalarValue", "assignmentValue", "valueApply"):
             continue
         source = (root / site["sourceLocation"]["file"]).read_bytes()
         lines = source.splitlines(keepends=True)
@@ -39,7 +39,18 @@ for record in sys.stdin:
             edit_start = offset(edit["span"]["start"], lines)
             edit_end = offset(edit["span"]["end"], lines)
             assert start <= edit_start <= edit_end <= end, alternative
+            replacement = edit["replacement"]
+            if "replacementParts" in edit:
+                replacement = ""
+                for part in edit["replacementParts"]:
+                    if "literal" in part:
+                        replacement += part["literal"]
+                    else:
+                        part_start = offset(part["source"]["start"], lines)
+                        part_end = offset(part["source"]["end"], lines)
+                        assert start <= part_start <= part_end <= end, part
+                        replacement += source[part_start:part_end].decode()
             alternative["sourceOriginal"] = source[start:end].decode()
             alternative["sourceMutated"] = (source[start:edit_start].decode()
-                                              + edit["replacement"] + source[edit_end:end].decode())
+                                              + replacement + source[edit_end:end].decode())
     print(json.dumps(fragment, separators=(",", ":"), ensure_ascii=False))

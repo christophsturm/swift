@@ -25,7 +25,7 @@
 // RUN: %target-run %t/a.out | %FileCheck %s
 // RUN: %FileCheck %s --check-prefix=EVENTS --input-file %t/compiler-events.jsonl
 // RUN: %FileCheck %s --check-prefix=NESTED --input-file %t/compiler-events.jsonl
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %t > %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=MANIFEST --input-file %t/all-fragments.json
 
 // CHECK: 0

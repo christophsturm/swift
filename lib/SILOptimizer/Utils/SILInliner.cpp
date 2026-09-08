@@ -21,6 +21,7 @@
 #include "swift/SIL/PrettyStackTrace.h"
 #include "swift/SIL/SILDebugScope.h"
 #include "swift/SIL/SILInstruction.h"
+#include "swift/SIL/SwiftmutSourceFacts.h"
 #include "swift/SIL/TypeSubstCloner.h"
 #include "swift/SILOptimizer/Utils/CFGOptUtils.h"
 #include "swift/SILOptimizer/Utils/OwnershipOptUtils.h"
@@ -434,6 +435,7 @@ protected:
     // We just updated the debug scope information. Intentionally
     // don't call SILClonerWithScopes<SILInlineCloner>::postProcess().
     SILCloner<SILInlineCloner>::postProcess(Orig, Cloned);
+    recordSwiftmutInlinedSource(Orig, Cloned);
   }
 
   SILLocation remapLocation(SILLocation InLoc) {

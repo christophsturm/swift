@@ -20,7 +20,7 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-build-swift -Onone -D SWIFTMUT_DISCOVERY %t/main.swift -module-name SwiftmutOperatorValueApplyExactSnippetRuntime -emit-sil -o /dev/null
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} -c 'import json, sys; sites = (site for line in sys.stdin if line.strip() for site in json.loads(line)["sites"]); site = next(site for site in sites if site["siteKind"] == "valueApply" and any(alternative["sourceOriginal"] == "left < right" and alternative["sourceMutated"] == "right < left" for alternative in site["alternatives"])); alternative = next(alternative for alternative in site["alternatives"] if alternative["sourceMutated"] == "right < left"); print("public let swiftmutTargetSiteID: UInt64 = {}\npublic let swiftmutTargetAlternative: UInt32 = {}".format(site["siteID"], alternative["alternativeIndex"]))' > %t/target.swift
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %t | %{python} -c 'import json, sys; sites = (site for line in sys.stdin if line.strip() for site in json.loads(line)["sites"]); site = next(site for site in sites if site["siteKind"] == "valueApply" and any(alternative["sourceOriginal"] == "left < right" and alternative["sourceMutated"] == "right < left" for alternative in site["alternatives"])); alternative = next(alternative for alternative in site["alternatives"] if alternative["sourceMutated"] == "right < left"); print("public let swiftmutTargetSiteID: UInt64 = {}\npublic let swiftmutTargetAlternative: UInt32 = {}".format(site["siteID"], alternative["alternativeIndex"]))' > %t/target.swift
 // RUN: test -s %t/target.swift
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-build-swift -Onone %t/main.swift %t/target.swift -module-name SwiftmutOperatorValueApplyExactSnippetRuntime -o %t/a.out
 // RUN: %target-codesign %t/a.out
@@ -28,7 +28,7 @@
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-build-swift -Onone -D SWIFTMUT_BASELINE %t/main.swift -module-name SwiftmutOperatorValueApplyExactSnippetRuntime -o %t/baseline.out
 // RUN: %target-codesign %t/baseline.out
 // RUN: %target-run %t/baseline.out | %FileCheck %s --check-prefix=BASELINE
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | sort -u > %t/all-fragments.json
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %t | sort -u > %t/all-fragments.json
 // RUN: %FileCheck %s --check-prefix=MANIFEST --input-file %t/all-fragments.json
 
 // CHECK: true

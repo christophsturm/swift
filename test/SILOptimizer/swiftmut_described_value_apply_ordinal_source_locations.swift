@@ -21,7 +21,7 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutDescribedValueApplyOrdinalSourceLocations %s -o /dev/null
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' > %t/all-fragments.json
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %S > %t/all-fragments.json
 // RUN: %FileCheck %s --input-file %t/all-fragments.json
 
 @inline(never)
@@ -41,4 +41,4 @@ public func swiftmutRepeatedDescribedValueApply(_ flag: Bool) -> Int {
   return swiftmutRepeatedNumber()
 }
 
-// CHECK: "line":39,"column":12},"siteKind":"valueApply","resultKind":"value","valueNominalType":{"module":"Swift","name":"Int"},{{.*}}"alternatives":[{{.*}}"sourceOriginal":"swiftmutRepeatedNumber()","sourceMutated":"0"{{.*}}"line":41,"column":10},"siteKind":"valueApply","resultKind":"value","valueNominalType":{"module":"Swift","name":"Int"},{{.*}}"alternatives":[{{.*}}"sourceOriginal":"swiftmutRepeatedNumber()","sourceMutated":"0"
+// CHECK: "line":39,"column":12},"siteKind":"valueApply","resultKind":"value",{{.*}}"valueNominalType":{"module":"Swift","name":"Int"},{{.*}}"alternatives":[{{.*}}"sourceOriginal":"swiftmutRepeatedNumber()","sourceMutated":"0"{{.*}}"line":41,"column":10},"siteKind":"valueApply","resultKind":"value",{{.*}}"valueNominalType":{"module":"Swift","name":"Int"},{{.*}}"alternatives":[{{.*}}"sourceOriginal":"swiftmutRepeatedNumber()","sourceMutated":"0"

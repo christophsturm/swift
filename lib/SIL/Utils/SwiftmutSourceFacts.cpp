@@ -21,11 +21,25 @@
 #include "swift/Bridging/ASTGen.h"
 #include "swift/SIL/SILContext.h"
 #include "swift/SIL/SILDebugScope.h"
+#include "swift/SIL/SwiftmutSourceFacts.h"
 #include <algorithm>
+#include <cstdlib>
+#include <mutex>
 
 using namespace swift;
 
 namespace {
+
+bool retainsSwiftmutSource() {
+  static bool enabled = [] {
+    auto *config = std::getenv("SWIFTMUT_CONFIG");
+    return config && *config;
+  }();
+  return enabled;
+}
+
+std::mutex inlinedSourceMutex;
+llvm::DenseMap<const SILInstruction *, SmallVector<SwiftInt, 4>> inlinedSources;
 
 SwiftInt identity(ASTNode node) {
   return node ? reinterpret_cast<SwiftInt>(node.getOpaqueValue()) : 0;
@@ -269,6 +283,51 @@ public:
 };
 
 } // namespace
+
+void swift::recordSwiftmutInlinedSource(const SILInstruction *original,
+                                       const SILInstruction *cloned) {
+  if (!retainsSwiftmutSource())
+    return;
+  std::lock_guard<std::mutex> lock(inlinedSourceMutex);
+  SmallVector<SwiftInt, 4> nodes;
+  auto previous = inlinedSources.find(original);
+  if (previous != inlinedSources.end())
+    nodes.append(previous->second.begin(), previous->second.end());
+  if (auto node = original->getLoc().getASTNode()) {
+    auto value = identity(node);
+    if (!llvm::is_contained(nodes, value))
+      nodes.push_back(value);
+  }
+  if (!nodes.empty())
+    inlinedSources[cloned] = std::move(nodes);
+}
+
+void swift::forgetSwiftmutInstructionSource(const SILInstruction *instruction) {
+  if (!retainsSwiftmutSource())
+    return;
+  std::lock_guard<std::mutex> lock(inlinedSourceMutex);
+  inlinedSources.erase(instruction);
+}
+
+void BridgedInstruction::visitASTProvenance(
+    void *outputContext, void (*visit)(void *, SwiftInt)) const {
+  if (retainsSwiftmutSource()) {
+    std::lock_guard<std::mutex> lock(inlinedSourceMutex);
+    auto found = inlinedSources.find(unbridged());
+    if (found != inlinedSources.end())
+      for (auto node : found->second)
+        visit(outputContext, node);
+  }
+  BridgedLocation(unbridged()->getDebugLocation()).visitASTProvenance(
+      outputContext, visit);
+}
+
+SwiftInt BridgedDeclRef::getSourceDeclarationIdentity() const {
+  auto *declaration = unbridged().getDecl();
+  if (auto *accessor = dyn_cast_or_null<AccessorDecl>(declaration))
+    declaration = accessor->getStorage();
+  return declaration ? identity(ASTNode{declaration}) : 0;
+}
 
 bool BridgedContext::visitSourceNodes(
     void *outputContext,

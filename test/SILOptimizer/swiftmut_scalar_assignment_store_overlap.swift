@@ -37,7 +37,7 @@
 // EVENTS: "event":"metamutantInjection","module":"SwiftmutScalarAssignmentStoreOverlap","function":"{{.*}}swiftmutByteOffset
 // EVENTS-SAME: "injectedScalarValueSites":"9"
 // EVENTS-SAME: "injectedAssignmentValueSites":"4"
-// MANIFEST-DAG: "siteKind":"scalarValue"
+// MANIFEST-DAG: "siteKind":"scalarValue","resultKind":"value"
 // MANIFEST-DAG: "siteKind":"assignmentValue"
 
 private func swiftmutByteOffset(

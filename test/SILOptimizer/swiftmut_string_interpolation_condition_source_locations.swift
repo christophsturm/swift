@@ -35,7 +35,7 @@ public func __swiftmut_visit(_ siteID: UInt64) -> UInt32 {
   0
 }
 
-// CHECK: "siteKind":"condition"
+// CHECK: "siteKind":"condition",{{.*}}"resultKind":"condition"
 // CHECK-SAME: "sourceOriginal":"count == 1","sourceMutated":"count != 1"
 // CHECK-SAME: "sourceOriginal":"count == 1","sourceMutated":"false"
 // CHECK-SAME: "sourceOriginal":"count == 1","sourceMutated":"true"

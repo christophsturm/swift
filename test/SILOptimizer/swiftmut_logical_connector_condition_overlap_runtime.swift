@@ -37,7 +37,7 @@
 
 // CHECK: true
 // BASELINE: false
-// MANIFEST: "siteKind":"logicalConnector"
+// MANIFEST: "siteKind":"logicalConnector",{{.*}}"resultKind":"condition"
 // MANIFEST-SAME: "sourceOriginal":"&&"
 // MANIFEST-SAME: "sourceMutated":"||"
 

@@ -25,6 +25,9 @@ for record in sys.stdin:
     if not record.strip():
         continue
     fragment = json.loads(record)
+    # These assertions describe injected SIL sites. Independent AST candidates
+    # have their own native regression and must not satisfy site FileChecks.
+    fragment.pop("sourceMutationInventory", None)
     for site in fragment.get("sites", []):
         if site["siteKind"] not in ("condition", "returnValue", "returnBranchValue", "scalarValue", "assignmentValue", "valueApply"):
             continue

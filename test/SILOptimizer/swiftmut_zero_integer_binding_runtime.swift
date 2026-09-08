@@ -36,7 +36,7 @@
 
 // CHECK: 8
 // BASELINE: 7
-// MANIFEST: "siteKind":"scalarValue"
+// MANIFEST: "siteKind":"scalarValue","resultKind":"value"
 // MANIFEST-SAME: "sourceOriginal":"0"
 // MANIFEST-SAME: "sourceMutated":"1"
 

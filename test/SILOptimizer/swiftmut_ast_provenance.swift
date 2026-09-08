@@ -44,5 +44,7 @@ else:
              for site in json.loads(fragment.read_text())["sites"]]
     returned = [site for site in sites if site["siteKind"] == "returnValue"]
     assert sorted(site["sourceLocation"]["line"] for site in returned) == [3, 6], returned
-    assert all(site["alternatives"][0]["sourceOriginal"] == "value" for site in returned), returned
-    assert all(site["alternatives"][0]["sourceMutated"] == "0" for site in returned), returned
+    assert all(site["sourceSpan"]["start"]["column"] == 10 for site in returned), returned
+    assert all(site["sourceSpan"]["end"]["column"] == 15 for site in returned), returned
+    assert all(site["alternatives"][0]["operation"] == "replaceWithZero" for site in returned), returned
+    assert all(site["alternatives"][0]["sourceEdit"]["replacement"] == "0" for site in returned), returned

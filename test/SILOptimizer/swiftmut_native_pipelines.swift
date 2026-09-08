@@ -27,11 +27,11 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutNativePipeline %s -o /dev/null
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | sort > %t/performance-fragments.json
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %S | sort > %t/performance-fragments.json
 // RUN: %FileCheck %s --check-prefix=PERFORMANCE-MANIFEST --input-file %t/performance-fragments.json
 // RUN: rm -rf %t/fragments
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -Onone -module-name SwiftmutNativePipeline %s -o /dev/null
-// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | sort > %t/onone-fragments.json
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %S | sort > %t/onone-fragments.json
 // RUN: %FileCheck %s --check-prefix=ONONE-MANIFEST --input-file %t/onone-fragments.json
 // RUN: diff -u %t/performance-fragments.json %t/onone-fragments.json
 // RUN: env SWIFTMUT_CONFIG= %target-swift-frontend -emit-sil -O -module-name SwiftmutNativePerformancePipelineNoSession %s -o /dev/null

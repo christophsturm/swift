@@ -48,3 +48,11 @@ public struct SwiftmutCoverageLine {
 // EVENTS-DAG: "event":"functionSkip","reason":"generatedStoredPropertyGetter","module":"SwiftmutStoredPropertyReturnSourceLocations","function":"{{.*}}V9isEnabledSbvg"
 // EVENTS-DAG: "event":"functionSkip","reason":"generatedStoredPropertyGetter","module":"SwiftmutStoredPropertyReturnSourceLocations","function":"{{.*}}V10totalLinesSivg"
 // EVENTS-DAG: "event":"functionSkip","reason":"generatedStoredPropertyGetter","module":"SwiftmutStoredPropertyReturnSourceLocations","function":"{{.*}}V11missedLinesSivg"
+
+// Initializer functions retain their own expression; excluding a generated
+// getter must not remove the declaration initializer's mutation.
+// RUN: find %t/fragments -type f -name '*.json' -exec cat {} ';' | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %S > %t/all-fragments.json
+// RUN: %FileCheck %s --check-prefix=INITIALIZER --input-file %t/all-fragments.json
+// INITIALIZER: "function":"{{[^"]*}}V9isEnabledSbvpfi"
+// INITIALIZER-SAME: "siteKind":"returnValue"
+// INITIALIZER-SAME: "sourceOriginal":"true","sourceMutated":"false"

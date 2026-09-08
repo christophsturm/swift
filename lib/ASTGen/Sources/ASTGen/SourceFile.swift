@@ -200,7 +200,14 @@ public func visitTokenRanges(
   let sourceFile = sourceFilePtr.assumingMemoryBound(to: ExportedSourceFile.self).pointee
   for token in sourceFile.syntax.tokens(viewMode: .sourceAccurate) {
     let start = token.positionAfterSkippingLeadingTrivia
-    let end = token.endPositionBeforeTrailingTrivia
+    var end = token.endPositionBeforeTrailingTrivia
+    // C++ literal expressions can locate their final token at the opening
+    // quote. SwiftSyntax represents that literal with multiple tokens, so
+    // retain the complete syntax endpoint for both opening delimiters.
+    if let literal = token.parent?.as(StringLiteralExprSyntax.self),
+       token.id == literal.openingQuote.id || token.id == literal.openingPounds?.id {
+      end = literal.endPositionBeforeTrailingTrivia
+    }
     guard start < end else { continue }
     let endLocation = sourceFile.sourceLocationConverter.location(for: end)
     visit(context, start.utf8Offset, end.utf8Offset, endLocation.line, endLocation.column)

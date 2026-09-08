@@ -21,7 +21,7 @@
 // RUN:   '  "sourceMutationDisplayRules": []' \
 // RUN:   '}' > %t/config.json
 // RUN: env SWIFTMUT_CONFIG=%t/config.json %target-swift-frontend -emit-sil -O -module-name SwiftmutDefaultArgumentReturnSourceLocations %s -o /dev/null
-// RUN: cat %t/fragments/*.json | %FileCheck %s
+// RUN: cat %t/fragments/*.json | %{python} %S/Inputs/swiftmut-render-condition-ranges.py %S | %FileCheck %s
 
 public func swiftmutUseDefaultReturn(_ value: Int = 7) -> Int {
   value

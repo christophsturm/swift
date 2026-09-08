@@ -14,6 +14,7 @@
 #include "swift/AST/ASTWalker.h"
 #include "swift/AST/Expr.h"
 #include "swift/AST/ParseRequests.h"
+#include "swift/AST/ParameterList.h"
 #include "swift/AST/Pattern.h"
 #include "swift/AST/SourceFile.h"
 #include "swift/AST/Stmt.h"
@@ -209,6 +210,23 @@ public:
       result.value = identity(ASTNode{assignment->getSrc()});
     if (auto *conversion = dyn_cast<ImplicitConversionExpr>(expression))
       result.value = identity(ASTNode{conversion->getSubExpr()});
+    if (auto *closure = dyn_cast<AbstractClosureExpr>(expression))
+      result.closureParameterCount = closure->getParameters()->size();
+    if (auto *closure = dyn_cast<AutoClosureExpr>(expression))
+      result.value = identity(ASTNode{closure->getSingleExpressionBody()});
+    if (auto *literal = dyn_cast<BooleanLiteralExpr>(expression))
+      result.literalKind = StringRef(literal->getValue() ? "booleanTrue" : "booleanFalse");
+    if (auto *literal = dyn_cast<IntegerLiteralExpr>(expression)) {
+      auto value = literal->getRawValue();
+      result.literalKind = StringRef(value.isZero() ? "integerZero" :
+                                     value.isOne() && !literal->isNegative() ? "integerOne" : "integerOther");
+    }
+    if (isa<NilLiteralExpr>(expression))
+      result.literalKind = StringRef("nil");
+    if (auto *literal = dyn_cast<StringLiteralExpr>(expression))
+      result.literalKind = StringRef(literal->getValue().empty() ? "emptyString" : "string");
+    if (auto *literal = dyn_cast<CollectionExpr>(expression))
+      result.literalKind = StringRef(literal->getNumElements() == 0 ? "emptyCollection" : "collection");
     visit(outputContext, result);
     return Action::Continue(expression);
   }

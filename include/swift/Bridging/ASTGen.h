@@ -72,6 +72,8 @@ void swift_ASTGen_visitStatementRanges(
 
 /// Visit retained token positions, without returning token text. Arguments
 /// are start offset, end offset, end line, and end column.
+/// Opening string delimiters map to the complete retained literal endpoint,
+/// matching the C++ AST's convention for string expression locations.
 void swift_ASTGen_visitTokenRanges(
     void *_Nonnull sourceFile, void *_Nonnull context,
     void (*_Nonnull visit)(void *_Nonnull, intptr_t, intptr_t, intptr_t,

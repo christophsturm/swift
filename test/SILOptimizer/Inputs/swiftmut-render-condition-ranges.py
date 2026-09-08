@@ -2,7 +2,7 @@
 
 This is test infrastructure only. Production report rendering lives in swiftmut;
 the compiler publishes ranges and typed operations without reading source text.
-Every condition assertion requires exact compiler ranges and a bounded edit.
+Every condition or return assertion requires exact compiler ranges and a bounded edit.
 """
 
 import json
@@ -26,7 +26,7 @@ for record in sys.stdin:
         continue
     fragment = json.loads(record)
     for site in fragment.get("sites", []):
-        if site["siteKind"] != "condition":
+        if site["siteKind"] not in ("condition", "returnValue", "returnBranchValue"):
             continue
         source = (root / site["sourceLocation"]["file"]).read_bytes()
         lines = source.splitlines(keepends=True)

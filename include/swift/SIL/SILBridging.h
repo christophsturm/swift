@@ -1535,6 +1535,8 @@ struct BridgedSourceNode {
   BridgedStringRef declarationModule;
   BridgedStringRef typeName;
   BridgedStringRef typeModule;
+  BridgedStringRef literalKind;
+  SwiftInt closureParameterCount;
   SwiftInt startLine;
   SwiftInt startColumn;
   SwiftInt startOffset;

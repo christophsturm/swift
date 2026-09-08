@@ -37,6 +37,8 @@ public struct SourceNode {
   public let declarationModule: String
   public let typeName: String
   public let typeModule: String
+  public let literalKind: String
+  public let closureParameterCount: Int
   public let start: Position
   public let end: Position
   public let isImplicit: Bool
@@ -60,6 +62,8 @@ public struct SourceNode {
     declarationModule = StringRef(bridged: node.declarationModule).string
     typeName = StringRef(bridged: node.typeName).string
     typeModule = StringRef(bridged: node.typeModule).string
+    literalKind = StringRef(bridged: node.literalKind).string
+    closureParameterCount = node.closureParameterCount
     start = Position(line: node.startLine, column: node.startColumn, utf8Offset: node.startOffset)
     end = Position(line: node.endLine, column: node.endColumn, utf8Offset: node.endOffset)
     isImplicit = node.implicit

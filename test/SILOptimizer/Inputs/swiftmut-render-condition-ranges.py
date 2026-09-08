@@ -26,7 +26,7 @@ for record in sys.stdin:
         continue
     fragment = json.loads(record)
     for site in fragment.get("sites", []):
-        if site["siteKind"] not in ("condition", "returnValue", "returnBranchValue", "scalarValue"):
+        if site["siteKind"] not in ("condition", "returnValue", "returnBranchValue", "scalarValue", "assignmentValue"):
             continue
         source = (root / site["sourceLocation"]["file"]).read_bytes()
         lines = source.splitlines(keepends=True)

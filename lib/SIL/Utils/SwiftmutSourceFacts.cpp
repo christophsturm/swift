@@ -243,6 +243,7 @@ public:
   PreWalkAction walkToDeclPre(Decl *declaration) override {
     auto result = makeNode(declaration, "declaration",
                            Decl::getKindName(declaration->getKind()));
+    result.localDeclaration = declaration->getDeclContext()->isLocalContext();
     if (auto *accessor = dyn_cast<AccessorDecl>(declaration)) {
       if (accessor->isGetter() && accessor->getStorage()->hasStorage())
         result.role = StringRef("storedPropertyGetter");
